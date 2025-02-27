@@ -1,0 +1,80 @@
+name: Elixir CI
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "**/README.md"
+  pull_request:
+    paths-ignore:
+      - "**/README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: mix test
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
+            ${{ runner.os }}-deps-
+
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: |
+            _build/*/lib
+            !_build/*/lib/electric_phoenix
+          key: ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
+            ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-
+            ${{ runner.os }}-build-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-build-
+
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+
+      - name: Compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors
+
+      - name: Run tests
+        run: mix test --trace
+
+  formatting:
+    name: mix format --check-formatted
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+      - name: Restore dependencies cache
+        uses: actions/cache/restore@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
+            ${{ runner.os }}-deps-
+      - run: mix deps.get
+      - run: mix format --check-formatted
