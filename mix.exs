@@ -38,15 +38,16 @@ defmodule Phoenix.Sync.MixProject do
       {
         :electric,
         optional: true,
+        override: true,
         github: "electric-sql/electric",
         sparse: "packages/sync-service",
-        ref: "955449869fbc2073b870702359d090080e891670"
+        ref: "7ea8833c948902dfa81897e4a0792f112ba7e3d8"
       },
       {
         :electric_client,
         github: "electric-sql/electric",
         sparse: "packages/elixir-client",
-        ref: "955449869fbc2073b870702359d090080e891670"
+        ref: "7ea8833c948902dfa81897e4a0792f112ba7e3d8"
       }
     ] ++ deps_for_env(Mix.env())
   end
