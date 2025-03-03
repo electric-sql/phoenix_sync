@@ -44,7 +44,7 @@ defmodule Phoenix.Sync.LiveView do
 
       def mount(_params, _session, socket) do
         socket =
-          Phoenix.Sync.LiveView.electric_stream(
+          Phoenix.Sync.LiveView.sync_stream(
             socket,
             :admins,
             from(u in Users, where: u.admin == true)
@@ -59,8 +59,8 @@ defmodule Phoenix.Sync.LiveView do
 
   To handle these you need to add a `handle_info/2` implementation that receives these:
 
-      def handle_info({:electric, event}, socket) do
-        {:noreply, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+      def handle_info({:sync, event}, socket) do
+        {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
       end
 
   See the docs for
@@ -69,12 +69,12 @@ defmodule Phoenix.Sync.LiveView do
 
   ## Lifecycle Events
 
-  Most `{:electric, event}` messages are opaque and should be passed directly
-  to the `electric_stream_update/3` function, but there are two events that are
+  Most `{:sync, event}` messages are opaque and should be passed directly
+  to the `sync_stream_update/3` function, but there are two events that are
   outside Electric's replication protocol and designed to be useful in the
   LiveView component.
 
-  - `{:electric, {stream_name, :loaded}}` - sent when the Electric event stream has passed
+  - `{:sync, {stream_name, :loaded}}` - sent when the Electric event stream has passed
     from initial state to update mode.
 
     This event is useful to show the stream component after
@@ -84,7 +84,7 @@ defmodule Phoenix.Sync.LiveView do
     E.g.:
 
         # in the LiveView component
-        def handle_info({:electric, {_name, :live}}, socket) do
+        def handle_info({:sync, {_name, :live}}, socket) do
           {:noreply, assign(socket, :show_stream, true)}
         end
 
@@ -95,7 +95,7 @@ defmodule Phoenix.Sync.LiveView do
           </div>
         </div>
 
-  - `{:electric, {stream_name, :live}}` - sent when the Electric stream is in
+  - `{:sync, {stream_name, :live}}` - sent when the Electric stream is in
     `live` mode, that is the initial state has loaded and the client is
     up-to-date with the database and is long-polling for new events from the
     Electric server.
@@ -103,11 +103,11 @@ defmodule Phoenix.Sync.LiveView do
   If your app doesn't need this extra information, then you can ignore them and
   just have a catch-all callback:
 
-      def handle_info({:electric, event}, socket) do
-        {:noreply, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+      def handle_info({:sync, event}, socket) do
+        {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
       end
 
-  `Phoenix.Sync.LiveView.electric_stream_update` will just ignore the
+  `Phoenix.Sync.LiveView.sync_stream_update` will just ignore the
   lifecycle events.
 
   ## Sub-components
@@ -118,7 +118,7 @@ defmodule Phoenix.Sync.LiveView do
   `Phoenix.Sync` handles this for you by encapsulating component messages
   so it can correctly forward on the event to the component.
 
-  So in the parent `LiveView` process you handle the `:electric` messages as
+  So in the parent `LiveView` process you handle the `:sync` messages as
   above:
 
       defmodule MyLiveView do
@@ -132,10 +132,10 @@ defmodule Phoenix.Sync.LiveView do
           \"""
         end
 
-        # We setup the Electric electric_stream in the component but update messages will
+        # We setup the Electric sync_stream in the component but update messages will
         # be sent to the parent process.
-        def handle_info({:electric, event}, socket) do
-          {:noreply, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+        def handle_info({:sync, event}, socket) do
+          {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
         end
       end
 
@@ -155,30 +155,30 @@ defmodule Phoenix.Sync.LiveView do
           \"""
         end
 
-        # Equivalent to the `handle_info({:electric, {stream_name, :live}}, socket)` callback
+        # Equivalent to the `handle_info({:sync, {stream_name, :live}}, socket)` callback
         # in the parent LiveView.
-        def update(%{electric: {_stream_name, :live}}, socket) do
+        def update(%{sync: {_stream_name, :live}}, socket) do
           {:ok, socket}
         end
 
-        # Equivalent to the `handle_info({:electric, event}, socket)` callback
+        # Equivalent to the `handle_info({:sync, event}, socket)` callback
         # in the parent LiveView.
-        def update(%{electric: event}, socket) do
-          {:ok, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+        def update(%{sync: event}, socket) do
+          {:ok, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
         end
 
         def update(assigns, socket) do
-          {:ok, Phoenix.Sync.electric_stream(socket, :users, User)}
+          {:ok, Phoenix.Sync.LiveView.sync_stream(socket, :users, User)}
         end
       end
   """
-  @spec electric_stream(
+  @spec sync_stream(
           socket :: Phoenix.LiveView.Socket.t(),
           name :: atom() | String.t(),
           query :: Ecto.Queryable.t(),
           opts :: stream_options()
         ) :: Phoenix.LiveView.Socket.t()
-  def electric_stream(socket, name, query, opts \\ []) do
+  def sync_stream(socket, name, query, opts \\ []) do
     {electric_opts, stream_opts} = Keyword.split(opts, [:client])
 
     component =
@@ -204,17 +204,17 @@ defmodule Phoenix.Sync.LiveView do
   @doc """
   Handle Electric events within a LiveView.
 
-      def handle_info({:electric, event}, socket) do
-        {:noreply, Phoenix.Sync.LiveView.electric_stream_update(socket, event, at: 0)}
+      def handle_info({:sync, event}, socket) do
+        {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event, at: 0)}
       end
 
   The `opts` are passed to the `Phoenix.LiveView.stream_insert/4` call.
   """
-  @spec electric_stream_update(Phoenix.LiveView.Socket.t(), event(), Keyword.t()) ::
+  @spec sync_stream_update(Phoenix.LiveView.Socket.t(), event(), Keyword.t()) ::
           Phoenix.LiveView.Socket.t()
-  def electric_stream_update(socket, event, opts \\ [])
+  def sync_stream_update(socket, event, opts \\ [])
 
-  def electric_stream_update(
+  def sync_stream_update(
         socket,
         component_event(component: component, event: {_name, status} = event),
         _opts
@@ -224,20 +224,20 @@ defmodule Phoenix.Sync.LiveView do
     socket
   end
 
-  def electric_stream_update(socket, component_event(component: component, event: event), opts) do
+  def sync_stream_update(socket, component_event(component: component, event: event), opts) do
     Phoenix.LiveView.send_update(component, electric: event(event, opts: opts))
     socket
   end
 
-  def electric_stream_update(socket, {_name, :loaded}, _opts) do
+  def sync_stream_update(socket, {_name, :loaded}, _opts) do
     socket
   end
 
-  def electric_stream_update(socket, {_name, :live}, _opts) do
+  def sync_stream_update(socket, {_name, :live}, _opts) do
     socket
   end
 
-  def electric_stream_update(
+  def sync_stream_update(
         socket,
         event(operation: :insert, name: name, item: item, opts: event_opts),
         opts
@@ -245,7 +245,7 @@ defmodule Phoenix.Sync.LiveView do
     Phoenix.LiveView.stream_insert(socket, name, item, Keyword.merge(event_opts, opts))
   end
 
-  def electric_stream_update(socket, event(operation: :delete, name: name, item: item), _opts) do
+  def sync_stream_update(socket, event(operation: :delete, name: name, item: item), _opts) do
     Phoenix.LiveView.stream_delete(socket, name, item)
   end
 
@@ -305,9 +305,9 @@ defmodule Phoenix.Sync.LiveView do
   defp update_mode({updates, resume}, client, name, query, pid, component) do
     # need to send every update as a separate message.
     for event <- updates |> Enum.reverse() |> Enum.map(&wrap_msg(&1, name, component)),
-        do: send(pid, {:electric, event})
+        do: send(pid, {:sync, event})
 
-    send(pid, {:electric, wrap_event(component, {name, :loaded})})
+    send(pid, {:sync, wrap_event(component, {name, :loaded})})
 
     Task.start_link(fn ->
       client
@@ -318,11 +318,11 @@ defmodule Phoenix.Sync.LiveView do
   end
 
   defp send_live_event(%Message.ChangeMessage{} = msg, pid, name, component) do
-    send(pid, {:electric, wrap_msg(msg, name, component)})
+    send(pid, {:sync, wrap_msg(msg, name, component)})
   end
 
   defp send_live_event(%Message.ControlMessage{control: :up_to_date}, pid, name, component) do
-    send(pid, {:electric, wrap_event(component, {name, :live})})
+    send(pid, {:sync, wrap_event(component, {name, :live})})
   end
 
   defp send_live_event(_msg, _pid, _name, _component) do

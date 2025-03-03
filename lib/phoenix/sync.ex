@@ -10,7 +10,7 @@ defmodule Phoenix.Sync do
 
   ## Phoenix.LiveView Streams
 
-  `Phoenix.Sync.LiveView.electric_stream/4` integrates with
+  `Phoenix.Sync.LiveView.sync_stream/4` integrates with
   [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4)
   and provides a live updating collection of items.
 

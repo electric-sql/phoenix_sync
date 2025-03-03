@@ -38,13 +38,13 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLive do
      socket
      |> assign(:count, 0)
      |> assign(:test_pid, parent)
-     |> Phoenix.Sync.LiveView.electric_stream(:users, Support.User, client: client)}
+     |> Phoenix.Sync.LiveView.sync_stream(:users, Support.User, client: client)}
   end
 
-  def handle_info({:electric, event}, socket) do
+  def handle_info({:sync, event}, socket) do
     # send messsage to test pid, just for sync
-    send(socket.assigns.test_pid, {:electric, event})
-    {:noreply, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+    send(socket.assigns.test_pid, {:sync, event})
+    {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end
 
   def handle_info(:ping, socket) do
@@ -170,8 +170,8 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLiveWithComponent do
      |> assign(:client, client)}
   end
 
-  def handle_info({:electric, event}, socket) do
-    {:noreply, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+  def handle_info({:sync, event}, socket) do
+    {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end
 end
 
@@ -193,13 +193,13 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLiveComponent do
   end
 
   def update(%{electric: {:users, :live}}, socket) do
-    send(socket.assigns.test_pid, {:electric, :users, :live})
+    send(socket.assigns.test_pid, {:sync, :users, :live})
     {:ok, socket}
   end
 
   def update(%{electric: event}, socket) do
-    send(socket.assigns.test_pid, {:electric, event})
-    {:ok, Phoenix.Sync.LiveView.electric_stream_update(socket, event)}
+    send(socket.assigns.test_pid, {:sync, event})
+    {:ok, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end
 
   def update(assigns, socket) do
@@ -207,6 +207,6 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLiveComponent do
      socket
      |> assign(:client, assigns.client)
      |> assign(:test_pid, assigns.test_pid)
-     |> Phoenix.Sync.LiveView.electric_stream(:users, Support.User, client: assigns.client)}
+     |> Phoenix.Sync.LiveView.sync_stream(:users, Support.User, client: assigns.client)}
   end
 end

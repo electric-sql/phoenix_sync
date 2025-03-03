@@ -9,14 +9,6 @@ if config_env() == :test do
 
   connection_opts = Electric.Config.parse_postgresql_uri!(database_url)
 
-  # default_electric_url = "http://localhost:#{port}"
-
-  # config :electric_client,
-  #   database_config: connection_opts,
-  #   electric_url: electric_url
-
-  # config :electric_client, Support.Repo, url: database_url
-
   config :electric,
     start_in_library_mode: true,
     connection_opts: Electric.Utils.obfuscate_password(connection_opts),

@@ -20,7 +20,7 @@ defmodule Phoenix.Sync.LiveViewTest do
 
   import Plug.Conn
 
-  describe "electric_stream/3" do
+  describe "sync_stream/3" do
     test "simple live view with only a snapshot", %{conn: conn} do
       {:ok, client} = Client.Mock.new()
 
@@ -64,7 +64,7 @@ defmodule Phoenix.Sync.LiveViewTest do
         )
 
       for _ <- users2 do
-        assert_receive {:electric, _}
+        assert_receive {:sync, _}
       end
 
       html = render(lv)
@@ -88,7 +88,7 @@ defmodule Phoenix.Sync.LiveViewTest do
         )
 
       for _ <- users3 do
-        assert_receive {:electric, _}
+        assert_receive {:sync, _}
       end
 
       html = render(lv)
@@ -136,7 +136,7 @@ defmodule Phoenix.Sync.LiveViewTest do
         assert html =~ name
       end
 
-      assert_receive {:electric, _}
+      assert_receive {:sync, _}
 
       html = render(lv)
 
@@ -188,11 +188,11 @@ defmodule Phoenix.Sync.LiveViewTest do
         )
 
       for _ <- users2 do
-        assert_receive {:electric, _}
+        assert_receive {:sync, _}
       end
 
       # assert that the component received the :live status event
-      assert_receive {:electric, :users, :live}
+      assert_receive {:sync, :users, :live}
 
       html = render(lv)
 
