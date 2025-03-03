@@ -1,4 +1,6 @@
 defmodule Phoenix.Sync.RouterTest do
+  @pool_opts [backoff_type: :stop, max_restarts: 0, pool_size: 2]
+
   use ExUnit.Case,
     async: false,
     parameterize: [
@@ -6,7 +8,7 @@ defmodule Phoenix.Sync.RouterTest do
         sync_config: [
           mode: :embedded,
           electric: [
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
+            pool_opts: @pool_opts
           ]
         ]
       },
@@ -15,27 +17,30 @@ defmodule Phoenix.Sync.RouterTest do
           mode: :http,
           electric: [
             url: "http://localhost:3000",
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
+            pool_opts: @pool_opts
           ]
         ]
       }
     ]
 
   use Plug.Test
+  use Support.ElectricHelpers
 
   alias Electric.Shapes
 
-  import Support.DbSetup
-  import Support.ElectricHelpers
-
   require Phoenix.ConnTest
 
-  @endpoint Phoenix.Sync.LiveViewTest.Endpoint
+  defmodule Endpoint do
+    use Phoenix.Endpoint, otp_app: :phoenix_sync
+
+    plug Phoenix.Sync.LiveViewTest.Router
+  end
 
   Code.ensure_loaded!(Support.Todo)
   Code.ensure_loaded!(Support.Repo)
 
   setup [
+    :define_endpoint,
     :with_stack_id_from_test,
     :with_unique_db,
     :with_stack_config,
@@ -56,7 +61,6 @@ defmodule Phoenix.Sync.RouterTest do
          }
     @tag data: {"todos", ["title"], [["one"], ["two"], ["three"]]}
 
-    @tag wip: true
     test "supports schema modules", _ctx do
       resp =
         Phoenix.ConnTest.build_conn()

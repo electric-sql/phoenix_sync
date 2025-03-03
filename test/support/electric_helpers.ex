@@ -6,6 +6,25 @@ defmodule Support.ElectricHelpers do
 
   @endpoint Phoenix.Sync.LiveViewTest.Endpoint
 
+  defmacro __using__(opts) do
+    endpoint_module = opts[:endpoint] || @endpoint
+
+    quote do
+      import Support.ElectricHelpers
+      import Support.DbSetup
+
+      @endpoint unquote(endpoint_module)
+
+      defp define_endpoint(_ctx) do
+        endpoint =
+          @endpoint ||
+            raise "Set @endpoint before calling define_endpoint"
+
+        [endpoint: endpoint]
+      end
+    end
+  end
+
   def endpoint, do: @endpoint
 
   def with_stack_id_from_test(ctx) do
@@ -116,11 +135,14 @@ defmodule Support.ElectricHelpers do
   end
 
   def configure_endpoint(%{electric_opts: electric_opts} = ctx) do
-    if ctx.async, do: raise(RuntimeError, message: "do not use configure_endpoint in async tests")
+    endpoint = ctx.endpoint || @endpoint
 
-    Phoenix.Config.put(@endpoint, :electric, Phoenix.Sync.Application.plug_opts(electric_opts))
+    if endpoint == @endpoint && ctx.async,
+      do: raise(RuntimeError, message: "do not use configure_endpoint in async tests")
 
-    [endpoint: @endpoint]
+    Phoenix.Config.put(endpoint, :electric, Phoenix.Sync.Application.plug_opts(electric_opts))
+
+    [endpoint: endpoint]
   end
 
   defp full_test_name(ctx) do

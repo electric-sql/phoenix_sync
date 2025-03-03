@@ -22,13 +22,9 @@ defmodule Phoenix.Sync.ControllerTest do
     ]
 
   use Plug.Test
+  use Support.ElectricHelpers
 
   require Phoenix.ConnTest
-
-  import Support.DbSetup
-  import Support.ElectricHelpers
-
-  @endpoint Phoenix.Sync.LiveViewTest.Endpoint
 
   Code.ensure_loaded!(Support.Todo)
   Code.ensure_loaded!(Support.Repo)
@@ -46,6 +42,7 @@ defmodule Phoenix.Sync.ControllerTest do
                 [["one", false], ["two", false], ["three", true]]}
 
   setup [
+    :define_endpoint,
     :with_stack_id_from_test,
     :with_unique_db,
     :with_stack_config,

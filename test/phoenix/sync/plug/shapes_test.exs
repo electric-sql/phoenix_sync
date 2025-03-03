@@ -22,12 +22,11 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
     ]
 
   use Plug.Test
+  use Support.ElectricHelpers
 
   alias Electric.Shapes.Api
 
   import Mox
-  import Support.DbSetup
-  import Support.ElectricHelpers
 
   require Phoenix.ConnTest
 
@@ -65,6 +64,7 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
   setup :verify_on_exit!
 
   setup [
+    :define_endpoint,
     :with_stack_id_from_test,
     :with_unique_db,
     :with_stack_config,
