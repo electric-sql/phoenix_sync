@@ -24,16 +24,55 @@ defmodule Phoenix.Sync.RouterTest do
     ]
 
   use Plug.Test
-  use Support.ElectricHelpers
+  use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
 
   alias Electric.Shapes
 
   require Phoenix.ConnTest
 
+  defmodule Router do
+    use Phoenix.Router
+
+    import Phoenix.Sync.Router
+
+    scope "/sync" do
+      # by default we take the table name from the path
+      # note that this does not handle weird table names that need quoting
+      # or namespaces
+      sync "/todos", Support.Todo
+
+      # or we can expliclty specify the table
+      sync "/things-to-do", table: "todos"
+
+      # to use a non-standard namespace, we include it
+      # so in this case the table is "food"."toeats"
+      sync "/toeats", table: "toeats", namespace: "food"
+
+      # or we can expliclty specify the table
+      sync "/ideas",
+        table: "ideas",
+        where: "plausible = true",
+        columns: ["id", "title"],
+        replica: :full,
+        storage: %{compaction: :disabled}
+
+      # support shapes from a query, passed as the 2nd arg
+      # #sdf
+      sync "/query-where", Support.Todo, where: "completed = false"
+
+      # or as query: ...
+      sync "/query-bare", Support.Todo
+
+      # query version also accepts shape config
+      sync "/query-config", Support.Todo, replica: :full
+      sync "/query-config2", Support.Todo, replica: :full, storage: %{compaction: :disabled}
+    end
+  end
+
   defmodule Endpoint do
     use Phoenix.Endpoint, otp_app: :phoenix_sync
 
-    plug Phoenix.Sync.LiveViewTest.Router
+    plug Router
   end
 
   Code.ensure_loaded!(Support.Todo)

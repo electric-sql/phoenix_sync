@@ -9,11 +9,23 @@ defmodule Support.ElectricHelpers do
   defmacro __using__(opts) do
     endpoint_module = opts[:endpoint] || @endpoint
 
+    start_endpoint =
+      if endpoint_module != @endpoint do
+        quote do
+          setup_all do
+            ExUnit.CaptureLog.capture_log(fn -> start_supervised!(unquote(endpoint_module)) end)
+            :ok
+          end
+        end
+      end
+
     quote do
       import Support.ElectricHelpers
       import Support.DbSetup
 
       @endpoint unquote(endpoint_module)
+
+      unquote(start_endpoint)
 
       defp define_endpoint(_ctx) do
         endpoint =

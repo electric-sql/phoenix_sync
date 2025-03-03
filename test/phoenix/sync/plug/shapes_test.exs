@@ -22,7 +22,7 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
     ]
 
   use Plug.Test
-  use Support.ElectricHelpers
+  use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
 
   alias Electric.Shapes.Api
 
@@ -30,7 +30,25 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
 
   require Phoenix.ConnTest
 
-  @endpoint endpoint()
+  defmodule Router do
+    use Phoenix.Router
+
+    pipeline :browser do
+      plug :accepts, ["html"]
+    end
+
+    scope "/api" do
+      pipe_through [:browser]
+
+      forward "/", Phoenix.Sync.Plug.Shapes
+    end
+  end
+
+  defmodule Endpoint do
+    use Phoenix.Endpoint, otp_app: :phoenix_sync
+
+    plug Router
+  end
 
   Code.ensure_loaded!(Support.Todo)
   Code.ensure_loaded!(Support.Repo)

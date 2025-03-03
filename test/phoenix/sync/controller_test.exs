@@ -22,9 +22,32 @@ defmodule Phoenix.Sync.ControllerTest do
     ]
 
   use Plug.Test
-  use Support.ElectricHelpers
+  use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
 
   require Phoenix.ConnTest
+
+  defmodule Router do
+    use Phoenix.Router
+
+    pipeline :browser do
+      plug :accepts, ["html"]
+    end
+
+    scope "/todos", Phoenix.Sync.LiveViewTest do
+      pipe_through [:browser]
+
+      get "/all", TodoController, :all
+      get "/complete", TodoController, :complete
+      get "/flexible", TodoController, :flexible
+      get "/module", TodoController, :module
+    end
+  end
+
+  defmodule Endpoint do
+    use Phoenix.Endpoint, otp_app: :phoenix_sync
+
+    plug Router
+  end
 
   Code.ensure_loaded!(Support.Todo)
   Code.ensure_loaded!(Support.Repo)
