@@ -103,16 +103,14 @@ defmodule Phoenix.Sync.Plug.Shapes do
   def init(opts), do: Map.new(opts)
 
   def call(%{private: %{phoenix_endpoint: endpoint}} = conn, _config) do
-    config = endpoint.config(:electric)
-
-    api = Access.fetch!(config, :api)
+    api = endpoint.config(:phoenix_sync)
 
     serve_api(conn, api)
   end
 
   def call(conn, %{opts_in_assign: key}) do
     api =
-      get_in(conn.assigns, [key, :electric, :api]) ||
+      get_in(conn.assigns, [key, :phoenix_sync]) ||
         raise "Unable to retrieve the Electric API configuration from the assigns"
 
     serve_api(conn, api)

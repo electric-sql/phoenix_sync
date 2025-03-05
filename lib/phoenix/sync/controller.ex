@@ -11,19 +11,19 @@ defmodule Phoenix.Sync.Controller do
                         )
 
       def sync_render(conn, shape) do
-        case get_in(conn.assigns, [@plug_assign_opts, :electric, :api]) do
-          %Electric.Shapes.Api{} = api ->
+        case get_in(conn.assigns, [@plug_assign_opts, :phoenix_sync]) do
+          %_{} = api ->
             conn =
               conn
               |> Plug.Conn.fetch_query_params()
-              |> Plug.Conn.put_private(:electric_api, api)
+              |> Plug.Conn.put_private(:phoenix_sync_api, api)
 
             Phoenix.Sync.Controller.sync_render(conn, conn.params, shape)
 
-          _ ->
+          nil ->
             raise RuntimeError,
               message:
-                "Please configure your Router opts with [electric: Electric.Shapes.Api.plug_opts()]"
+                "Please configure your Router opts with [phoenix_sync: Phoenix.Sync.plug_opts()]"
         end
       end
     end
@@ -33,10 +33,8 @@ defmodule Phoenix.Sync.Controller do
           Plug.Conn.t()
 
   def sync_render(%{private: %{phoenix_endpoint: endpoint}} = conn, params, shape) do
-    config = endpoint.config(:electric)
-
     api =
-      config[:api] ||
+      endpoint.config(:phoenix_sync) ||
         raise RuntimeError,
           message:
             "Please configure your Router opts with [electric: Electric.Shapes.Api.plug_opts()]"
@@ -44,7 +42,7 @@ defmodule Phoenix.Sync.Controller do
     sync_render_api(conn, api, params, shape)
   end
 
-  def sync_render(%{private: %{electric_api: api}} = conn, params, shape) do
+  def sync_render(%{private: %{phoenix_sync_api: api}} = conn, params, shape) do
     sync_render_api(conn, api, params, shape)
   end
 

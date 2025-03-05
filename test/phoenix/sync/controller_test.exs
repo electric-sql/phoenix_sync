@@ -4,16 +4,16 @@ defmodule Phoenix.Sync.ControllerTest do
     parameterize: [
       %{
         sync_config: [
-          mode: :embedded,
           electric: [
+            mode: :embedded,
             pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
           ]
         ]
       },
       %{
         sync_config: [
-          mode: :http,
           electric: [
+            mode: :http,
             url: "http://localhost:3000",
             pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
           ]
@@ -159,13 +159,14 @@ defmodule Phoenix.Sync.ControllerTest do
 
   describe "plug: sync_render/3" do
     setup(ctx) do
-      [electric_opts: Electric.Shapes.Api.plug_opts(electric_opts(ctx))]
+      opts = Phoenix.Sync.plug_opts(electric: electric_opts(ctx))
+      [plug_opts: [phoenix_sync: opts]]
     end
 
-    test "sdfoi", ctx do
+    test "returns the sync events", ctx do
       conn = conn(:get, "/shape/todos", %{"offset" => "-1"})
 
-      resp = PlugRouter.call(conn, PlugRouter.init(electric: ctx.electric_opts))
+      resp = PlugRouter.call(conn, PlugRouter.init(ctx.plug_opts))
 
       assert resp.status == 200
       assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]

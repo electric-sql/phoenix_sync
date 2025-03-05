@@ -4,16 +4,16 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
     parameterize: [
       %{
         sync_config: [
-          mode: :embedded,
           electric: [
+            mode: :embedded,
             pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
           ]
         ]
       },
       %{
         sync_config: [
-          mode: :http,
           electric: [
+            mode: :http,
             url: "http://localhost:3000",
             pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
           ]
@@ -23,8 +23,6 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
 
   use Plug.Test
   use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
-
-  alias Electric.Shapes.Api
 
   import Mox
 
@@ -105,9 +103,9 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
   end
 
   defp call(conn, plug \\ MyEnv.TestRouter, ctx) do
-    opts = Api.plug_opts(electric_opts(ctx))
+    opts = Phoenix.Sync.plug_opts(electric: electric_opts(ctx))
 
-    plug.call(conn, electric: opts)
+    plug.call(conn, phoenix_sync: opts)
   end
 
   describe "Plug" do

@@ -28,8 +28,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode" do
       config = [
-        mode: :embedded,
         electric: [
+          mode: :embedded,
           repo: Support.ConfigTestRepo,
           storage_dir: "/something"
         ]
@@ -50,13 +50,13 @@ defmodule Phoenix.Sync.ApplicationTest do
     end
 
     test "disabled mode" do
-      assert {:ok, []} = App.children(:dev, mode: :disabled)
+      assert {:ok, []} = App.children(:dev, electric: [mode: :disabled])
     end
 
     test "embedded mode dev env" do
       config = [
-        mode: :embedded,
         electric: [
+          mode: :embedded,
           repo: Support.ConfigTestRepo
         ]
       ]
@@ -86,8 +86,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode dev env doesn't overwrite explicit storage_dir" do
       config = [
-        mode: :embedded,
         electric: [
+          mode: :embedded,
           repo: Support.ConfigTestRepo,
           # don't overwrite this explict config
           storage_dir: "/something"
@@ -106,8 +106,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode test env" do
       config = [
-        mode: :embedded,
         electric: [
+          mode: :embedded,
           repo: Support.ConfigTestRepo,
           storage_dir: "/something"
         ]
@@ -125,8 +125,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode with explict connection_opts" do
       config = [
-        mode: :embedded,
         electric: [
+          mode: :embedded,
           connection_opts: [
             username: "postgres",
             hostname: "localhost",
@@ -156,8 +156,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "remote http mode" do
       config = [
-        mode: :http,
         electric: [
+          mode: :http,
           url: "https://api.electric-sql.cloud",
           credentials: [
             secret: "my-secret",
@@ -171,8 +171,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded http mode" do
       config = [
-        mode: :http,
         electric: [
+          mode: :http,
           repo: Support.ConfigTestRepo,
           url: "http://localhost:4001",
           http: [
@@ -195,16 +195,14 @@ defmodule Phoenix.Sync.ApplicationTest do
   describe "plug_opts/1" do
     test "embedded mode" do
       config = [
-        mode: :embedded,
         electric: [
+          mode: :embedded,
           repo: Support.ConfigTestRepo,
           storage_dir: "/something"
         ]
       ]
 
-      config = App.plug_opts(:dev, config)
-
-      assert {:ok, api} = Keyword.fetch(config, :api)
+      api = App.plug_opts(:dev, config)
 
       assert %Electric.Shapes.Api{
                storage: {Electric.ShapeCache.FileStorage, %{base_path: "/something" <> _}},
@@ -216,8 +214,8 @@ defmodule Phoenix.Sync.ApplicationTest do
       url = "https://api.electric-sql.cloud"
 
       config = [
-        mode: :http,
         electric: [
+          mode: :http,
           url: url,
           credentials: [
             secret: "my-secret",
@@ -231,7 +229,7 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       endpoint = URI.new!(url) |> URI.append_path("/v1/shape")
 
-      assert [api: api] = App.plug_opts(:prod, config)
+      assert api = App.plug_opts(:prod, config)
 
       assert %Phoenix.Sync.Adapter.ElectricClient{
                client: %Electric.Client{
@@ -245,8 +243,8 @@ defmodule Phoenix.Sync.ApplicationTest do
       url = "http://localhost:4000"
 
       config = [
-        mode: :http,
         electric: [
+          mode: :http,
           repo: Support.ConfigTestRepo,
           url: "http://localhost:4000",
           http: [
@@ -258,7 +256,7 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       endpoint = URI.new!(url) |> URI.append_path("/v1/shape")
 
-      assert [api: api] = App.plug_opts(:prod, config)
+      assert api = App.plug_opts(:prod, config)
 
       assert %Phoenix.Sync.Adapter.ElectricClient{
                client: %Electric.Client{

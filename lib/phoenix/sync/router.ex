@@ -14,17 +14,7 @@ defmodule Phoenix.Sync.Router do
 
   Within Plug applications you need to do a little more work.
 
-
-
-  **Note:** If you use Ecto queries in your shape definitions, e.g.
-
-      shape "/todos",
-        Ecto.Query.from(t in MyApp.Todos, where: t.completed == false)
-
-  and you get the error `error: undefined variable "t"` it's because you forgot
-  to require the Ecto.Query module. Above your shape route add:
-
-      require Ecto.Query
+  TODO
 
   """
 
@@ -51,6 +41,38 @@ defmodule Phoenix.Sync.Router do
     end
   end
 
+  @doc """
+  Defines a synchronization route for streaming Electric shapes.
+
+  The shape can be defined in several ways:
+
+  ### Using Ecto Schemas
+
+  Defines a synchronization route for streaming Electric shapes using an Ecto schema.
+
+      sync "/all-todos", MyApp.Todo
+
+  Note: Only Ecto schema modules are supported as direct arguments. For Ecto queries,
+  use the `query` option in the third argument or use `Phoenix.Sync.Controller.sync_render/3`.
+
+  ### Using Ecto Schema and `where` clause
+
+      sync "/incomplete-todos", MyApp.Todo, where: "completed = false"
+
+  ### Using an explicit `table`
+
+      sync "/incomplete-todos", table: "todos", where: "completed = false"
+
+  ## Options
+
+    * `:table` - (required if no schema provided) The database table to expose
+    * `:namespace` - (optional) The namespace for the table
+    * `:where` - (optional) The where clause to apply to the data
+    * `:columns` - (optional) Subset of table columns to include in the streamed data (default all columns)
+    * `:storage` - (optional) Storage configuration
+    * `:replica` - (optional) Replication strategy
+
+  """
   defmacro sync(path, opts) when is_list(opts) do
     route(env!(__CALLER__), path, build_definition(path, __CALLER__, opts))
   end
@@ -148,18 +170,17 @@ defmodule Phoenix.Sync.Router do
     def init(opts), do: opts
 
     def call(%{private: %{phoenix_endpoint: endpoint}} = conn, %{shape: shape}) do
-      config = endpoint.config(:electric)
-      api = Keyword.fetch!(config, :api)
+      api = endpoint.config(:phoenix_sync)
 
       serve_shape(conn, api, shape)
     end
 
     def call(conn, %{shape: shape, plug_opts_assign: assign_key}) do
       api =
-        get_in(conn.assigns, [assign_key, :electric, :api]) ||
+        get_in(conn.assigns, [assign_key, :phoenix_sync]) ||
           raise RuntimeError,
             message:
-              "Please configure your Router opts with [electric: Electric.Shapes.Api.plug_opts()]"
+              "Please configure your Router opts with [phoenix_sync: Phoenix.Sync.plug_opts()]"
 
       serve_shape(conn, api, shape)
     end

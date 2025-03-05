@@ -26,8 +26,6 @@ defmodule Phoenix.Sync.RouterTest do
   use Plug.Test
   use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
 
-  alias Electric.Shapes
-
   require Phoenix.ConnTest
 
   defmodule Router do
@@ -322,9 +320,9 @@ defmodule Phoenix.Sync.RouterTest do
     end
 
     setup(ctx) do
-      opts = Shapes.Api.plug_opts(electric_opts(ctx))
+      opts = Phoenix.Sync.plug_opts(electric: electric_opts(ctx))
 
-      [plug_opts: [electric: opts]]
+      [plug_opts: [phoenix_sync: opts]]
     end
 
     test "raises compile-time error if Plug.Router is not configured to copy_opts_to_assign" do

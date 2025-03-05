@@ -152,7 +152,7 @@ defmodule Support.ElectricHelpers do
     if endpoint == @endpoint && ctx.async,
       do: raise(RuntimeError, message: "do not use configure_endpoint in async tests")
 
-    Phoenix.Config.put(endpoint, :electric, Phoenix.Sync.Application.plug_opts(electric_opts))
+    Phoenix.Config.put(endpoint, :phoenix_sync, Phoenix.Sync.Application.plug_opts(electric_opts))
 
     [endpoint: endpoint]
   end
@@ -176,7 +176,7 @@ defmodule Support.ElectricHelpers do
       long_poll_timeout: long_poll_timeout(ctx),
       max_age: max_age(ctx),
       stale_age: stale_age(ctx),
-      allow_shape_deletion: allow_shape_deletion(ctx)
+      allow_shape_deletion?: allow_shape_deletion(ctx)
     ]
   end
 
