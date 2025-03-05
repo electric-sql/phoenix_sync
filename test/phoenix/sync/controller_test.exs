@@ -4,19 +4,15 @@ defmodule Phoenix.Sync.ControllerTest do
     parameterize: [
       %{
         sync_config: [
-          electric: [
-            mode: :embedded,
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-          ]
+          mode: :embedded,
+          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       },
       %{
         sync_config: [
-          electric: [
-            mode: :http,
-            url: "http://localhost:3000",
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-          ]
+          mode: :http,
+          url: "http://localhost:3000",
+          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       }
     ]
@@ -159,7 +155,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
   describe "plug: sync_render/3" do
     setup(ctx) do
-      opts = Phoenix.Sync.plug_opts(electric: electric_opts(ctx))
+      opts = Phoenix.Sync.plug_opts(electric_opts(ctx))
       [plug_opts: [phoenix_sync: opts]]
     end
 

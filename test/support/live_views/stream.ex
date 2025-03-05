@@ -192,12 +192,12 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLiveComponent do
     {:ok, socket}
   end
 
-  def update(%{electric: {:users, :live}}, socket) do
+  def update(%{sync: {:users, :live}}, socket) do
     send(socket.assigns.test_pid, {:sync, :users, :live})
     {:ok, socket}
   end
 
-  def update(%{electric: event}, socket) do
+  def update(%{sync: event}, socket) do
     send(socket.assigns.test_pid, {:sync, event})
     {:ok, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end

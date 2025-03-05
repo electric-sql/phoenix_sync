@@ -21,34 +21,6 @@ defmodule Phoenix.Sync.LiveViewTest.Endpoint do
   # def config(:render_errors), do: [view: __MODULE__]
   def config(:render_errors), do: [view: __MODULE__, accepts: ~w(html json)]
   def config(:static_url), do: [path: "/static"]
-  # sub-optimal way of configuring the api since it means api_config/0 is called on every request
-  # better way is to call api_config/0 in Application.start/2
-  # and configure the endpoint at that point, e.g.:
-  #
-  #     electric_config = Electric.Application.api_config()
-  #     children = [
-  #        # ...
-  #        {MyApp.Endpoint, electric: electric_config}
-  #     ]
-  # or in prod, we can just set the config using Electric.Application.api_plug_opts/1
-  # in runtime.exs:
-  #
-  #     config :my_app, MyEndpoint,
-  #       electric: Electric.Application.api_plug_opts()
-  # FIXME: we should be able to do something like
-  #
-  #     config :my_app, MyEndpoint,
-  #       electric: Electric.Application.api_plug_opts(repo: MyApp.Repo)
-  #
-  # with the rest of the config filled by defaults.
-  #
-  # Because Electric.Application.api_plug_opts/0 uses the application
-  # config, we need to first configure electric, then call this.
-  # Shouldn't we be able to just configure electric in one place?
-  # Maybe that's the reason to use the {endpoint, electric: config} version
-  # def config(:electric) do
-  #   Electric.Application.api_plug_opts()
-  # end
 
   def config(which) do
     super(which)

@@ -4,19 +4,15 @@ defmodule Phoenix.Sync.ClientTest do
     parameterize: [
       %{
         sync_config: [
-          electric: [
-            mode: :embedded,
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-          ]
+          mode: :embedded,
+          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       },
       %{
         sync_config: [
-          electric: [
-            mode: :http,
-            url: "http://localhost:3000",
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-          ]
+          mode: :http,
+          url: "http://localhost:3000",
+          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       }
     ]
@@ -67,9 +63,7 @@ defmodule Phoenix.Sync.ClientTest do
   describe "client/1" do
     test "returns embedded client when configured" do
       config = [
-        electric: [
-          mode: :embedded
-        ]
+        mode: :embedded
       ]
 
       assert {:ok, client} = Client.new(config)
@@ -79,10 +73,8 @@ defmodule Phoenix.Sync.ClientTest do
 
     test "returns http client when configured" do
       config = [
-        electric: [
-          mode: :http,
-          url: "http://api.electric-sql.cloud"
-        ]
+        mode: :http,
+        url: "http://api.electric-sql.cloud"
       ]
 
       assert {:ok, client} = Client.new(config)

@@ -1,10 +1,13 @@
 defmodule Phoenix.Sync.MixProject do
   use Mix.Project
 
+  # Remember to update the README when you change the version
+  @version "0.3.0"
+
   def project do
     [
       app: :phoenix_sync,
-      version: "0.2.0",
+      version: @version,
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -19,7 +22,6 @@ defmodule Phoenix.Sync.MixProject do
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -27,7 +29,6 @@ defmodule Phoenix.Sync.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:nimble_options, "~> 1.1"},
@@ -35,8 +36,8 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:electric, "~> 1.0.0-beta.20"},
-      {:electric_client, "~> 0.3.0-beta.4"}
+      {:electric, ">= 1.0.0-beta.20"},
+      {:electric_client, ">= 0.3.0-beta.4"}
     ] ++ deps_for_env(Mix.env())
   end
 
@@ -59,32 +60,26 @@ defmodule Phoenix.Sync.MixProject do
     []
   end
 
-  # defp very_temporary_path_based_deps_remove_me! do
-  #   [
-  #     {:electric,
-  #      path: "../electric/packages/sync-service/", only: [:dev, :test], override: true},
-  #     {:electric_client,
-  #      path: "../electric/packages/elixir-client/", env: :dev, only: [:dev, :test]}
-  #   ]
-  # end
-
   defp docs do
     [
-      main: "Phoenix.Sync"
+      main: "readme",
+      extras: ["README.md", "LICENSE"]
     ]
   end
 
   defp package do
     [
       links: %{
-        "Electric SQL" => "https://electric-sql.com"
+        "Electric SQL" => "https://electric-sql.com",
+        "Github" => "https://github.com/electric-sql/phoenix_sync"
       },
-      licenses: ["Apache-2.0"]
+      licenses: ["Apache-2.0"],
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
     ]
   end
 
   defp description do
-    "A work-in-progress adapter to integrate Electric SQL's streaming updates into Phoenix."
+    "Phoenix.Sync enables real-time sync for Postgres-backed Phoenix and Plug applications"
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]

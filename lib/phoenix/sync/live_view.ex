@@ -220,12 +220,12 @@ defmodule Phoenix.Sync.LiveView do
         _opts
       )
       when status in [:live, :loaded] do
-    Phoenix.LiveView.send_update(component, electric: event)
+    Phoenix.LiveView.send_update(component, sync: event)
     socket
   end
 
   def sync_stream_update(socket, component_event(component: component, event: event), opts) do
-    Phoenix.LiveView.send_update(component, electric: event(event, opts: opts))
+    Phoenix.LiveView.send_update(component, sync: event(event, opts: opts))
     socket
   end
 

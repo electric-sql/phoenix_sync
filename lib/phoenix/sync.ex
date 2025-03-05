@@ -73,6 +73,7 @@ defmodule Phoenix.Sync do
   @type param_overrides :: [param_override()]
 
   defdelegate plug_opts(), to: Phoenix.Sync.Application
+  @doc false
   defdelegate plug_opts(opts), to: Phoenix.Sync.Application
 
   @doc """

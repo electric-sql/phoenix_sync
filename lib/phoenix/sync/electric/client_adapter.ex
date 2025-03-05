@@ -1,9 +1,9 @@
-defmodule Phoenix.Sync.Adapter.ElectricClient do
+defmodule Phoenix.Sync.Electric.ClientAdapter do
   @moduledoc false
 
   defstruct [:client, :shape_definition]
 
-  defimpl Phoenix.Sync.Adapter do
+  defimpl Phoenix.Sync.Adapter.PlugApi do
     alias Electric.Client
 
     alias Phoenix.Sync.PredefinedShape
@@ -12,7 +12,7 @@ defmodule Phoenix.Sync.Adapter.ElectricClient do
       shape_client = PredefinedShape.client(sync_client.client, predefined_shape)
 
       {:ok,
-       %Phoenix.Sync.Adapter.ElectricClient{
+       %Phoenix.Sync.Electric.ClientAdapter{
          client: shape_client,
          shape_definition: predefined_shape
        }}

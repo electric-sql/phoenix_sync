@@ -28,11 +28,9 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode" do
       config = [
-        electric: [
-          mode: :embedded,
-          repo: Support.ConfigTestRepo,
-          storage_dir: "/something"
-        ]
+        mode: :embedded,
+        repo: Support.ConfigTestRepo,
+        storage_dir: "/something"
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(:prod, config)
@@ -50,15 +48,13 @@ defmodule Phoenix.Sync.ApplicationTest do
     end
 
     test "disabled mode" do
-      assert {:ok, []} = App.children(:dev, electric: [mode: :disabled])
+      assert {:ok, []} = App.children(:dev, mode: :disabled)
     end
 
     test "embedded mode dev env" do
       config = [
-        electric: [
-          mode: :embedded,
-          repo: Support.ConfigTestRepo
-        ]
+        mode: :embedded,
+        repo: Support.ConfigTestRepo
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(:dev, config)
@@ -75,9 +71,7 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "only repo config given and electric installed defaults to embedded" do
       config = [
-        electric: [
-          repo: Support.ConfigTestRepo
-        ]
+        repo: Support.ConfigTestRepo
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(:dev, config)
@@ -86,12 +80,10 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode dev env doesn't overwrite explicit storage_dir" do
       config = [
-        electric: [
-          mode: :embedded,
-          repo: Support.ConfigTestRepo,
-          # don't overwrite this explict config
-          storage_dir: "/something"
-        ]
+        mode: :embedded,
+        repo: Support.ConfigTestRepo,
+        # don't overwrite this explict config
+        storage_dir: "/something"
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(:dev, config)
@@ -106,11 +98,9 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode test env" do
       config = [
-        electric: [
-          mode: :embedded,
-          repo: Support.ConfigTestRepo,
-          storage_dir: "/something"
-        ]
+        mode: :embedded,
+        repo: Support.ConfigTestRepo,
+        storage_dir: "/something"
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(:test, config)
@@ -125,16 +115,14 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded mode with explict connection_opts" do
       config = [
-        electric: [
-          mode: :embedded,
-          connection_opts: [
-            username: "postgres",
-            hostname: "localhost",
-            database: "electric",
-            password: "password"
-          ],
-          storage_dir: "/something"
-        ]
+        mode: :embedded,
+        connection_opts: [
+          username: "postgres",
+          hostname: "localhost",
+          database: "electric",
+          password: "password"
+        ],
+        storage_dir: "/something"
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(:prod, config)
@@ -156,13 +144,11 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "remote http mode" do
       config = [
-        electric: [
-          mode: :http,
-          url: "https://api.electric-sql.cloud",
-          credentials: [
-            secret: "my-secret",
-            source_id: "my-source-id"
-          ]
+        mode: :http,
+        url: "https://api.electric-sql.cloud",
+        credentials: [
+          secret: "my-secret",
+          source_id: "my-source-id"
         ]
       ]
 
@@ -171,14 +157,12 @@ defmodule Phoenix.Sync.ApplicationTest do
 
     test "embedded http mode" do
       config = [
-        electric: [
-          mode: :http,
-          repo: Support.ConfigTestRepo,
-          url: "http://localhost:4001",
-          http: [
-            ip: :loopback,
-            port: 4001
-          ]
+        mode: :http,
+        repo: Support.ConfigTestRepo,
+        url: "http://localhost:4001",
+        http: [
+          ip: :loopback,
+          port: 4001
         ]
       ]
 
@@ -195,11 +179,9 @@ defmodule Phoenix.Sync.ApplicationTest do
   describe "plug_opts/1" do
     test "embedded mode" do
       config = [
-        electric: [
-          mode: :embedded,
-          repo: Support.ConfigTestRepo,
-          storage_dir: "/something"
-        ]
+        mode: :embedded,
+        repo: Support.ConfigTestRepo,
+        storage_dir: "/something"
       ]
 
       api = App.plug_opts(:dev, config)
@@ -214,24 +196,22 @@ defmodule Phoenix.Sync.ApplicationTest do
       url = "https://api.electric-sql.cloud"
 
       config = [
-        electric: [
-          mode: :http,
-          url: url,
-          credentials: [
-            secret: "my-secret",
-            source_id: "my-source-id"
-          ],
-          params: %{
-            something: "here"
-          }
-        ]
+        mode: :http,
+        url: url,
+        credentials: [
+          secret: "my-secret",
+          source_id: "my-source-id"
+        ],
+        params: %{
+          something: "here"
+        }
       ]
 
       endpoint = URI.new!(url) |> URI.append_path("/v1/shape")
 
       assert api = App.plug_opts(:prod, config)
 
-      assert %Phoenix.Sync.Adapter.ElectricClient{
+      assert %Phoenix.Sync.Electric.ClientAdapter{
                client: %Electric.Client{
                  endpoint: ^endpoint,
                  params: %{secret: "my-secret", source_id: "my-source-id", something: "here"}
@@ -243,14 +223,12 @@ defmodule Phoenix.Sync.ApplicationTest do
       url = "http://localhost:4000"
 
       config = [
-        electric: [
-          mode: :http,
-          repo: Support.ConfigTestRepo,
-          url: "http://localhost:4000",
-          http: [
-            ip: :loopback,
-            port: 4000
-          ]
+        mode: :http,
+        repo: Support.ConfigTestRepo,
+        url: "http://localhost:4000",
+        http: [
+          ip: :loopback,
+          port: 4000
         ]
       ]
 
@@ -258,7 +236,7 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       assert api = App.plug_opts(:prod, config)
 
-      assert %Phoenix.Sync.Adapter.ElectricClient{
+      assert %Phoenix.Sync.Electric.ClientAdapter{
                client: %Electric.Client{
                  endpoint: ^endpoint
                }

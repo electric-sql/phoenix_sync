@@ -7,18 +7,14 @@ defmodule Phoenix.Sync.RouterTest do
       %{
         sync_config: [
           mode: :embedded,
-          electric: [
-            pool_opts: @pool_opts
-          ]
+          pool_opts: @pool_opts
         ]
       },
       %{
         sync_config: [
           mode: :http,
-          electric: [
-            url: "http://localhost:3000",
-            pool_opts: @pool_opts
-          ]
+          url: "http://localhost:3000",
+          pool_opts: @pool_opts
         ]
       }
     ]
@@ -320,7 +316,7 @@ defmodule Phoenix.Sync.RouterTest do
     end
 
     setup(ctx) do
-      opts = Phoenix.Sync.plug_opts(electric: electric_opts(ctx))
+      opts = Phoenix.Sync.plug_opts(electric_opts(ctx))
 
       [plug_opts: [phoenix_sync: opts]]
     end

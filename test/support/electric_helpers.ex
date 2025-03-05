@@ -1,6 +1,5 @@
 defmodule Support.ElectricHelpers do
   alias Electric.Postgres.Inspector.EtsInspector
-  alias Electric.Shapes.Api
 
   import ExUnit.Callbacks
 
@@ -132,8 +131,7 @@ defmodule Support.ElectricHelpers do
   end
 
   def start_embedded(%{stack_config: stack_config, sync_config: sync_config} = ctx) do
-    config =
-      Keyword.update!(sync_config, :electric, &Keyword.merge(&1, Enum.to_list(stack_config)))
+    config = Keyword.merge(sync_config, Enum.to_list(stack_config))
 
     {:ok, children} = Phoenix.Sync.Application.children(config)
 
@@ -178,19 +176,6 @@ defmodule Support.ElectricHelpers do
       stale_age: stale_age(ctx),
       allow_shape_deletion?: allow_shape_deletion(ctx)
     ]
-  end
-
-  def with_api_server(ctx) do
-    port = 33000
-
-    # Phoenix.Sync.plug_config(
-    electric_opts = Api.plug_opts(electric_opts(ctx))
-
-    ExUnit.Callbacks.start_link_supervised!(
-      {Bandit, plug: {MyEnv.TestRouter, electric: electric_opts}, port: port}
-    )
-
-    [port: port]
   end
 
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)

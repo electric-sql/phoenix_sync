@@ -165,6 +165,8 @@ defmodule Phoenix.Sync.Router do
   end
 
   defmodule Shape do
+    @moduledoc false
+
     @behaviour Plug
 
     def init(opts), do: opts
@@ -186,10 +188,10 @@ defmodule Phoenix.Sync.Router do
     end
 
     defp serve_shape(conn, api, shape) do
-      {:ok, shape_api} = Phoenix.Sync.Adapter.predefined_shape(api, shape)
+      {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, shape)
 
       conn = Plug.Conn.fetch_query_params(conn)
-      Phoenix.Sync.Adapter.call(shape_api, conn, conn.params)
+      Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, conn.params)
     end
   end
 end

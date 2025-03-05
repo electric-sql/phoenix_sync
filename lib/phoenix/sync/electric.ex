@@ -3,7 +3,7 @@ defmodule Phoenix.Sync.Electric do
   A `Plug.Router` and `Phoenix.Router` compatible Plug handler that allows
   you to mount the full Electric shape api into your application.
 
-  Unlike `Phoenix.Sync.Router.shape/2` this allows your app to serve
+  Unlike `Phoenix.Sync.Router.sync/2` this allows your app to serve
   shapes defined by `table` parameters, much like the Electric application.
 
   The advantage is that you're free to put your own authentication and
@@ -88,6 +88,9 @@ defmodule Phoenix.Sync.Electric do
 
   require Logger
 
+  @behaviour Phoenix.Sync.Adapter
+  @behaviour Plug
+
   @valid_modes [:http, :embedded, :disabled]
   @client_valid_modes @valid_modes -- [:disabled]
   @electric_available? Code.ensure_loaded?(Electric.Application)
@@ -104,12 +107,12 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
-  @behaviour Plug
-
   @doc false
+  @impl Plug
   def init(opts), do: Map.new(opts)
 
   @doc false
+  @impl Plug
   def call(%{private: %{phoenix_endpoint: endpoint}} = conn, _config) do
     api = endpoint.config(:phoenix_sync)
 
@@ -128,87 +131,62 @@ defmodule Phoenix.Sync.Electric do
   def serve_api(conn, api) do
     conn = Plug.Conn.fetch_query_params(conn)
 
-    Phoenix.Sync.Adapter.call(api, conn, conn.params)
+    Phoenix.Sync.Adapter.PlugApi.call(api, conn, conn.params)
   end
 
   @doc false
   def valid_modes, do: @valid_modes
 
   @doc false
+  @impl Phoenix.Sync.Adapter
   def children(env, opts) do
-    electric_opts = electric_opts(opts)
+    {mode, electric_opts} = electric_opts(opts)
 
-    case Keyword.fetch(electric_opts, :mode) do
-      {:ok, :disabled} ->
+    case mode do
+      :disabled ->
         {:ok, []}
 
-      {:ok, mode} when mode in @valid_modes ->
+      mode when mode in @valid_modes ->
         embedded_children(env, mode, electric_opts)
 
-      {:ok, invalid_mode} ->
+      invalid_mode ->
         {:error,
          "Invalid mode `#{inspect(invalid_mode)}`. Valid modes are: #{Enum.map_join(@valid_modes, " or ", &"`:#{&1}`")}"}
-
-      :error ->
-        if electric_available?() do
-          Logger.warning([
-            "missing mode configuration for #{__MODULE__}. Electric is installed so assuming `embedded` mode"
-          ])
-
-          embedded_children(env, :embedded, electric_opts)
-        else
-          {:error,
-           "Missing `mode`. Should be one of #{Enum.map_join(@valid_modes, " or ", &":#{&1}")}"}
-        end
     end
   end
 
   @doc false
+  @impl Phoenix.Sync.Adapter
   def plug_opts(env, opts) do
-    electric_opts = electric_opts(opts)
+    {mode, electric_opts} = electric_opts(opts)
     # don't need to validate the mode here -- it will have already been
     # validated by children/0 which is run at phoenix_sync startup before the
     # plug opts call even comes through
-    case Keyword.fetch(electric_opts, :mode) do
-      {:ok, :disabled} ->
+    case mode do
+      :disabled ->
         []
 
-      {:ok, mode} when mode in @valid_modes ->
+      mode when mode in @valid_modes ->
         plug_opts(env, mode, electric_opts)
 
-      {:ok, mode} ->
-        raise ArgumentError, message: "Invalid `mode` setting: #{inspect(mode)}"
-
-      :error ->
-        if electric_available?() do
-          Logger.warning([
-            "missing mode configuration for phoenix_sync. Electric is installed so assuming `embedded` mode"
-          ])
-
-          plug_opts(env, :embedded, electric_opts)
-        else
-          raise ArgumentError, message: "Missing `mode` configuration"
-        end
+      mode ->
+        raise ArgumentError,
+          message:
+            "Invalid `mode` for phoenix_sync: #{inspect(mode)}. Valid modes are: #{Enum.map_join(@valid_modes, " or ", &"`:#{&1}`")}"
     end
   end
 
   @doc false
+  @impl Phoenix.Sync.Adapter
   def client(opts) do
-    electric_opts = electric_opts(opts)
+    {mode, electric_opts} = electric_opts(opts)
 
-    case Keyword.fetch(electric_opts, :mode) do
-      {:ok, mode} when mode in @client_valid_modes ->
+    case mode do
+      mode when mode in @client_valid_modes ->
         configure_client(electric_opts, mode)
 
-      {:ok, invalid_mode} ->
+      invalid_mode ->
         {:error, "Cannot configure client for mode #{inspect(invalid_mode)}"}
-
-      :error ->
-        if electric_available?() do
-          configure_client(electric_opts, :embedded)
-        else
-          {:error, "No mode configured"}
-        end
     end
   end
 
@@ -218,7 +196,19 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp electric_opts(opts) do
-    Keyword.get(opts, :electric, [])
+    Keyword.pop_lazy(opts, :mode, fn ->
+      if electric_available?() do
+        Logger.warning([
+          "missing mode configuration for :phoenix_sync. Electric is installed so assuming `embedded` mode"
+        ])
+
+        :embedded
+      else
+        Logger.warning("No `:mode` configuration for :phoenix_sync, assuming `:disabled`")
+
+        :disabled
+      end
+    end)
   end
 
   defp electric_api_server(opts) do
@@ -404,7 +394,7 @@ defmodule Phoenix.Sync.Electric do
              params: params,
              fetch: {Electric.Client.Fetch.HTTP, [request: [raw: true]]}
            ) do
-      {:ok, %Phoenix.Sync.Adapter.ElectricClient{client: client}}
+      {:ok, %Phoenix.Sync.Electric.ClientAdapter{client: client}}
     end
   end
 
@@ -443,7 +433,7 @@ defmodule Phoenix.Sync.Electric do
 end
 
 if Code.ensure_loaded?(Electric.Shapes.Api) do
-  defimpl Phoenix.Sync.Adapter, for: Electric.Shapes.Api do
+  defimpl Phoenix.Sync.Adapter.PlugApi, for: Electric.Shapes.Api do
     alias Electric.Shapes
 
     alias Phoenix.Sync.PredefinedShape

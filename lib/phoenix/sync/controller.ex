@@ -11,6 +11,8 @@ defmodule Phoenix.Sync.Controller do
       defmodule MyAppWeb.TodoController do
         use Phoenix.Controller, formats: [:html, :json]
 
+        import #{__MODULE__}
+
         alias MyApp.Todos
 
         def all(conn, %{"user_id" => user_id} = params) do
@@ -72,7 +74,7 @@ defmodule Phoenix.Sync.Controller do
   end
 
   @doc """
-  Return the sync events for the given shape.
+  Return the sync events for the given shape as a `Plug.Conn` response.
   """
   @spec sync_render(Plug.Conn.t(), Plug.Conn.params(), Electric.Shapes.Api.shape_opts()) ::
           Plug.Conn.t()
@@ -81,11 +83,12 @@ defmodule Phoenix.Sync.Controller do
       endpoint.config(:phoenix_sync) ||
         raise RuntimeError,
           message:
-            "Please configure your Router opts with [electric: Electric.Shapes.Api.plug_opts()]"
+            "Please configure your Endpoint with [phoenix_sync: Phoenix.Sync.plug_opts()] in your `c:Application.start/2`"
 
     sync_render_api(conn, api, params, shape)
   end
 
+  # the Plug.{Router, Builder} version
   def sync_render(%{private: %{phoenix_sync_api: api}} = conn, params, shape) do
     sync_render_api(conn, api, params, shape)
   end
@@ -93,8 +96,8 @@ defmodule Phoenix.Sync.Controller do
   defp sync_render_api(conn, api, params, shape) do
     predefined_shape = Phoenix.Sync.PredefinedShape.new!(shape)
 
-    {:ok, shape_api} = Phoenix.Sync.Adapter.predefined_shape(api, predefined_shape)
+    {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, predefined_shape)
 
-    Phoenix.Sync.Adapter.call(shape_api, conn, params)
+    Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, params)
   end
 end

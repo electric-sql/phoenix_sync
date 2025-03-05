@@ -69,9 +69,9 @@ defmodule MyWeb.MyLive do
 end
 ```
 
-LiveView takes care of automatically keeping the front-end up-to-date with the assigned stream. What Phoenix.Sync does is automatically keep the *stream* up-to-date with the state of the database.
+LiveView takes care of automatically keeping the front-end up-to-date with the assigned stream. What Phoenix.Sync does is automatically keep the _stream_ up-to-date with the state of the database.
 
-This means you can build fully end-to-end real-time multi-user applications without writing Javascript *and* without worrying about message delivery, reconnections, cache invalidation or polling the database for changes.
+This means you can build fully end-to-end real-time multi-user applications without writing Javascript _and_ without worrying about message delivery, reconnections, cache invalidation or polling the database for changes.
 
 ### Sync shapes through your Router
 
@@ -94,7 +94,7 @@ defmodule MyWeb.Router do
 end
 ```
 
-Because the shapes are exposed through your Router, the client connects through your existing Plug middleware. This allows you to do real-time sync straight out of Postgres *without* having to translate your auth logic into complex/fragile database rules.
+Because the shapes are exposed through your Router, the client connects through your existing Plug middleware. This allows you to do real-time sync straight out of Postgres _without_ having to translate your auth logic into complex/fragile database rules.
 
 ### Sync dynamic shapes from a Controller
 
@@ -120,46 +120,92 @@ This allows you to define and personalise the shape definition at runtime using 
 
 ### Consume shapes in the frontend
 
-You can sync *into* any client in any language that [speaks HTTP and JSON](https://electric-sql.com/docs/api/http).
+You can sync _into_ any client in any language that [speaks HTTP and JSON](https://electric-sql.com/docs/api/http).
 
-For example, using the Electric [Typescript client](https://electric-sql.com/docs/api/clients/typescript):
+For example, using the Electric [sync_stream_updatescript client](https://electric-sql.com/docs/api/clients/typescript):
 
-```typescript
-import { Shape, ShapeStream } from '@electric-sql/client'
+```sync_stream_updatescript
+import { Shape, ShapeStream } from "@electric-sql/client";
 
 const stream = new ShapeStream({
-  url: `/shapes/todos`
-})
-const shape = new Shape(stream)
+  url: `/shapes/todos`,
+});
+const shape = new Shape(stream);
 
 // The callback runs every time the data changes.
-shape.subscribe(data => console.log(data))
+shape.subscribe((data) => console.log(data));
 ```
 
 Or binding a shape to a component using the [React bindings](https://electric-sql.com/docs/integrations/react):
 
 ```tsx
-import { useShape } from '@electric-sql/react'
+import { useShape } from "@electric-sql/react";
 
 const MyComponent = () => {
   const { data } = useShape({
-    url: `shapes/todos`
-  })
+    url: `shapes/todos`,
+  });
 
-  return (
-    <List todos={data} />
-  )
-}
+  return <List todos={data} />;
+};
 ```
 
 See the Electric [demos](https://electric-sql.com/demos) and [documentation](https://electric-sql.com/demos) for more client-side usage examples.
+
+### Shape Definitions
+
+Phoenix.Sync allows shapes to be defined in two ways:
+
+#### As an `Ecto` schema module or `Ecto.Query`
+
+This is the simplest way to
+integrate with your existing data model and means you don't have to worry too
+much about the lower-level details of the integration.
+
+Examples:
+
+```elixir
+
+sync_render(conn, params, from(t in Todos.Todo, where: t.completed == false))
+```
+
+Query support is currently limited to only `where` conditions. Support for more complex queries, including `JOIN`s is planned.
+
+**Note:** The static shapes defined using the `sync/2` or `sync/3` router macros do not accept `Ecto.Query` structs as a shape definition. This is to avoid excessive recompilation caused by having your router having a compile-time dependency on your `Ecto` schemas.
+
+If you want to add a where-clause filter to a static shape in your router, you must add an explicit [`where` clause](https://electric-sql.com/docs/guides/shapes#where-clause) alongside your `Ecto.Schema` module:
+
+```elixir
+
+sync "/incomplete-todos", Todos.Todo, where: "completed = false"
+```
+
+You can also include `replica` (see below) in your static shape definitions:
+
+```elixir
+
+sync "/incomplete-todos", Todos.Todo, where: "completed = false", replica: :full
+```
+
+#### As a keyword list
+
+At minimum a shape requires a `table`. You can think of shapes defined with
+just a table name as the sync-equivalent of `SELECT * FROM table`.
+
+The available options are:
+
+- `table` (required). The Postgres table name. Be aware of casing and [Postgres's handling of unquoted upper-case names](https://wiki.postgresql.org/wiki/Don%27t_Do_This#Don.27t_use_upper_case_table_or_column_names).
+- `namespace` (optional). The Postgres namespace that the table belongs to. Defaults to `public`.
+- `where` (optional). Filter to apply to the synced data in SQL format, e.g. `where: "amount < 1.23 AND colour in ('red', 'green')`.
+- `columns` (optional). The columns to include in the synced data. By default Electric will include all columns in the table. The column list **must** include all primary keys. E.g. `columns: ["id", "title", "amount"]`.
+- `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
 
 ## Installation and configuration
 
 `Phoenix.Sync` can be used in two modes:
 
 1. `:embedded` where Electric is included as an application dependency and Phoenix.Sync consumes data internally using Elixir APIs
-2. `:http` where Electric does *not* need to be included as an application dependency and Phoenix.Sync consumes data from an external Electric service using it's [HTTP API](https://electric-sql.com/docs/api/http)
+2. `:http` where Electric does _not_ need to be included as an application dependency and Phoenix.Sync consumes data from an external Electric service using it's [HTTP API](https://electric-sql.com/docs/api/http)
 
 ### Embedded mode
 
@@ -235,8 +281,6 @@ end
 config :phoenix_sync,
   mode: :http,
   http: [
-    # https://hexdocs.pm/bandit/Bandit.html#t:options/0
-    ip: :loopback,
     port: 3000,
   ],
   repo: MyApp.Repo,
@@ -280,7 +324,6 @@ config :phoenix_sync,
 config :phoenix_sync,
   mode: :http,
   http: [
-    ip: :loopback,
     port: 3000,
   ],
   repo: MyApp.Repo,
@@ -316,3 +359,4 @@ Phoenix.Sync uses Electric to handle the core concerns of partial replication, f
 Electric defines partial replication using [Shapes](https://electric-sql.com/docs/guides/shapes).
 
 Phoenix.Sync maps Ecto queries to shape definitions. This allows you to control what data syncs where using Ecto.Schema and Ecto.Query.
+

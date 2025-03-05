@@ -4,19 +4,15 @@ defmodule Phoenix.Sync.ElectricTest do
     parameterize: [
       %{
         sync_config: [
-          electric: [
-            mode: :embedded,
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-          ]
+          mode: :embedded,
+          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       },
       %{
         sync_config: [
-          electric: [
-            mode: :http,
-            url: "http://localhost:3000",
-            pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-          ]
+          mode: :http,
+          url: "http://localhost:3000",
+          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       }
     ]
@@ -103,7 +99,7 @@ defmodule Phoenix.Sync.ElectricTest do
   end
 
   defp call(conn, plug \\ MyEnv.TestRouter, ctx) do
-    opts = Phoenix.Sync.plug_opts(electric: electric_opts(ctx))
+    opts = Phoenix.Sync.plug_opts(electric_opts(ctx))
 
     plug.call(conn, phoenix_sync: opts)
   end
