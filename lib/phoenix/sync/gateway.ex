@@ -28,7 +28,8 @@ defmodule Phoenix.Sync.Gateway do
 
   """
   def configuration(%Client.ShapeDefinition{} = shape, %Client{} = client) do
-    request = Client.request(client, shape: shape)
+    shape_client = Client.for_shape(client, shape)
+    request = Client.request(shape_client, [])
     auth_headers = Client.authenticate_shape(client, shape)
     shape_params = ShapeDefinition.params(shape, format: :json)
     url = Fetch.Request.url(request, query: false)
