@@ -90,7 +90,9 @@ defmodule Support.ElectricHelpers do
       publication_name: publication_name,
       slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
       connection_opts: ctx.db_config,
-      replication_slot_temporary?: true
+      replication_slot_temporary?: true,
+      long_poll_timeout: long_poll_timeout(ctx),
+      allow_shape_deletion?: allow_shape_deletion(ctx)
     }
 
     Map.put(config, :stack_config, config)
@@ -180,6 +182,6 @@ defmodule Support.ElectricHelpers do
 
   defp max_age(ctx), do: Access.get(ctx, :max_age, 60)
   defp stale_age(ctx), do: Access.get(ctx, :stale_age, 300)
-  defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20_000)
+  defp long_poll_timeout(ctx), do: Access.get(ctx, :long_poll_timeout, 20)
   defp allow_shape_deletion(ctx), do: Access.get(ctx, :allow_shape_deletion, false)
 end

@@ -25,7 +25,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           method: :get,
           offset: params["offset"],
           shape_handle: params["handle"],
-          live: params["live"],
+          live: live?(params["live"]),
           next_cursor: params["cursor"]
         )
 
@@ -44,6 +44,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     end
 
     defp normalise_method(method), do: method |> String.downcase() |> String.to_atom()
+    defp live?(live), do: live == "true"
 
     defp fetch_upstream(sync_client, conn, request) do
       response =

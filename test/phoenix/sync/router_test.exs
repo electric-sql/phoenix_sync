@@ -257,6 +257,51 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
              ] = Jason.decode!(resp.resp_body)
     end
+
+    @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {
+           "todos",
+           ["title", "completed"],
+           [["one", false], ["two", false], ["three", true]]
+         }
+    test "cursor header is correctly returned", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/query-where", %{offset: "-1"})
+
+      assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+      assert [offset] = Plug.Conn.get_resp_header(resp, "electric-offset")
+
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/query-where", %{
+          offset: offset,
+          handle: handle,
+          live: false
+        })
+
+      assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+      assert [offset] = Plug.Conn.get_resp_header(resp, "electric-offset")
+      assert [_] = Plug.Conn.get_resp_header(resp, "electric-up-to-date")
+
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/query-where", %{
+          offset: offset,
+          handle: handle,
+          live: true,
+          cursor: ""
+        })
+
+      assert ["0"] = Plug.Conn.get_resp_header(resp, "electric-cursor")
+    end
   end
 
   describe "Plug.Router - shape/2" do
