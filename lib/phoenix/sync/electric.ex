@@ -183,7 +183,9 @@ defmodule Phoenix.Sync.Electric do
 
     case mode do
       mode when mode in @client_valid_modes ->
-        configure_client(electric_opts, mode)
+        electric_opts
+        |> stack_id()
+        |> configure_client(mode)
 
       invalid_mode ->
         {:error, "Cannot configure client for mode #{inspect(invalid_mode)}"}
@@ -290,10 +292,14 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
+  defp stack_id(opts) do
+    Keyword.put_new(opts, :stack_id, "electric-embedded")
+  end
+
   defp core_configuration(env, opts) do
     opts
     |> env_defaults(env)
-    |> Keyword.put_new(:stack_id, "electric-embedded")
+    |> stack_id()
   end
 
   defp env_defaults(opts, :dev) do
