@@ -36,7 +36,7 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:electric, ">= 1.0.0-beta.20"},
+      {:electric, ">= 1.0.0-beta.20", optional: true},
       {:electric_client, ">= 0.3.0-beta.4"}
     ] ++ deps_for_env(Mix.env())
   end
