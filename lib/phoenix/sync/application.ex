@@ -49,22 +49,6 @@ defmodule Phoenix.Sync.Application do
     apply(adapter, :plug_opts, [env, opts])
   end
 
-  # if Code.ensure_loaded?(Electric.Application) do
-  #   def api_opts do
-  #     config()
-  #     |> api_opts()
-  #   end
-  #
-  #   def api_opts(opts) when is_list(opts) do
-  #     api_opts(@env, opts)
-  #   end
-  #
-  #   def api_opts(env, opts) do
-  #     electric_opts = Keyword.get(opts, :electric, [])
-  #     core_configuration(env, electric_opts)
-  #   end
-  # end
-
   def fetch_with_error(opts, key) do
     case Keyword.fetch(opts, key) do
       {:ok, url} -> {:ok, url}

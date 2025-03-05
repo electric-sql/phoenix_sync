@@ -13,7 +13,7 @@ defmodule Phoenix.Sync.Plug.Shapes do
   ## Configuration
 
   Before configuring your router, you must install and configure the
-  `:electric` application.
+  `:phoenix_sync` application.
 
   See the documentation for [embedding electric](`Phoenix.Sync`) for
   details on embedding Electric into your Elixir application.
@@ -38,14 +38,14 @@ defmodule Phoenix.Sync.Plug.Shapes do
   pass the key you configure here (in this case `:config`) to the
   `Phoenix.Sync.Plug.Shapes` plug in it's `init_opts`.
 
-  In your application, build your Electric confguration using `Electric.Application.api_plug_opts/0` and pass the result to your router as `electric`:
+  In your application, build your Electric confguration using
+  `Phoenix.Sync.plug_opts()` and pass the result to your router as
+  `phoenix_sync`:
 
       # in application.ex
       def start(_type, _args) do
-        electric_config = Electric.Application.api_plug_opts()
-
         children = [
-          {Bandit, plug: {MyRouter, electric: electric_config}, port: 4000}
+          {Bandit, plug: {MyRouter, phoenix_sync: Phoenix.Sync.plug_opts()}, port: 4000}
         ]
 
         Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
@@ -69,16 +69,14 @@ defmodule Phoenix.Sync.Plug.Shapes do
         end
       end
 
-  As for the Plug integration, include the Electric configuration at runtime
+  As for the Plug integration, include the configuration at runtime
   within the `Application.start/2` callback.
 
       # in application.ex
       def start(_type, _args) do
-        electric_config = Electric.Application.api_plug_opts()
-
         children = [
           # ...
-          {MyAppWeb.Endpoint, electric: electric_config}
+          {MyAppWeb.Endpoint, phoenix_sync: Phoenix.Sync.plug_opts()}
         ]
 
         Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)

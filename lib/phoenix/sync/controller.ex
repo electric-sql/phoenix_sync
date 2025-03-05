@@ -1,4 +1,46 @@
 defmodule Phoenix.Sync.Controller do
+  @moduledoc """
+  Provides controller-level integration with sync streams.
+
+  Unlike `Phoenix.Sync.Router.sync/2`, which only permits static shape
+  definitions, in a controller you can use request and session information to
+  filter your data.
+
+  ## Phoenix Example
+
+      defmodule MyAppWeb.TodoController do
+        use Phoenix.Controller, formats: [:html, :json]
+
+        alias MyApp.Todos
+
+        def all(conn, %{"user_id" => user_id} = params) do
+          sync_render(
+            conn,
+            params,
+            from(t in Todos.Todo, where: t.owner_id == ^user_id)
+          )
+        end
+      end
+
+  ## Plug Example
+
+  You should `use #{__MODULE__}` in your `Plug.Router`, then within your route
+  you can use the `sync_render/2` function.
+
+      defmodule MyPlugApp.Router do
+        use Plug.Router, copy_opts_to_assign: :options
+        use #{__MODULE__}
+
+        plug :match
+        plug :dispatch
+
+        get "/todos" do
+          sync_render(conn, MyPlugApp.Todos.Todo)
+        end
+      end
+
+  """
+
   defmacro __using__(opts \\ []) do
     # validate that we're being used in the context of a Plug.Router impl
     Phoenix.Sync.Plug.Utils.env!(__CALLER__)
@@ -29,9 +71,11 @@ defmodule Phoenix.Sync.Controller do
     end
   end
 
+  @doc """
+  Return the sync events for the given shape.
+  """
   @spec sync_render(Plug.Conn.t(), Plug.Conn.params(), Electric.Shapes.Api.shape_opts()) ::
           Plug.Conn.t()
-
   def sync_render(%{private: %{phoenix_endpoint: endpoint}} = conn, params, shape) do
     api =
       endpoint.config(:phoenix_sync) ||
