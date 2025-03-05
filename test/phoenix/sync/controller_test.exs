@@ -147,7 +147,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
   defmodule PlugRouter do
     use Plug.Router, copy_opts_to_assign: :options
-    use Phoenix.Sync.Controller, opts_in_assign: :options
+    use Phoenix.Sync.Controller
 
     plug :match
     plug :dispatch
