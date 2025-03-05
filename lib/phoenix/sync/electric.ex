@@ -150,7 +150,7 @@ defmodule Phoenix.Sync.Electric do
          "Invalid mode `#{inspect(invalid_mode)}`. Valid modes are: #{Enum.map_join(@valid_modes, " or ", &"`:#{&1}`")}"}
 
       :error ->
-        if @electric_available? do
+        if electric_available?() do
           Logger.warning([
             "missing mode configuration for #{__MODULE__}. Electric is installed so assuming `embedded` mode"
           ])
@@ -180,7 +180,7 @@ defmodule Phoenix.Sync.Electric do
         raise ArgumentError, message: "Invalid `mode` setting: #{inspect(mode)}"
 
       :error ->
-        if @electric_available? do
+        if electric_available?() do
           Logger.warning([
             "missing mode configuration for phoenix_sync. Electric is installed so assuming `embedded` mode"
           ])
@@ -204,7 +204,7 @@ defmodule Phoenix.Sync.Electric do
         {:error, "Cannot configure client for mode #{inspect(invalid_mode)}"}
 
       :error ->
-        if @electric_available? do
+        if electric_available?() do
           configure_client(electric_opts, :embedded)
         else
           {:error, "No mode configured"}
@@ -245,7 +245,7 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp plug_opts(env, :embedded, electric_opts) do
-    if @electric_available? do
+    if electric_available?() do
       env
       |> core_configuration(electric_opts)
       |> Electric.Application.api_plug_opts()
@@ -267,7 +267,7 @@ defmodule Phoenix.Sync.Electric do
   defp electric_children(env, mode, opts) do
     case validate_database_config(env, mode, opts) do
       {:start, db_config_fun, message} ->
-        if @electric_available? do
+        if electric_available?() do
           db_config =
             db_config_fun.()
             |> Keyword.update!(:connection_opts, &Electric.Utils.obfuscate_password/1)
