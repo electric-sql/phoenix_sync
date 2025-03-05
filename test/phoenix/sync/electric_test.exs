@@ -1,4 +1,4 @@
-defmodule Phoenix.Sync.Plug.ShapesTest do
+defmodule Phoenix.Sync.ElectricTest do
   use ExUnit.Case,
     async: false,
     parameterize: [
@@ -38,7 +38,7 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
     scope "/api" do
       pipe_through [:browser]
 
-      forward "/", Phoenix.Sync.Plug.Shapes
+      forward "/", Phoenix.Sync.Electric
     end
   end
 
@@ -92,13 +92,13 @@ defmodule Phoenix.Sync.Plug.ShapesTest do
 
   defmodule MyEnv.TestRouter do
     use Plug.Router, copy_opts_to_assign: :config
-    use Phoenix.Sync.Plug.Shapes
+    use Phoenix.Sync.Electric
 
     plug :match
     plug :dispatch
 
     forward "/shapes",
-      to: Phoenix.Sync.Plug.Shapes,
+      to: Phoenix.Sync.Electric,
       init_opts: [opts_in_assign: :config]
   end
 
