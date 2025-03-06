@@ -7,7 +7,7 @@ defmodule Phoenix.Sync.Application do
 
   @impl true
   def start(_type, _args) do
-    case children() |> dbg do
+    case children() do
       {:ok, children} ->
         Supervisor.start_link(children, strategy: :one_for_one, name: Phoenix.Sync.Supervisor)
 
@@ -106,7 +106,7 @@ defmodule Phoenix.Sync.Application do
   def plug_opts(opts) when is_list(opts) do
     {adapter, env} = adapter_env(opts)
 
-    apply(adapter, :plug_opts, [env, opts]) |> dbg
+    apply(adapter, :plug_opts, [env, opts])
   end
 
   @doc false

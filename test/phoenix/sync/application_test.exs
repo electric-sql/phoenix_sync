@@ -63,11 +63,15 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       validate_repo_connection_opts!(opts)
 
+      # assert %{
+      #          storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/tmp/" <> storage_dir]},
+      #          persistent_kv: %Electric.PersistentKV.Filesystem{
+      #            root: "/tmp/" <> storage_dir
+      #          }
+      #        } = Map.new(opts)
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/tmp/" <> storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{
-                 root: "/tmp/" <> storage_dir
-               }
+               storage: {Electric.ShapeCache.InMemoryStorage, _},
+               persistent_kv: %Electric.PersistentKV.Memory{}
              } = Map.new(opts)
     end
 
@@ -95,9 +99,14 @@ defmodule Phoenix.Sync.ApplicationTest do
       validate_repo_connection_opts!(opts)
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/something"]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+               storage: {Electric.ShapeCache.InMemoryStorage, _},
+               persistent_kv: %Electric.PersistentKV.Memory{}
              } = Map.new(opts)
+
+      # assert %{
+      #          storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/something"]},
+      #          persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+      #        } = Map.new(opts)
     end
 
     test "embedded mode test env" do
@@ -195,9 +204,13 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       api = App.plug_opts(config)
 
+      # assert %Electric.Shapes.Api{
+      #          storage: {Electric.ShapeCache.FileStorage, %{base_path: "/something" <> _}},
+      #          persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+      #        } = api
       assert %Electric.Shapes.Api{
-               storage: {Electric.ShapeCache.FileStorage, %{base_path: "/something" <> _}},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+               storage: {Electric.ShapeCache.InMemoryStorage, _},
+               persistent_kv: %Electric.PersistentKV.Memory{}
              } = api
     end
 

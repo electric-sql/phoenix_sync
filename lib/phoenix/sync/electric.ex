@@ -319,6 +319,10 @@ defmodule Phoenix.Sync.Electric do
       {Electric.ShapeCache.InMemoryStorage,
        table_base_name: :"electric-storage#{opts[:stack_id]}", stack_id: opts[:stack_id]}
     )
+    |> Keyword.put_new(
+      :persistent_kv,
+      {Electric.PersistentKV.Memory, :new!, []}
+    )
     |> Keyword.put_new(:send_cache_headers?, false)
   end
 
