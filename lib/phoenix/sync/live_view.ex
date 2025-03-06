@@ -346,7 +346,7 @@ defmodule Phoenix.Sync.LiveView do
     component_event(component: component, event: event)
   end
 
-  @doc """
+  _ = """
   Embed client configuration for a shape into your HTML.
 
       <Phoenix.Sync.LiveView.electric_client_configuration
@@ -396,6 +396,8 @@ defmodule Phoenix.Sync.LiveView do
         );
       </script>
   """
+
+  @doc false
   attr :shape, :any, required: true, doc: "The Ecto query (or schema module) to subscribe to"
 
   attr :key, :string,

@@ -15,7 +15,7 @@ defmodule Phoenix.Sync.Electric do
   Before configuring your router, you must install and configure the
   `:phoenix_sync` application.
 
-  See the documentation for [embedding electric](`Phoenix.Sync`) for
+  See the documentation for [embedding electric](readme.html#installation-and-configuration) for
   details on embedding Electric into your Elixir application.
 
   ## Plug Integration

@@ -1,58 +1,4 @@
 defmodule Phoenix.Sync do
-  @moduledoc """
-  Wrappers to ease integration of [Electric’s Postgres syncing
-  service](https://electric-sql.com) with [Phoenix
-  applications](https://www.phoenixframework.org/).
-
-  There are currently 2 integration modes: [`Phoenix.LiveView`
-  streams](#module-phoenix-liveview-streams) and [configuration
-  gateway](#module-configuration-gateway).
-
-  ## Phoenix.LiveView Streams
-
-  `Phoenix.Sync.LiveView.sync_stream/4` integrates with
-  [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4)
-  and provides a live updating collection of items.
-
-  ## Configuration Gateway
-
-  Using `Phoenix.Sync.Plug` you can create endpoints that
-  return configuration information for your Electric Typescript clients. See
-  [that module's documentation](`Phoenix.Sync.Plug`) for
-  more information.
-
-  ## Installation
-
-  Add `phoenix_sync` to your application dependencies:
-
-      def deps do
-        [
-          {:phoenix_sync, "~> 0.1"}
-        ]
-      end
-
-  ## Configuration
-
-  In your `config/config.exs` or `config/runtime.exs` you **must** configure the
-  client for the Electric streaming API:
-
-      import Config
-
-      config :phoenix_sync, Electric.Client,
-        # one of `base_url` or `endpoint` is required
-        base_url: System.get_env("ELECTRIC_URL", "http://localhost:3000"),
-        # endpoint: System.get_env("ELECTRIC_ENDPOINT", "http://localhost:3000/v1/shape"),
-        # optional
-        database_id: System.get_env("ELECTRIC_DATABASE_ID", nil)
-
-  See the documentation for [`Electric.Client.new/1`](`Electric.Client.new/1`)
-  for information on the client configuration.
-
-  ## Embedding Electric
-
-  **TODO**
-  """
-
   alias Electric.Client.ShapeDefinition
 
   @shape_keys [:namespace, :where, :columns]
@@ -73,31 +19,10 @@ defmodule Phoenix.Sync do
   @type param_overrides :: [param_override()]
 
   defdelegate plug_opts(), to: Phoenix.Sync.Application
-  @doc false
-  defdelegate plug_opts(opts), to: Phoenix.Sync.Application
 
-  @doc """
-  Create a new `Electric.Client` instance based on the application config.
+  defdelegate client!(), to: Phoenix.Sync.Client, as: :new!
 
-  To connect your live streams to an externally hosted Electric instance over
-  HTTP, configure your app with the URL of the Electric server:
-
-    # dev.exs
-    config :phoenix_sync, Electric.Client,
-      base_url: "http://localhost:3000"
-
-  If Electric is installed as a dependency of your app, and you wish to connect
-  your live streams to this internal application, then you don't need to configure
-  anything -- `client!/0` will return an `Electric.Client` instance configured to
-  data directly from the running Electric application.
-
-  See [`Electric.Client.new/1`](`Electric.Client.new/1`) for the available
-  options.
-
-  """
-  defdelegate client!, to: Phoenix.Sync.Client, as: :new!
-
-  @doc """
+  _ = """
   Use request query parameters to create a `Electric.Client.ShapeDefinition`.
 
   Useful when creating authorization endpoints that validate a user's access to
@@ -149,9 +74,10 @@ defmodule Phoenix.Sync do
       {:ok, %Electric.Client.ShapeDefinition{table: "things"}}
 
   """
+
+  @doc false
   @spec shape_from_params(Plug.Conn.t() | Plug.Conn.params(), overrides :: param_overrides()) ::
           {:ok, Electric.Client.ShapeDefinition.t()} | {:error, String.t()}
-
   def shape_from_params(conn_or_map, overrides \\ [])
 
   def shape_from_params(%Plug.Conn{} = conn, overrides) do

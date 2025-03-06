@@ -6,16 +6,42 @@ defmodule Phoenix.Sync.Router do
   ## Phoenix Integration
 
   When using within a Phoenix application, you should just import the macros
-  defined here
+  defined here in your `Phoenix.Router` module:
 
-      import #{__MODULE__}
+      defmodule MyAppWeb.Router do
+        use Phoenix.Router
+
+        import #{__MODULE__}
+
+        scope "/shapes" do
+          sync "/all-todos", MyApp.Todos.Todo
+
+          sync "/pending-todos", MyApp.Todos.Todo,
+            where: "completed = false"
+        end
+      end
 
   ## Plug Integration
 
-  Within Plug applications you need to do a little more work.
+  Within your `Plug.Router` module, `use #{__MODULE__}` and then 
+  add your `sync` routes:
 
-  TODO
+      defmodule MyApp.Plug.Router do
+        use Plug.Router, copy_opts_to_assign: :options
+        use #{__MODULE__}
 
+        plug :match
+        plug :dispatch
+
+        sync "/shapes/all-todos", MyApp.Todos.Todo
+
+        sync "/shapes/pending-todos", MyApp.Todos.Todo,
+          where: "completed = false"
+      end
+
+  You **must** use the `copy_opts_to_assign` option in `Plug.Router` in order
+  for the `sync` macro to get the configuration defined in your
+  `application.ex` [`start/2`](`c:Application.start/2`) callback.
   """
 
   import Phoenix.Sync.Plug.Utils
@@ -63,15 +89,9 @@ defmodule Phoenix.Sync.Router do
 
       sync "/incomplete-todos", table: "todos", where: "completed = false"
 
-  ## Options
 
-    * `:table` - (required if no schema provided) The database table to expose
-    * `:namespace` - (optional) The namespace for the table
-    * `:where` - (optional) The where clause to apply to the data
-    * `:columns` - (optional) Subset of table columns to include in the streamed data (default all columns)
-    * `:storage` - (optional) Storage configuration
-    * `:replica` - (optional) Replication strategy
-
+  See [the section on Shape definitions](readme.html#shape-definitions) for
+  more details on keyword-based shapes.
   """
   defmacro sync(path, opts) when is_list(opts) do
     route(env!(__CALLER__), path, build_definition(path, __CALLER__, opts))
@@ -82,6 +102,14 @@ defmodule Phoenix.Sync.Router do
     route(env!(__CALLER__), path, build_shape_from_query(queryable, __CALLER__, []))
   end
 
+  @doc """
+  Create a synchronization route from an `Ecto.Schema` plus shape options.
+
+      sync "/my-shape", MyApp.Todos.Todo,
+        where: "completed = false"
+
+  See `sync/2`.
+  """
   # e.g. shape "/path", Ecto.Query.from(t in MyTable), replica: :full
   defmacro sync(path, queryable, opts) when is_tuple(queryable) and is_list(opts) do
     route(env!(__CALLER__), path, build_shape_from_query(queryable, __CALLER__, opts))

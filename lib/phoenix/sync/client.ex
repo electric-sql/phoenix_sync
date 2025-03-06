@@ -28,7 +28,7 @@ defmodule Phoenix.Sync.Client do
 
   This client can then generate streams for use in your Elixir applications:
 
-      client = Phoenix.Sync.Client.new()
+      {:ok, client} = Phoenix.Sync.Client.new()
       stream = Electric.Client.stream(client, Todos.Todo)
       for msg <- stream, do: IO.inspect(msg)
 
@@ -40,6 +40,14 @@ defmodule Phoenix.Sync.Client do
     apply(adapter, :client, [env, opts])
   end
 
+  @doc """
+  Create a new sync client based on the application configuration or raise if
+  the config is invalid.
+
+      client = Phoenix.Sync.Client.new!()
+
+  See `new/0`.
+  """
   def new! do
     case new() do
       {:ok, client} ->
@@ -50,6 +58,14 @@ defmodule Phoenix.Sync.Client do
     end
   end
 
+  @doc """
+  Create a new sync client based on the given opts or raise if
+  the config is invalid.
+
+      client = Phoenix.Sync.Client.new!(mode: :embedded)
+
+  See `new/1`.
+  """
   def new!(opts) do
     case new(opts) do
       {:ok, client} ->
@@ -95,6 +111,7 @@ defmodule Phoenix.Sync.Client do
     stream(shape, stream_opts, nil)
   end
 
+  @doc false
   def stream(shape, stream_opts, sync_opts) do
     client = new!(sync_opts)
     {shape, shape_stream_opts} = resolve_shape(shape)

@@ -1,5 +1,6 @@
 defmodule Phoenix.Sync.Plug do
-  @moduledoc """
+  @moduledoc false
+  _ = """
   Provides an configuration endpoint for use in your Phoenix applications.
 
   Rather than configuring your [Electric Typescript

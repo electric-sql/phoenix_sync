@@ -1,3 +1,5 @@
+# Phoenix.Sync
+
 <p>
   <br />
   <a href="https://hexdocs.pm/phoenix_sync" target="_blank">
@@ -9,8 +11,6 @@
   </a>
   <br />
 </p>
-
-# Phoenix.Sync
 
 [![Hex.pm](https://img.shields.io/hexpm/v/phoenix_sync.svg)](https://hex.pm/packages/phoenix_sync)
 [![Documentation](https://img.shields.io/badge/docs-hexdocs-green)](https://hexdocs.pm/phoenix_sync)
@@ -176,8 +176,8 @@ end
 
 # config/config.exs
 config :phoenix_sync,
-  mode: :embedded,
   env: config_env(),
+  mode: :embedded,
   repo: MyApp.Repo
 
 # application.ex
@@ -202,8 +202,8 @@ end
 
 # config/config.exs
 config :phoenix_sync,
-  mode: :http,
   env: config_env(),
+  mode: :http,
   url: "https://api.electric-sql.cloud",
   credentials: [
     secret: "...",    # required
@@ -233,8 +233,8 @@ end
 
 # config/config.exs
 config :phoenix_sync,
-  mode: :http,
   env: config_env(),
+  mode: :http,
   http: [
     port: 3000,
   ],
@@ -272,14 +272,14 @@ end
 
 # config/dev.exs
 config :phoenix_sync,
-  mode: :embedded,
   env: config_env(),
+  mode: :embedded,
   repo: MyApp.Repo
 
 # config/test.esx
 config :phoenix_sync,
-  mode: :http,
   env: config_env(),
+  mode: :http,
   http: [
     port: 3000,
   ],
@@ -372,3 +372,4 @@ The available options are:
 - `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
 
 See the [Electric Shapes guide](https://electric-sql.com/docs/guides/shapes) for more information.
+
