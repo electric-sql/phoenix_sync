@@ -299,15 +299,17 @@ defmodule Phoenix.Sync.Electric do
   defp core_configuration(env, opts) do
     opts
     |> env_defaults(env)
+    |> overrides()
     |> stack_id()
   end
 
   defp env_defaults(opts, :dev) do
-    Keyword.put_new(
-      opts,
+    opts
+    |> Keyword.put_new(
       :storage_dir,
       Path.join(System.tmp_dir!(), "electric/shape-data#{System.monotonic_time()}")
     )
+    |> Keyword.put_new(:send_cache_headers?, false)
   end
 
   defp env_defaults(opts, :test) do
@@ -329,6 +331,11 @@ defmodule Phoenix.Sync.Electric do
 
   defp env_defaults(opts, _) do
     opts
+  end
+
+  defp overrides(opts) do
+    opts
+    |> Keyword.put_new(:stack_ready_timeout, 5_000)
   end
 
   # Returns a function to generate the config so that we can
