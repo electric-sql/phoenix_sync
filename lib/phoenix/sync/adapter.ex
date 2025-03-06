@@ -3,5 +3,5 @@ defmodule Phoenix.Sync.Adapter do
 
   @callback children(atom(), keyword()) :: {:ok, [Supervisor.child_spec()]} | {:error, String.t()}
   @callback plug_opts(atom(), keyword()) :: keyword() | no_return()
-  @callback client(keyword()) :: {:ok, struct()} | {:error, String.t()}
+  @callback client(atom(), keyword()) :: {:ok, struct()} | {:error, String.t()}
 end

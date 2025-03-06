@@ -35,9 +35,9 @@ defmodule Phoenix.Sync.Client do
   Alternatively use `stream/1` which wraps this functionality.
   """
   def new(opts) do
-    adapter = Phoenix.Sync.Application.adapter(opts)
+    {adapter, env} = Phoenix.Sync.Application.adapter_env(opts)
 
-    apply(adapter, :client, [opts])
+    apply(adapter, :client, [env, opts])
   end
 
   def new! do

@@ -178,13 +178,13 @@ defmodule Phoenix.Sync.Electric do
 
   @doc false
   @impl Phoenix.Sync.Adapter
-  def client(opts) do
+  def client(env, opts) do
     {mode, electric_opts} = electric_opts(opts)
 
     case mode do
       mode when mode in @client_valid_modes ->
-        electric_opts
-        |> stack_id()
+        env
+        |> core_configuration(electric_opts)
         |> configure_client(mode)
 
       invalid_mode ->
@@ -304,10 +304,20 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp env_defaults(opts, :dev) do
+    # can't use new tmp dir for every run in dev because the storage
+    # path must remain consistent between invocations of children(), plug_opts()
+    # and client()...
+    # if we want to use emphemeral dir for dev storage then we have to persist
+    # the storage_dir into the application config.
     opts
+    # |> Keyword.put_new(
+    #   :storage_dir,
+    #   Path.join(System.tmp_dir!(), "electric/shape-data#{System.monotonic_time()}")
+    # )
     |> Keyword.put_new(
-      :storage_dir,
-      Path.join(System.tmp_dir!(), "electric/shape-data#{System.monotonic_time()}")
+      :storage,
+      {Electric.ShapeCache.InMemoryStorage,
+       table_base_name: :"electric-storage#{opts[:stack_id]}", stack_id: opts[:stack_id]}
     )
     |> Keyword.put_new(:send_cache_headers?, false)
   end

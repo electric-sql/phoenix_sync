@@ -3,7 +3,7 @@
   <a href="https://hexdocs.pm/phoenix_sync" target="_blank">
     <picture>
       <img alt="Phoenix sync illustration"
-          src="./docs/phoenix-sync.png"
+          src="https://github.com/electric-sql/phoenix_sync/raw/main/docs/phoenix-sync.png"
       />
     </picture>
   </a>
@@ -196,7 +196,7 @@ The available options are:
 
 - `table` (required). The Postgres table name. Be aware of casing and [Postgres's handling of unquoted upper-case names](https://wiki.postgresql.org/wiki/Don%27t_Do_This#Don.27t_use_upper_case_table_or_column_names).
 - `namespace` (optional). The Postgres namespace that the table belongs to. Defaults to `public`.
-- `where` (optional). Filter to apply to the synced data in SQL format, e.g. `where: "amount < 1.23 AND colour in ('red', 'green')`.
+- `where` (optional). Filter to apply to the synced data in SQL syntax, e.g. `where: "amount < 1.23 AND colour in ('red', 'green')`.
 - `columns` (optional). The columns to include in the synced data. By default Electric will include all columns in the table. The column list **must** include all primary keys. E.g. `columns: ["id", "title", "amount"]`.
 - `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
 
@@ -225,6 +225,7 @@ end
 # config/config.exs
 config :phoenix_sync,
   mode: :embedded,
+  env: config_env(),
   repo: MyApp.Repo
 
 # application.ex
@@ -250,6 +251,7 @@ end
 # config/config.exs
 config :phoenix_sync,
   mode: :http,
+  env: config_env(),
   url: "https://api.electric-sql.cloud",
   credentials: [
     secret: "...",    # required
@@ -280,6 +282,7 @@ end
 # config/config.exs
 config :phoenix_sync,
   mode: :http,
+  env: config_env(),
   http: [
     port: 3000,
   ],
@@ -318,11 +321,13 @@ end
 # config/dev.exs
 config :phoenix_sync,
   mode: :embedded,
+  env: config_env(),
   repo: MyApp.Repo
 
 # config/test.esx
 config :phoenix_sync,
   mode: :http,
+  env: config_env(),
   http: [
     port: 3000,
   ],
