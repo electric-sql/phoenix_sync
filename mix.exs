@@ -18,7 +18,7 @@ defmodule Phoenix.Sync.MixProject do
       package: package(),
       description: description(),
       source_url: "https://github.com/electric-sql/phoenix_sync",
-      homepage_url: "https://electric-sql.com"
+      homepage_url: "https://hexdocs.pm/phoenix_sync"
     ]
   end
 
@@ -70,8 +70,7 @@ defmodule Phoenix.Sync.MixProject do
   defp package do
     [
       links: %{
-        "Electric SQL" => "https://electric-sql.com",
-        "Github" => "https://github.com/electric-sql/phoenix_sync"
+        "Source code" => "https://github.com/electric-sql/phoenix_sync"
       },
       licenses: ["Apache-2.0"],
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
@@ -79,7 +78,7 @@ defmodule Phoenix.Sync.MixProject do
   end
 
   defp description do
-    "Phoenix.Sync enables real-time sync for Postgres-backed Phoenix and Plug applications"
+    "Real-time sync for Postgres-backed Phoenix applications."
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]

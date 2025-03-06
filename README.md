@@ -122,9 +122,9 @@ This allows you to define and personalise the shape definition at runtime using 
 
 You can sync _into_ any client in any language that [speaks HTTP and JSON](https://electric-sql.com/docs/api/http).
 
-For example, using the Electric [sync_stream_updatescript client](https://electric-sql.com/docs/api/clients/typescript):
+For example, using the Electric [Typescript client](https://electric-sql.com/docs/api/clients/typescript):
 
-```sync_stream_updatescript
+```typescript
 import { Shape, ShapeStream } from "@electric-sql/client";
 
 const stream = new ShapeStream({
@@ -151,54 +151,6 @@ const MyComponent = () => {
 ```
 
 See the Electric [demos](https://electric-sql.com/demos) and [documentation](https://electric-sql.com/demos) for more client-side usage examples.
-
-### Shape Definitions
-
-Phoenix.Sync allows shapes to be defined in two ways:
-
-#### As an `Ecto` schema module or `Ecto.Query`
-
-This is the simplest way to
-integrate with your existing data model and means you don't have to worry too
-much about the lower-level details of the integration.
-
-Examples:
-
-```elixir
-
-sync_render(conn, params, from(t in Todos.Todo, where: t.completed == false))
-```
-
-Query support is currently limited to only `where` conditions. Support for more complex queries, including `JOIN`s is planned.
-
-**Note:** The static shapes defined using the `sync/2` or `sync/3` router macros do not accept `Ecto.Query` structs as a shape definition. This is to avoid excessive recompilation caused by having your router having a compile-time dependency on your `Ecto` schemas.
-
-If you want to add a where-clause filter to a static shape in your router, you must add an explicit [`where` clause](https://electric-sql.com/docs/guides/shapes#where-clause) alongside your `Ecto.Schema` module:
-
-```elixir
-
-sync "/incomplete-todos", Todos.Todo, where: "completed = false"
-```
-
-You can also include `replica` (see below) in your static shape definitions:
-
-```elixir
-
-sync "/incomplete-todos", Todos.Todo, where: "completed = false", replica: :full
-```
-
-#### As a keyword list
-
-At minimum a shape requires a `table`. You can think of shapes defined with
-just a table name as the sync-equivalent of `SELECT * FROM table`.
-
-The available options are:
-
-- `table` (required). The Postgres table name. Be aware of casing and [Postgres's handling of unquoted upper-case names](https://wiki.postgresql.org/wiki/Don%27t_Do_This#Don.27t_use_upper_case_table_or_column_names).
-- `namespace` (optional). The Postgres namespace that the table belongs to. Defaults to `public`.
-- `where` (optional). Filter to apply to the synced data in SQL syntax, e.g. `where: "amount < 1.23 AND colour in ('red', 'green')`.
-- `columns` (optional). The columns to include in the synced data. By default Electric will include all columns in the table. The column list **must** include all primary keys. E.g. `columns: ["id", "title", "amount"]`.
-- `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
 
 ## Installation and configuration
 
@@ -363,5 +315,60 @@ Phoenix.Sync uses Electric to handle the core concerns of partial replication, f
 
 Electric defines partial replication using [Shapes](https://electric-sql.com/docs/guides/shapes).
 
+### Shape definitions
+
+Phoenix.Sync allows shapes to be defined in two ways:
+
+1. using an `Ecto.Query` (or `Ecto.Schema` module)
+2. using a keyword list
+
+### Using an `Ecto.Query`
+
 Phoenix.Sync maps Ecto queries to shape definitions. This allows you to control what data syncs where using Ecto.Schema and Ecto.Query.
 
+For example, using a query:
+
+```elixir
+sync_render(conn, params, from(t in Todos.Todo, where: t.completed == false))
+```
+
+Or using a schema (equivalent to `from(t in Todos.Todo)`):
+
+```elixir
+sync_render(conn, params, Todos.Todo)
+```
+
+Query support is currently limited to `where` conditions. Support for more complex queries using `join`, `order_by`, `limit` and preloaded association graphs is planned and will be added in Q2 2025.
+
+The static shapes defined using the `sync/2` or `sync/3` router macros do not accept `Ecto.Query` structs as a shape definition. This is to avoid excessive recompilation caused by your router having a compile-time dependency on your `Ecto` schemas.
+
+If you want to add a where-clause filter to a static shape in your router, you can add an explicit [`where` clause](https://electric-sql.com/docs/guides/shapes#where-clause) alongside your `Ecto.Schema` module:
+
+```elixir
+
+sync "/incomplete-todos", Todos.Todo, where: "completed = false"
+```
+
+You can also include `replica` (see below) in your static shape definitions:
+
+```elixir
+
+sync "/incomplete-todos", Todos.Todo, where: "completed = false", replica: :full
+```
+
+For anything else more dyanamic, or to use Ecto queries, you should switch from using the `sync` macros in your router to using `sync_render/3` in a controller.
+
+### Using a keyword list
+
+At minimum a shape requires a `table`. You can think of shapes defined with
+just a table name as the sync-equivalent of `SELECT * FROM table`.
+
+The available options are:
+
+- `table` (required). The Postgres table name. Be aware of casing and [Postgres's handling of unquoted upper-case names](https://wiki.postgresql.org/wiki/Don%27t_Do_This#Don.27t_use_upper_case_table_or_column_names).
+- `namespace` (optional). The Postgres namespace that the table belongs to. Defaults to `public`.
+- `where` (optional). Filter to apply to the synced data in SQL format, e.g. `where: "amount < 1.23 AND colour in ('red', 'green')`.
+- `columns` (optional). The columns to include in the synced data. By default Electric will include all columns in the table. The column list **must** include all primary keys. E.g. `columns: ["id", "title", "amount"]`.
+- `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
+
+See the [Electric Shapes guide](https://electric-sql.com/docs/guides/shapes) for more information.
