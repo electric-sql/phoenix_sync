@@ -18,6 +18,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MIX_ENV: test
+
+    services:
+      postgres:
+        image: "postgres:17-alpine"
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54321:5432
+
     steps:
       - uses: actions/checkout@v4
 
