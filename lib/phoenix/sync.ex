@@ -10,7 +10,7 @@ defmodule Phoenix.Sync do
   @type shape_definition ::
           String.t()
           | Ecto.Queryable.t()
-          | shape_definition()
+          | shape_specification()
   @type param_override ::
           {:namespace, String.t()}
           | {:table, String.t()}
