@@ -140,7 +140,7 @@ defmodule Phoenix.Sync.Electric do
   @doc false
   @impl Phoenix.Sync.Adapter
   def children(env, opts) do
-    {mode, electric_opts} = electric_opts(opts)
+    {mode, electric_opts} = electric_opts(env, opts)
 
     case mode do
       :disabled ->
@@ -158,7 +158,7 @@ defmodule Phoenix.Sync.Electric do
   @doc false
   @impl Phoenix.Sync.Adapter
   def plug_opts(env, opts) do
-    {mode, electric_opts} = electric_opts(opts)
+    {mode, electric_opts} = electric_opts(env, opts)
     # don't need to validate the mode here -- it will have already been
     # validated by children/0 which is run at phoenix_sync startup before the
     # plug opts call even comes through
@@ -179,7 +179,7 @@ defmodule Phoenix.Sync.Electric do
   @doc false
   @impl Phoenix.Sync.Adapter
   def client(env, opts) do
-    {mode, electric_opts} = electric_opts(opts)
+    {mode, electric_opts} = electric_opts(env, opts)
 
     case mode do
       mode when mode in @client_valid_modes ->
@@ -197,35 +197,29 @@ defmodule Phoenix.Sync.Electric do
     @electric_available?
   end
 
-  defp electric_opts(opts) do
+  defp electric_opts(env, opts) do
     Keyword.pop_lazy(opts, :mode, fn ->
-      if electric_available?() do
-        Logger.warning([
-          "missing mode configuration for :phoenix_sync. Electric is installed so assuming `embedded` mode"
-        ])
-
-        :embedded
-      else
-        Logger.warning("No `:mode` configuration for :phoenix_sync, assuming `:disabled`")
-
-        :disabled
-      end
+      default_mode(env)
     end)
   end
 
-  defp electric_api_server(opts) do
-    config = electric_http_config(opts)
+  defp default_mode(:test) do
+    :disabled
+  end
 
-    cond do
-      Code.ensure_loaded?(Bandit) ->
-        Electric.Application.api_server(Bandit, config)
+  if @electric_available? do
+    defp default_mode(_env) do
+      Logger.warning([
+        "missing mode configuration for :phoenix_sync. Electric is installed so assuming `embedded` mode"
+      ])
 
-      Code.ensure_loaded?(Plug.Cowboy) ->
-        Electric.Application.api_server(Plug.Cowboy, config)
+      :embedded
+    end
+  else
+    defp default_mode(_env) do
+      Logger.warning("No `:mode` configuration for :phoenix_sync, assuming `:disabled`")
 
-      true ->
-        raise RuntimeError,
-          message: "No HTTP server found. Please install either Bandit or Plug.Cowboy"
+      :disabled
     end
   end
 
@@ -236,15 +230,23 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
-  defp plug_opts(env, :embedded, electric_opts) do
-    if electric_available?() do
-      env
-      |> core_configuration(electric_opts)
-      |> Electric.Application.api_plug_opts()
-      |> Keyword.fetch!(:api)
-    else
-      raise RuntimeError,
-        message: "Configured for embedded mode but `:electric` dependency not installed"
+  if @electric_available? do
+    defp plug_opts(env, :embedded, electric_opts) do
+      if electric_available?() do
+        env
+        |> core_configuration(electric_opts)
+        |> Electric.Application.api_plug_opts()
+        |> Keyword.fetch!(:api)
+      else
+        raise RuntimeError,
+          message: "Configured for embedded mode but `:electric` dependency not installed"
+      end
+    end
+  else
+    defp plug_opts(_env, :embedded, _electric_opts) do
+      raise ArgumentError,
+        message:
+          "phoenix_sync configured in `mode: :embedded` but electric not installed. Please add `:electric` to your dependencies or use `:http` mode."
     end
   end
 
@@ -259,36 +261,71 @@ defmodule Phoenix.Sync.Electric do
   defp electric_children(env, mode, opts) do
     case validate_database_config(env, mode, opts) do
       {:start, db_config_fun, message} ->
-        if electric_available?() do
-          db_config =
-            db_config_fun.()
-            |> Keyword.update!(:connection_opts, &Electric.Utils.obfuscate_password/1)
-
-          electric_config = core_configuration(env, db_config)
-
-          Logger.info(message)
-
-          http_server =
-            case mode do
-              :http -> electric_api_server(electric_config)
-              :embedded -> []
-            end
-
-          {:ok,
-           [
-             {Electric.StackSupervisor, Electric.Application.configuration(electric_config)}
-             | http_server
-           ]}
-        else
-          {:error,
-           "Electric configured to start in embedded mode but :electric dependency not available"}
-        end
+        start_embedded(env, mode, db_config_fun, message)
 
       :ignore ->
         {:ok, []}
 
       {:error, _} = error ->
         error
+    end
+  end
+
+  if @electric_available? do
+    defp start_embedded(env, mode, db_config_fun, message) do
+      db_config =
+        db_config_fun.()
+        |> Keyword.update!(:connection_opts, &Electric.Utils.obfuscate_password/1)
+
+      electric_config = core_configuration(env, db_config)
+
+      Logger.info(message)
+
+      http_server =
+        case mode do
+          :http -> electric_api_server(electric_config)
+          :embedded -> []
+        end
+
+      {:ok,
+       [
+         {Electric.StackSupervisor, Electric.Application.configuration(electric_config)}
+         | http_server
+       ]}
+    end
+
+    defp electric_api_server(opts) do
+      config = electric_http_config(opts)
+
+      cond do
+        Code.ensure_loaded?(Bandit) ->
+          Electric.Application.api_server(Bandit, config)
+
+        Code.ensure_loaded?(Plug.Cowboy) ->
+          Electric.Application.api_server(Plug.Cowboy, config)
+
+        true ->
+          raise RuntimeError,
+            message: "No HTTP server found. Please install either Bandit or Plug.Cowboy"
+      end
+    end
+
+    defp electric_http_config(opts) do
+      case Keyword.fetch(opts, :http) do
+        {:ok, http_opts} ->
+          opts
+          |> then(fn o ->
+            if(port = http_opts[:port], do: Keyword.put(o, :service_port, port), else: o)
+          end)
+
+        :error ->
+          opts
+      end
+    end
+  else
+    defp start_embedded(_env, _mode, _db_config_fun, _message) do
+      {:error,
+       "Electric configured to start in embedded mode but :electric dependency not available"}
     end
   end
 
@@ -389,26 +426,32 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
-  defp convert_repo_config(repo_config) do
-    expected_keys = Electric.connection_opts_schema() |> Keyword.keys()
+  if @electric_available? do
+    defp convert_repo_config(repo_config) do
+      expected_keys = Electric.connection_opts_schema() |> Keyword.keys()
 
-    ssl_opts =
-      case Keyword.get(repo_config, :ssl, nil) do
-        off when off in [nil, false] -> [sslmode: :disable]
-        true -> [sslmode: :require]
-        _opts -> []
-      end
+      ssl_opts =
+        case Keyword.get(repo_config, :ssl, nil) do
+          off when off in [nil, false] -> [sslmode: :disable]
+          true -> [sslmode: :require]
+          _opts -> []
+        end
 
-    tcp_opts =
-      if :inet6 in Keyword.get(repo_config, :socket_options, []),
-        do: [ipv6: true],
-        else: []
+      tcp_opts =
+        if :inet6 in Keyword.get(repo_config, :socket_options, []),
+          do: [ipv6: true],
+          else: []
 
-    repo_config
-    |> Keyword.take(expected_keys)
-    |> Keyword.merge(ssl_opts)
-    |> Keyword.merge(tcp_opts)
-    |> Keyword.put_new(:port, 5432)
+      repo_config
+      |> Keyword.take(expected_keys)
+      |> Keyword.merge(ssl_opts)
+      |> Keyword.merge(tcp_opts)
+      |> Keyword.put_new(:port, 5432)
+    end
+  else
+    defp convert_repo_config(_repo_config) do
+      []
+    end
   end
 
   defp http_mode_plug_opts(electric_config) do
@@ -423,19 +466,6 @@ defmodule Phoenix.Sync.Electric do
              fetch: {Electric.Client.Fetch.HTTP, [request: [raw: true]]}
            ) do
       {:ok, %Phoenix.Sync.Electric.ClientAdapter{client: client}}
-    end
-  end
-
-  defp electric_http_config(opts) do
-    case Keyword.fetch(opts, :http) do
-      {:ok, http_opts} ->
-        opts
-        |> then(fn o ->
-          if(port = http_opts[:port], do: Keyword.put(o, :service_port, port), else: o)
-        end)
-
-      :error ->
-        opts
     end
   end
 
