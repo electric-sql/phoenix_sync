@@ -236,15 +236,18 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
-  defp plug_opts(env, :embedded, electric_opts) do
-    if electric_available?() do
+  if @electric_available? do
+    defp plug_opts(env, :embedded, electric_opts) do
       env
       |> core_configuration(electric_opts)
       |> Electric.Application.api_plug_opts()
       |> Keyword.fetch!(:api)
-    else
-      raise RuntimeError,
-        message: "Configured for embedded mode but `:electric` dependency not installed"
+    end
+  else
+    defp plug_opts(_env, :embedded, _electric_opts) do
+      raise ArgumentError,
+        message:
+          "phoenix_sync configured in `mode: :embedded` but electric not installed. Please add `:electric` to your dependencies or use `:http` mode."
     end
   end
 
