@@ -5,19 +5,23 @@ defmodule Phoenix.Sync.ApplicationTest do
 
   Code.ensure_loaded!(Support.ConfigTestRepo)
 
-  defp validate_repo_connection_opts!(opts) do
+  defp validate_repo_connection_opts!(opts, overrides \\ []) do
     assert {pass_fun, connection_opts} = Keyword.pop!(opts[:connection_opts], :password)
 
     assert pass_fun.() == "password"
 
-    assert connection_opts == [
-             username: "postgres",
-             hostname: "localhost",
-             database: "electric",
-             port: 54321,
-             sslmode: :require,
-             ipv6: true
-           ]
+    base_opts = [
+      username: "postgres",
+      hostname: "localhost",
+      database: "electric",
+      port: 5432,
+      sslmode: :require,
+      ipv6: true
+    ]
+
+    expected_opts = Keyword.merge(base_opts, overrides)
+
+    assert Enum.sort(connection_opts) == Enum.sort(expected_opts)
   end
 
   describe "children/1" do
@@ -73,6 +77,35 @@ defmodule Phoenix.Sync.ApplicationTest do
                storage: {Electric.ShapeCache.InMemoryStorage, _},
                persistent_kv: %Electric.PersistentKV.Memory{}
              } = Map.new(opts)
+    end
+
+    test "with defined port" do
+      original_config = Application.get_env(:phoenix_sync, Support.ConfigTestRepo, [])
+
+      override_port = 6543
+
+      config = [
+        env: :dev,
+        repo: Support.ConfigTestRepo
+      ]
+
+      try do
+        Application.put_env(
+          :phoenix_sync,
+          Support.ConfigTestRepo,
+          Keyword.put(original_config, :port, override_port)
+        )
+
+        assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+        validate_repo_connection_opts!(opts, port: override_port)
+      after
+        Application.put_env(
+          :phoenix_sync,
+          Support.ConfigTestRepo,
+          original_config
+        )
+      end
     end
 
     test "only repo config given and electric installed defaults to embedded" do
