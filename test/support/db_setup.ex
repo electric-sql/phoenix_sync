@@ -9,7 +9,7 @@ defmodule Support.DbSetup do
   ]
 
   def with_unique_db(ctx) do
-    base_config = Application.fetch_env!(:electric, :connection_opts) |> dbg
+    base_config = Application.fetch_env!(:electric, :connection_opts)
     {:ok, utility_pool} = start_db_pool(base_config)
     Process.unlink(utility_pool)
 
