@@ -24,6 +24,7 @@ jobs:
         image: "postgres:17-alpine"
         env:
           POSTGRES_PASSWORD: password
+          POSTGRES_DB: electric
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -34,6 +35,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: "Set PG settings"
+        run: |
+          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
+          docker restart ${{ job.services.postgres.id }}
 
       - uses: erlef/setup-beam@v1
         with:
