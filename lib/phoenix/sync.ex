@@ -19,6 +19,7 @@ defmodule Phoenix.Sync do
   @type param_overrides :: [param_override()]
 
   defdelegate plug_opts(), to: Phoenix.Sync.Application
+  defdelegate plug_opts(config), to: Phoenix.Sync.Application
 
   defdelegate client!(), to: Phoenix.Sync.Client, as: :new!
 
