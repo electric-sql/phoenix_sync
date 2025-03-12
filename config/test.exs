@@ -28,6 +28,4 @@ config :phoenix_sync, Support.ConfigTestRepo,
   # port: 54321,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
-  ssl: true,
-  socket_options: [:inet6],
   pool_size: 10
