@@ -256,10 +256,6 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp embedded_children(env, mode, opts) do
-    electric_children(env, mode, opts)
-  end
-
-  defp electric_children(env, mode, opts) do
     case validate_database_config(env, mode, opts) do
       {:start, db_config_fun, message} ->
         if electric_available?() do
@@ -313,19 +309,6 @@ defmodule Phoenix.Sync.Electric do
     # if we want to use emphemeral dir for dev storage then we have to persist
     # the storage_dir into the application config.
     opts
-    # |> Keyword.put_new(
-    #   :storage_dir,
-    #   Path.join(System.tmp_dir!(), "electric/shape-data#{System.monotonic_time()}")
-    # )
-    |> Keyword.put_new(
-      :storage,
-      {Electric.ShapeCache.InMemoryStorage,
-       table_base_name: :"electric-storage#{opts[:stack_id]}", stack_id: opts[:stack_id]}
-    )
-    |> Keyword.put_new(
-      :persistent_kv,
-      {Electric.PersistentKV.Memory, :new!, []}
-    )
     |> Keyword.put_new(:send_cache_headers?, false)
   end
 
