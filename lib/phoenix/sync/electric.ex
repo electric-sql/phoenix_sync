@@ -140,7 +140,10 @@ defmodule Phoenix.Sync.Electric do
   @doc false
   @impl Phoenix.Sync.Adapter
   def children(env, opts) do
-    {mode, electric_opts} = electric_opts(env, opts)
+    {mode, electric_opts} =
+      opts
+      |> set_environment_defaults(env)
+      |> electric_opts(env)
 
     case mode do
       :disabled ->
@@ -158,7 +161,11 @@ defmodule Phoenix.Sync.Electric do
   @doc false
   @impl Phoenix.Sync.Adapter
   def plug_opts(env, opts) do
-    {mode, electric_opts} = electric_opts(env, opts)
+    {mode, electric_opts} =
+      opts
+      |> set_environment_defaults(env)
+      |> electric_opts(env)
+
     # don't need to validate the mode here -- it will have already been
     # validated by children/0 which is run at phoenix_sync startup before the
     # plug opts call even comes through
@@ -179,7 +186,10 @@ defmodule Phoenix.Sync.Electric do
   @doc false
   @impl Phoenix.Sync.Adapter
   def client(env, opts) do
-    {mode, electric_opts} = electric_opts(env, opts)
+    {mode, electric_opts} =
+      opts
+      |> set_environment_defaults(env)
+      |> electric_opts(env)
 
     case mode do
       mode when mode in @client_valid_modes ->
@@ -192,12 +202,52 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
+  # if we want to set up per-run configuration, and avoid weird state errors in
+  # dev and test, then we have to write them to the application config, because
+  # `children/2`, `client/2` and `plug_opts/2` need to have consistent
+  # configuration values.
+  defp set_environment_defaults(opts, :test) do
+    opts
+    |> set_persistent_config(:stack_id, fn ->
+      "electric-stack#{System.monotonic_time()}"
+    end)
+    |> set_persistent_config(:replication_stream_id, fn ->
+      String.replace("phoenix_sync#{System.monotonic_time()}", "-", "_")
+    end)
+    |> set_persistent_config(:replication_slot_temporary?, true)
+  end
+
+  defp set_environment_defaults(opts, :dev) do
+    opts
+    |> set_environment_defaults(:prod)
+    |> set_persistent_config(:storage_dir, fn ->
+      Path.join([System.tmp_dir!(), "phoenix-sync#{System.monotonic_time()}"])
+    end)
+  end
+
+  defp set_environment_defaults(opts, _env) do
+    opts
+    |> set_persistent_config(:stack_id, "electric-embedded")
+  end
+
+  defp set_persistent_config(opts, key, value_fun) when is_function(value_fun) do
+    Keyword.put_new_lazy(opts, key, fn ->
+      value = value_fun.()
+      Application.put_env(:phoenix_sync, key, value)
+      value
+    end)
+  end
+
+  defp set_persistent_config(opts, key, value) do
+    set_persistent_config(opts, key, fn -> value end)
+  end
+
   @doc false
   def electric_available? do
     @electric_available?
   end
 
-  defp electric_opts(env, opts) do
+  defp electric_opts(opts, env) do
     Keyword.pop_lazy(opts, :mode, fn ->
       default_mode(env)
     end)
@@ -257,6 +307,14 @@ defmodule Phoenix.Sync.Electric do
   defp embedded_children(env, mode, opts) do
     electric_children(env, mode, opts)
   end
+
+  # don't start embedded electric in :test env because electric
+  # creates replication slots and doesn't play well with
+  # async tests
+  # defp electric_children(:test, :embedded, _opts) do
+  #   Logger.info("Not starting embedded electric in test mode")
+  #   {:ok, []}
+  # end
 
   defp electric_children(env, mode, opts) do
     case validate_database_config(env, mode, opts) do
@@ -336,8 +394,8 @@ defmodule Phoenix.Sync.Electric do
   defp core_configuration(env, opts) do
     opts
     |> env_defaults(env)
-    |> overrides()
     |> stack_id()
+    |> overrides()
   end
 
   defp env_defaults(opts, :dev) do
@@ -351,20 +409,20 @@ defmodule Phoenix.Sync.Electric do
     #   :storage_dir,
     #   Path.join(System.tmp_dir!(), "electric/shape-data#{System.monotonic_time()}")
     # )
-    |> Keyword.put_new(
-      :storage,
-      {Electric.ShapeCache.InMemoryStorage,
-       table_base_name: :"electric-storage#{opts[:stack_id]}", stack_id: opts[:stack_id]}
-    )
-    |> Keyword.put_new(
-      :persistent_kv,
-      {Electric.PersistentKV.Memory, :new!, []}
-    )
+    # |> Keyword.put_new(
+    #   :storage,
+    #   {Electric.ShapeCache.InMemoryStorage,
+    #    table_base_name: :"electric-storage#{opts[:stack_id]}", stack_id: opts[:stack_id]}
+    # )
+    # |> Keyword.put_new(
+    #   :persistent_kv,
+    #   {Electric.PersistentKV.Memory, :new!, []}
+    # )
     |> Keyword.put_new(:send_cache_headers?, false)
   end
 
   defp env_defaults(opts, :test) do
-    stack_id = "electric-stack#{System.monotonic_time()}"
+    stack_id = "electric-stack"
 
     opts = Keyword.put_new(opts, :stack_id, stack_id)
 
