@@ -408,6 +408,7 @@ defmodule Phoenix.Sync.Electric do
     |> Keyword.take(expected_keys)
     |> Keyword.merge(ssl_opts)
     |> Keyword.merge(tcp_opts)
+    |> Keyword.put_new(:port, 5432)
   end
 
   defp http_mode_plug_opts(electric_config) do

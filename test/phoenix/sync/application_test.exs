@@ -5,19 +5,42 @@ defmodule Phoenix.Sync.ApplicationTest do
 
   Code.ensure_loaded!(Support.ConfigTestRepo)
 
-  defp validate_repo_connection_opts!(opts) do
+  defp validate_repo_connection_opts!(opts, overrides \\ []) do
     assert {pass_fun, connection_opts} = Keyword.pop!(opts[:connection_opts], :password)
 
     assert pass_fun.() == "password"
 
-    assert connection_opts == [
-             username: "postgres",
-             hostname: "localhost",
-             database: "electric",
-             port: 54321,
-             sslmode: :require,
-             ipv6: true
-           ]
+    base_opts = [
+      username: "postgres",
+      hostname: "localhost",
+      database: "electric",
+      port: 5432,
+      sslmode: :disable
+    ]
+
+    expected_opts = Keyword.merge(base_opts, overrides)
+
+    assert Enum.sort(connection_opts) == Enum.sort(expected_opts)
+  end
+
+  defp with_modified_config(repo_config_overrides, fun) do
+    original_config = Application.get_env(:phoenix_sync, Support.ConfigTestRepo, [])
+
+    try do
+      Application.put_env(
+        :phoenix_sync,
+        Support.ConfigTestRepo,
+        Keyword.merge(original_config, repo_config_overrides)
+      )
+
+      fun.()
+    after
+      Application.put_env(
+        :phoenix_sync,
+        Support.ConfigTestRepo,
+        original_config
+      )
+    end
   end
 
   describe "children/1" do
@@ -73,6 +96,42 @@ defmodule Phoenix.Sync.ApplicationTest do
                storage: {Electric.ShapeCache.InMemoryStorage, _},
                persistent_kv: %Electric.PersistentKV.Memory{}
              } = Map.new(opts)
+    end
+
+    test "passes repo pg port to electric" do
+      config = [
+        env: :dev,
+        repo: Support.ConfigTestRepo
+      ]
+
+      repo_override = [port: 6543]
+
+      with_modified_config(repo_override, fn ->
+        assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+        validate_repo_connection_opts!(opts, repo_override)
+      end)
+    end
+
+    test "maps repo ssl and ipv6 settings to electric" do
+      config = [
+        env: :dev,
+        repo: Support.ConfigTestRepo
+      ]
+
+      repo_override = [
+        ssl: true,
+        socket_options: [:inet6]
+      ]
+
+      with_modified_config(repo_override, fn ->
+        assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+        validate_repo_connection_opts!(opts,
+          sslmode: :require,
+          ipv6: true
+        )
+      end)
     end
 
     test "only repo config given and electric installed defaults to embedded" do

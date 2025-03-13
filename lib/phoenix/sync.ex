@@ -10,7 +10,7 @@ defmodule Phoenix.Sync do
   @type shape_definition ::
           String.t()
           | Ecto.Queryable.t()
-          | shape_definition()
+          | shape_specification()
   @type param_override ::
           {:namespace, String.t()}
           | {:table, String.t()}
@@ -19,6 +19,7 @@ defmodule Phoenix.Sync do
   @type param_overrides :: [param_override()]
 
   defdelegate plug_opts(), to: Phoenix.Sync.Application
+  defdelegate plug_opts(config), to: Phoenix.Sync.Application
 
   defdelegate client!(), to: Phoenix.Sync.Client, as: :new!
 
