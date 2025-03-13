@@ -395,7 +395,7 @@ defmodule Phoenix.Sync.Plug do
       end
 
   """
-  @spec send_configuration(Plug.Conn.t(), Phoenix.Sync.shape_definition(), Client.t()) ::
+  @spec send_configuration(Plug.Conn.t(), Phoenix.Sync.shape_definition(), Electric.Client.t()) ::
           Plug.Conn.t()
   def send_configuration(conn, shape_or_queryable, client \\ Phoenix.Sync.client!()) do
     shape = normalise_shape(shape_or_queryable)
