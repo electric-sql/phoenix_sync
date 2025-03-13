@@ -303,14 +303,6 @@ defmodule Phoenix.Sync.Electric do
     electric_children(env, mode, opts)
   end
 
-  # don't start embedded electric in :test env because electric
-  # creates replication slots and doesn't play well with
-  # async tests
-  # defp electric_children(:test, :embedded, _opts) do
-  #   Logger.info("Not starting embedded electric in test mode")
-  #   {:ok, []}
-  # end
-
   defp electric_children(env, mode, opts) do
     case validate_database_config(env, mode, opts) do
       {:start, db_config_fun, message} ->
@@ -400,19 +392,6 @@ defmodule Phoenix.Sync.Electric do
     # if we want to use emphemeral dir for dev storage then we have to persist
     # the storage_dir into the application config.
     opts
-    # |> Keyword.put_new(
-    #   :storage_dir,
-    #   Path.join(System.tmp_dir!(), "electric/shape-data#{System.monotonic_time()}")
-    # )
-    # |> Keyword.put_new(
-    #   :storage,
-    #   {Electric.ShapeCache.InMemoryStorage,
-    #    table_base_name: :"electric-storage#{opts[:stack_id]}", stack_id: opts[:stack_id]}
-    # )
-    # |> Keyword.put_new(
-    #   :persistent_kv,
-    #   {Electric.PersistentKV.Memory, :new!, []}
-    # )
     |> Keyword.put_new(:send_cache_headers?, false)
   end
 
