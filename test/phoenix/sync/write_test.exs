@@ -118,43 +118,33 @@ defmodule Phoenix.Sync.WriteTest do
   # apply creates and applies i.e. new() |> Repo.transaction()
   describe "new/2" do
     test "accepts a schema or a list of schema structs", _ctx do
-      assert %Write{} = Write.new(Support.Todo)
-      # assert %Write{} = Write.new(Support.Todo) |> Write.allow(TodoNoChangeset)
+      assert %Write{} = Write.mutator(Support.Todo)
     end
 
     test "rejects a schema struct with no changeset/2 function", _ctx do
       assert_raise ArgumentError, fn ->
-        Write.new(TodoNoChangeset)
+        Write.mutator(TodoNoChangeset)
       end
 
-      assert %Write{} = Write.new(TodoNoChangeset, &todo_changeset(&1, &2, &3, nil))
-      assert %Write{} = Write.new(TodoNoChangeset, changeset: &todo_changeset(&1, &2, &3, nil))
+      assert %Write{} = Write.mutator(TodoNoChangeset, &todo_changeset(&1, &2, &3, nil))
+
+      assert %Write{} =
+               Write.mutator(TodoNoChangeset, changeset: &todo_changeset(&1, &2, &3, nil))
     end
 
     test "rejects non-schema module" do
       assert_raise ArgumentError, fn ->
-        Write.new(__MODULE__)
+        Write.mutator(__MODULE__)
       end
     end
 
     test "allows for complete configuration of behaviour", _ctx do
-      # how to get pks?
-      # function to load original for updates
       pid = self()
 
       assert %Write{} =
-               Write.new(
-                 # minimal -- defaults to Support.Todo.changeset/2, gets
-                 # table name from Todo.__schema__(:source)
-                 # pk from Todo.__schema__(:primary_key)
+               Write.mutator(
                  Support.Todo,
-                 # if the remote table name does not match the server one
-                 # if table is a string, then we match on the table name, ignoring the namespace
                  table: "todos_local",
-
-                 # if the table is a list/tuple, then we match on the full [_, _] relation in the "mutation"
-                 # table: ["public", "todos_local"],
-
                  # defaults to Repo.get!(Todo, <id>)
                  load: &todo_get!(&1, pid),
                  accept: [:insert, :update, :delete],
@@ -174,10 +164,6 @@ defmodule Phoenix.Sync.WriteTest do
                    before: &todo_before_delete(&1, &2, &3, pid)
                  ]
                )
-
-      # new returns an %Write{} struct
-      # this new/1 is a validation step
-      # apply() returns a txid
     end
   end
 
@@ -203,20 +189,11 @@ defmodule Phoenix.Sync.WriteTest do
     setup do
       pid = self()
 
-      write_config_todo =
+      mutator_config_todo =
         [
-          # if the remote table name does not match the server one
           table: "todos_local",
-          # defaults to Repo.get_by!(Todo, id: <id>)
           load: &todo_get!(&1, pid),
           accept: [:insert, :update, :delete],
-          # instead of per-action changesets, we can just define a single top-level one
-          # changeset: fn todo, params -> Changeset.cast(todo, params, [:id, :title, :completed]) end,
-          # if we pass a 3-arity changeset, then the second argument is the action
-          # changeset: fn todo, action, params when action in [:insert, :update, :delete] -> Changeset.cast(todo, params, [:id, :title, :completed]) end,
-          #
-          # the same is true for :after, and :before
-
           insert: [
             changeset: &todo_insert_changeset(&1, &2, pid),
             after: &todo_after_insert(&1, &2, &3, pid),
@@ -234,12 +211,9 @@ defmodule Phoenix.Sync.WriteTest do
           ]
         ]
 
-      write = Write.new(Support.Todo, write_config_todo)
+      mutator = Write.mutator(Support.Todo, mutator_config_todo)
 
-      # Write.new()
-      # |> Write.allow(Support.Todo, changeset: &Todo.changeset/2)
-      # |> Write.allow(Support.Config, changeset: &Config.changeset/2)
-      [write: write, write_config_todo: write_config_todo]
+      [mutator: mutator, mutator_config_todo: mutator_config_todo]
     end
 
     test "writes valid changes", ctx do
@@ -284,7 +258,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert %Ecto.Multi{} = multi = Write.apply(ctx.write, changes)
+      assert %Ecto.Multi{} = multi = Write.apply(ctx.mutator, changes)
       assert {:ok, txid, _values} = Write.transaction(multi, Repo)
 
       assert is_integer(txid)
@@ -344,14 +318,14 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:error, _, _, _} = ctx.write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:error, _, _, _} = ctx.mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
     test "allows for a generic changeset/2 for all mutations", _ctx do
       pid = self()
 
-      write =
-        Write.new(Support.Todo,
+      mutator =
+        Write.mutator(Support.Todo,
           table: "todos_local",
           load: &todo_get!(&1, pid),
           changeset: &todo_changeset(&1, &2, pid)
@@ -376,7 +350,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {:todo, :changeset, 98}
       assert_receive {:todo, :changeset, 2}
@@ -386,8 +360,8 @@ defmodule Phoenix.Sync.WriteTest do
     test "allows for a generic changeset/3 for all mutations", _ctx do
       pid = self()
 
-      write =
-        Write.new(Support.Todo,
+      mutator =
+        Write.mutator(Support.Todo,
           table: "todos_local",
           load: &todo_get!(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid)
@@ -412,7 +386,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {:todo, :changeset, :insert, 98}
       assert_receive {:todo, :changeset, :delete, 2}
@@ -422,8 +396,8 @@ defmodule Phoenix.Sync.WriteTest do
     test "rejects updates not in :accept list", _ctx do
       pid = self()
 
-      write =
-        Write.new(Support.Todo,
+      mutator =
+        Write.mutator(Support.Todo,
           table: "todos_local",
           load: &todo_get!(&1, pid),
           accept: [:insert, :update],
@@ -449,7 +423,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:error, _, _, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:error, _, _, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
     test "supports accepting writes on multiple tables", _ctx do
@@ -457,8 +431,8 @@ defmodule Phoenix.Sync.WriteTest do
       todo1_ref = make_ref()
       todo2_ref = make_ref()
 
-      write =
-        Write.new()
+      mutator =
+        Write.mutator()
         |> Write.allow(Support.Todo,
           load: &todo_get!(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, {pid, todo1_ref}),
@@ -484,7 +458,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {^todo1_ref, {:todo, :changeset, :insert, 98}}
       assert_receive {^todo1_ref, {:todo, :after_insert, 98}}
@@ -496,8 +470,8 @@ defmodule Phoenix.Sync.WriteTest do
     test "is intelligent about mapping client tables to server", _ctx do
       pid = self()
 
-      write =
-        Write.new()
+      mutator =
+        Write.mutator()
         |> Write.allow(Support.Todo,
           load: &todo_get!(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid),
@@ -517,7 +491,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {:todo, :changeset, :insert, 98}
       assert_receive {:todo, :after_insert, 98}
@@ -529,8 +503,8 @@ defmodule Phoenix.Sync.WriteTest do
     test "only matches full relation if configured", _ctx do
       pid = self()
 
-      write =
-        Write.new()
+      mutator =
+        Write.mutator()
         |> Write.allow(Support.Todo,
           table: ["public", "todos"],
           load: &todo_get!(&1, pid),
@@ -554,14 +528,14 @@ defmodule Phoenix.Sync.WriteTest do
       # we have specified allow/2 with a fully qualified table so only one of the
       # inserts matches
       assert {:error, {:invalid, 1}, _msg, _changes} =
-               write |> Write.apply(changes) |> Write.transaction(Repo)
+               mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
     test "allows for 1-arity delete changeset functions", _ctx do
       pid = self()
 
-      write =
-        Write.new(Support.Todo,
+      mutator =
+        Write.mutator(Support.Todo,
           table: "todos_local",
           load: &todo_get!(&1, pid),
           delete: [
@@ -577,17 +551,17 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {:todo, :delete, %Support.Todo{id: 2}}
     end
 
     test "allows for mfa style callback definitions", _ctx do
-      # mfa style allows for generating compile-time write configs
+      # mfa style allows for generating compile-time mutator configs
       pid = self()
 
-      write =
-        Write.new(Support.Todo,
+      mutator =
+        Write.mutator(Support.Todo,
           table: "todos_local",
           load: {__MODULE__, :todo_get!, [pid]},
           accept: [:insert, :update, :delete],
@@ -616,14 +590,14 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
     test "allows for a generic before/4 and after/4 for all mutations" do
       pid = self()
 
-      write =
-        Write.new(Support.Todo,
+      mutator =
+        Write.mutator(Support.Todo,
           table: "todos_local",
           load: &todo_get!(&1, pid),
           before: fn multi, type, changeset, _changes ->
@@ -655,7 +629,7 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {:before, :insert, 98}
       assert_receive {:before, :delete, 2}
