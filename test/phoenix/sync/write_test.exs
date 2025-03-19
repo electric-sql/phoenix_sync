@@ -452,15 +452,6 @@ defmodule Phoenix.Sync.WriteTest do
       assert {:error, _, _, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
-    test "allows for a generic before/2 and after/2 for all mutations"
-    test "allows for a generic before/3 and after/3 for all mutations"
-    test "returns an error and doesn't apply txn if any changeset returns an error"
-
-    test "uses custom table: \"..\" to map local tables to pg ones"
-
-    test "uses custom namespaced table: [\"..\", \"..\"] to map local tables to pg ones"
-    test "allows for both top-level and per-action callbacks"
-
     test "supports accepting writes on multiple tables", _ctx do
       pid = self()
       todo1_ref = make_ref()
@@ -626,6 +617,52 @@ defmodule Phoenix.Sync.WriteTest do
       ]
 
       assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+    end
+
+    test "allows for a generic before/4 and after/4 for all mutations" do
+      pid = self()
+
+      write =
+        Write.new(Support.Todo,
+          table: "todos_local",
+          load: &todo_get!(&1, pid),
+          before: fn multi, type, changeset, _changes ->
+            send(pid, {:before, type, changeset_id(changeset)})
+            multi
+          end,
+          after: fn multi, type, changeset, _changes ->
+            send(pid, {:after, type, changeset_id(changeset)})
+            multi
+          end
+        )
+
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "modified" => %{"id" => "98", "title" => "New todo", "completed" => "false"}
+        },
+        %{
+          "type" => "delete",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "2"}
+        },
+        %{
+          "type" => "update",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "1", "title" => "First todo", "completed" => "false"},
+          "changes" => %{"title" => "Changed title"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+
+      assert_receive {:before, :insert, 98}
+      assert_receive {:before, :delete, 2}
+      assert_receive {:before, :update, 1}
+      assert_receive {:after, :insert, 98}
+      assert_receive {:after, :delete, 2}
+      assert_receive {:after, :update, 1}
     end
   end
 end
