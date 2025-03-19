@@ -21,31 +21,31 @@ defmodule Phoenix.Sync.WriteTest do
 
   defp changeset_id(changeset), do: Changeset.fetch_field!(changeset, :id)
 
-  defp todo_changeset(todo, data, pid) do
+  def todo_changeset(todo, data, pid) do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
     |> tap(&send(pid, {:todo, :changeset, changeset_id(&1)}))
   end
 
-  defp todo_changeset(todo, action, data, pid) when action in [:insert, :update, :delete] do
+  def todo_changeset(todo, action, data, pid) when action in [:insert, :update, :delete] do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
     |> tap(&send(pid, {:todo, :changeset, action, changeset_id(&1)}))
   end
 
-  defp delete_changeset(todo, pid) do
+  def delete_changeset(todo, pid) do
     send(pid, {:todo, :delete, todo})
     todo
   end
 
-  defp todo_insert_changeset(todo, data, pid) do
+  def todo_insert_changeset(todo, data, pid) do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
     |> Changeset.validate_required([:id, :title, :completed])
     |> tap(&send(pid, {:todo, :insert, changeset_id(&1)}))
   end
 
-  defp todo_update_changeset(todo, data, pid) do
+  def todo_update_changeset(todo, data, pid) do
     send(pid, {:todo, :update, todo.id, data})
 
     todo
@@ -53,7 +53,7 @@ defmodule Phoenix.Sync.WriteTest do
     |> Changeset.validate_required([:id, :title, :completed])
   end
 
-  defp todo_delete_changeset(todo, data, pid) do
+  def todo_delete_changeset(todo, data, pid) do
     send(pid, {:todo, :delete, todo.id})
 
     todo
@@ -61,38 +61,38 @@ defmodule Phoenix.Sync.WriteTest do
     |> Changeset.validate_required([:id])
   end
 
-  defp todo_before_insert(multi, changeset, _changes, pid) do
+  def todo_before_insert(multi, changeset, _changes, pid) do
     send(pid, {:todo, :before_insert, changeset_id(changeset)})
     multi
   end
 
-  defp todo_before_update(multi, changeset, _changes, pid) do
+  def todo_before_update(multi, changeset, _changes, pid) do
     send(pid, {:todo, :before_update, changeset_id(changeset)})
 
     multi
   end
 
-  defp todo_before_delete(multi, changeset, _changes, pid) do
+  def todo_before_delete(multi, changeset, _changes, pid) do
     send(pid, {:todo, :before_delete, changeset_id(changeset)})
     multi
   end
 
-  defp todo_after_insert(multi, changeset, _changes, pid) do
+  def todo_after_insert(multi, changeset, _changes, pid) do
     send(pid, {:todo, :after_insert, changeset_id(changeset)})
     multi
   end
 
-  defp todo_after_update(multi, changeset, _changes, pid) do
+  def todo_after_update(multi, changeset, _changes, pid) do
     send(pid, {:todo, :after_update, changeset_id(changeset)})
     multi
   end
 
-  defp todo_after_delete(multi, changeset, _changes, pid) do
+  def todo_after_delete(multi, changeset, _changes, pid) do
     send(pid, {:todo, :after_delete, changeset_id(changeset)})
     multi
   end
 
-  defp todo_get!(%{"id" => id} = _change, pid) do
+  def todo_get!(%{"id" => id} = _change, pid) do
     send(pid, {:todo, :get, String.to_integer(id)})
     Repo.get_by!(Support.Todo, id: id)
   end
@@ -474,6 +474,43 @@ defmodule Phoenix.Sync.WriteTest do
       assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
 
       assert_receive {:todo, :delete, %Support.Todo{id: 2}}
+    end
+
+    test "allows for mfa style callback definitions", _ctx do
+      # mfa style allows for generating compile-time write configs
+      pid = self()
+
+      write =
+        Write.new(Support.Todo,
+          table: "todos_local",
+          load: {__MODULE__, :todo_get!, [pid]},
+          accept: [:insert, :update, :delete],
+          insert: [
+            changeset: {__MODULE__, :todo_insert_changeset, [pid]},
+            after: {__MODULE__, :todo_after_insert, [pid]},
+            before: {__MODULE__, :todo_before_insert, [pid]}
+          ],
+          update: [
+            changeset: {__MODULE__, :todo_update_changeset, [pid]},
+            after: {__MODULE__, :todo_after_update, [pid]},
+            before: {__MODULE__, :todo_before_update, [pid]}
+          ],
+          delete: [
+            changeset: {__MODULE__, :todo_delete_changeset, [pid]},
+            after: {__MODULE__, :todo_after_delete, [pid]},
+            before: {__MODULE__, :todo_before_delete, [pid]}
+          ]
+        )
+
+      changes = [
+        %{
+          "type" => "delete",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "2"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
     end
   end
 end

@@ -30,12 +30,16 @@ defmodule Phoenix.Sync.Write do
 
   @action_schema [
     type: :non_empty_keyword_list,
-    keys: [changeset: [type: {:fun, 2}], before: [type: {:fun, 3}], after: [type: {:fun, 3}]]
+    keys: [
+      changeset: [type: {:or, [{:fun, 2}, :mfa]}],
+      before: [type: {:or, [{:fun, 3}, :mfa]}],
+      after: [type: {:or, [{:fun, 3}, :mfa]}]
+    ]
   ]
   @schema NimbleOptions.new!(
             table: [type: {:or, [:string, {:list, :string}]}],
             load: [
-              type: {:or, [{:fun, 1}, {:fun, 2}]},
+              type: {:or, [{:fun, 1}, {:fun, 2}, :mfa]},
               doc: """
               `load` should be a 1- or 2-arity function that accepts either the
               mutation data or an Ecto.Repo instance and the mutation data and returns
@@ -62,9 +66,9 @@ defmodule Phoenix.Sync.Write do
                 )
             ],
             accept: [type: {:list, {:in, [:insert, :update, :delete]}}],
-            changeset: [type: {:or, [{:fun, 2}, {:fun, 3}]}],
+            changeset: [type: {:or, [{:fun, 2}, {:fun, 3}, :mfa]}],
             before: [
-              type: {:fun, 4},
+              type: {:or, [{:fun, 4}, :mfa]},
               doc: """
               `before` is an optional callback that allows for the pre-pending of
               operations to the `Ecto.Multi` representing a mutation transaction.
@@ -90,7 +94,7 @@ defmodule Phoenix.Sync.Write do
                 )
             ],
             after: [
-              type: {:fun, 4},
+              type: {:or, [{:fun, 4}, :mfa]},
               doc: """
               `after` is an optional callback function that allows for the
               appending of operations to the `Ecto.Multi` representing a mutation
@@ -110,7 +114,7 @@ defmodule Phoenix.Sync.Write do
               Keyword.update!(
                 @action_schema,
                 :keys,
-                &Keyword.put(&1, :changeset, type: {:or, [{:fun, 1}, {:fun, 2}]})
+                &Keyword.put(&1, :changeset, type: {:or, [{:fun, 1}, {:fun, 2}, :mfa]})
               )
           )
 
@@ -221,6 +225,9 @@ defmodule Phoenix.Sync.Write do
         fun when is_function(fun, 2) ->
           fun
 
+        {m, f, a} = mfa when is_atom(m) and is_atom(f) and is_list(a) ->
+          mfa
+
         _invalid ->
           raise(ArgumentError, message: "`load` should be a 1- or 2-arity function")
       end
@@ -230,8 +237,31 @@ defmodule Phoenix.Sync.Write do
         schema.__struct__()
 
       repo, action, change when action in [:update, :delete] ->
-        load_fun.(repo, change)
+        # need to do this function lookup at runtime
+        case load_fun do
+          fun when is_function(fun, 2) ->
+            fun.(repo, change)
+
+          {m, f, a} ->
+            l = length(a)
+
+            cond do
+              function_exported?(m, f, l + 2) ->
+                apply(m, f, [repo, change | a])
+
+              function_exported?(m, f, l + 1) ->
+                apply(m, f, [change | a])
+            end
+        end
     end
+  end
+
+  defp apply_fun({m, f, a}, args) do
+    Kernel.apply(m, f, args ++ a)
+  end
+
+  defp apply_fun(fun, args) when is_function(fun) do
+    Kernel.apply(fun, args)
   end
 
   defp default_changeset!(schema) do
@@ -285,14 +315,38 @@ defmodule Phoenix.Sync.Write do
     {lookup_data, change_data} = data
 
     Ecto.Multi.run(multi, {:changeset, n}, fn repo, _ ->
-      struct = action.load.(repo, type, lookup_data)
+      struct = apply_fun(action.load, [repo, type, lookup_data])
 
-      cond do
-        is_function(changeset_fun, 3) -> {:ok, changeset_fun.(struct, type, change_data)}
-        is_function(changeset_fun, 2) -> {:ok, changeset_fun.(struct, change_data)}
+      case changeset_fun do
+        fun3 when is_function(fun3, 3) ->
+          {:ok, fun3.(struct, type, change_data)}
+
+        fun2 when is_function(fun2, 2) ->
+          {:ok, fun2.(struct, change_data)}
+
         # delete changeset/validation functions can just look at the original
-        is_function(changeset_fun, 1) -> {:ok, changeset_fun.(struct)}
-        true -> raise "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}"
+        fun1 when is_function(fun1, 1) ->
+          {:ok, fun1.(struct)}
+
+        {m, f, a} ->
+          l = length(a)
+
+          cond do
+            function_exported?(m, f, l + 3) ->
+              {:ok, apply(m, f, [struct, type, change_data | a])}
+
+            function_exported?(m, f, l + 2) ->
+              {:ok, apply(m, f, [struct, change_data | a])}
+
+            function_exported?(m, f, l + 1) ->
+              {:ok, apply(m, f, [struct | a])}
+
+            true ->
+              raise "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}: #{inspect({m, f, a})}"
+          end
+
+        _ ->
+          raise "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}"
       end
     end)
   end
@@ -312,42 +366,44 @@ defmodule Phoenix.Sync.Write do
   end
 
   defp apply_before(multi, type, n, %{before: before_fun} = action) do
-    Ecto.Multi.merge(multi, fn changes ->
-      changeset = Map.fetch!(changes, {:changeset, n})
-
-      cond do
-        # per-action callback
-        is_function(before_fun, 3) ->
-          before_fun.(Ecto.Multi.new(), changeset, changes) |> validate_callback!(type, action)
-
-        # global callback including action
-        is_function(before_fun, 4) ->
-          before_fun.(Ecto.Multi.new(), type, changeset, changes)
-          |> validate_callback!(type, action)
-
-        true ->
-          raise "Invalid before_fun for #{inspect(action.table)} #{inspect(type)}"
-      end
-    end)
+    apply_hook(multi, type, n, before_fun, action)
   end
 
   defp apply_after(multi, type, n, %{after: after_fun} = action) do
+    apply_hook(multi, type, n, after_fun, action)
+  end
+
+  defp apply_hook(multi, type, n, hook_fun, action) do
     Ecto.Multi.merge(multi, fn changes ->
       changeset = Map.fetch!(changes, {:changeset, n})
 
-      cond do
+      case hook_fun do
         # per-action callback
-        is_function(after_fun, 3) ->
-          after_fun.(Ecto.Multi.new(), changeset, changes) |> validate_callback!(type, action)
+        fun3 when is_function(fun3, 3) ->
+          fun3.(Ecto.Multi.new(), changeset, changes)
 
         # global callback including action
-        is_function(after_fun, 4) ->
-          after_fun.(Ecto.Multi.new(), type, changeset, changes)
-          |> validate_callback!(type, action)
+        fun4 when is_function(fun4, 4) ->
+          fun4.(Ecto.Multi.new(), type, changeset, changes)
 
-        true ->
+        {m, f, a} ->
+          l = length(a)
+
+          cond do
+            function_exported?(m, f, l + 3) ->
+              apply(m, f, [Ecto.Multi.new(), changeset, changes | a])
+
+            function_exported?(m, f, l + 4) ->
+              apply(m, f, [Ecto.Multi.new(), type, changeset, changes | a])
+
+            true ->
+              raise "Invalid after_fun for #{inspect(action.table)} #{inspect(type)}: #{inspect({m, f, a})}"
+          end
+
+        _ ->
           raise "Invalid after_fun for #{inspect(action.table)} #{inspect(type)}"
       end
+      |> validate_callback!(type, action)
     end)
   end
 
