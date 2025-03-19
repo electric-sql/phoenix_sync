@@ -4,7 +4,7 @@ defmodule Phoenix.Sync.Write do
 
 
   ```elixir
-  Phoenix.Sync.Write.new(conn, [
+  Phoenix.Sync.Write.mutator(conn, [
     # just use the model's changeset to validate
     Todos.Todo,
     # use the `validate_write/2` function to map the write to a changeset
@@ -132,13 +132,13 @@ defmodule Phoenix.Sync.Write do
     end
   end
 
-  def new do
+  def mutator do
     %__MODULE__{}
   end
 
-  def new(schema, config \\ [])
+  def mutator(schema, config \\ [])
 
-  def new(schema, opts) when is_atom(schema) do
+  def mutator(schema, opts) when is_atom(schema) do
     %__MODULE__{}
     |> allow(schema, opts)
   end
