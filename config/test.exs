@@ -17,7 +17,8 @@ config :phoenix_sync, Support.Repo,
   port: 54321,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
-  pool_size: 10
+  pool_size: 10,
+  pool: Ecto.Adapters.SQL.Sandbox
 
 config :phoenix_sync, Support.ConfigTestRepo,
   username: "postgres",
