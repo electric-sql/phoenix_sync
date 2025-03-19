@@ -21,20 +21,28 @@ defmodule Phoenix.Sync.WriteTest do
 
   defp changeset_id(changeset), do: Changeset.fetch_field!(changeset, :id)
 
+  defp notify({pid, ref}, msg) when is_pid(pid) do
+    notify(pid, {ref, msg})
+  end
+
+  defp notify(pid, msg) when is_pid(pid) do
+    send(pid, msg)
+  end
+
   def todo_changeset(todo, data, pid) do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
-    |> tap(&send(pid, {:todo, :changeset, changeset_id(&1)}))
+    |> tap(&notify(pid, {:todo, :changeset, changeset_id(&1)}))
   end
 
   def todo_changeset(todo, action, data, pid) when action in [:insert, :update, :delete] do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
-    |> tap(&send(pid, {:todo, :changeset, action, changeset_id(&1)}))
+    |> tap(&notify(pid, {:todo, :changeset, action, changeset_id(&1)}))
   end
 
   def delete_changeset(todo, pid) do
-    send(pid, {:todo, :delete, todo})
+    notify(pid, {:todo, :delete, todo})
     todo
   end
 
@@ -42,11 +50,11 @@ defmodule Phoenix.Sync.WriteTest do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
     |> Changeset.validate_required([:id, :title, :completed])
-    |> tap(&send(pid, {:todo, :insert, changeset_id(&1)}))
+    |> tap(&notify(pid, {:todo, :insert, changeset_id(&1)}))
   end
 
   def todo_update_changeset(todo, data, pid) do
-    send(pid, {:todo, :update, todo.id, data})
+    notify(pid, {:todo, :update, todo.id, data})
 
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
@@ -54,7 +62,7 @@ defmodule Phoenix.Sync.WriteTest do
   end
 
   def todo_delete_changeset(todo, data, pid) do
-    send(pid, {:todo, :delete, todo.id})
+    notify(pid, {:todo, :delete, todo.id})
 
     todo
     |> Changeset.cast(data, [:id])
@@ -62,38 +70,38 @@ defmodule Phoenix.Sync.WriteTest do
   end
 
   def todo_before_insert(multi, changeset, _changes, pid) do
-    send(pid, {:todo, :before_insert, changeset_id(changeset)})
+    notify(pid, {:todo, :before_insert, changeset_id(changeset)})
     multi
   end
 
   def todo_before_update(multi, changeset, _changes, pid) do
-    send(pid, {:todo, :before_update, changeset_id(changeset)})
+    notify(pid, {:todo, :before_update, changeset_id(changeset)})
 
     multi
   end
 
   def todo_before_delete(multi, changeset, _changes, pid) do
-    send(pid, {:todo, :before_delete, changeset_id(changeset)})
+    notify(pid, {:todo, :before_delete, changeset_id(changeset)})
     multi
   end
 
   def todo_after_insert(multi, changeset, _changes, pid) do
-    send(pid, {:todo, :after_insert, changeset_id(changeset)})
+    notify(pid, {:todo, :after_insert, changeset_id(changeset)})
     multi
   end
 
   def todo_after_update(multi, changeset, _changes, pid) do
-    send(pid, {:todo, :after_update, changeset_id(changeset)})
+    notify(pid, {:todo, :after_update, changeset_id(changeset)})
     multi
   end
 
   def todo_after_delete(multi, changeset, _changes, pid) do
-    send(pid, {:todo, :after_delete, changeset_id(changeset)})
+    notify(pid, {:todo, :after_delete, changeset_id(changeset)})
     multi
   end
 
   def todo_get!(%{"id" => id} = _change, pid) do
-    send(pid, {:todo, :get, String.to_integer(id)})
+    notify(pid, {:todo, :get, String.to_integer(id)})
     Repo.get_by!(Support.Todo, id: id)
   end
 
@@ -447,9 +455,116 @@ defmodule Phoenix.Sync.WriteTest do
     test "allows for a generic before/2 and after/2 for all mutations"
     test "allows for a generic before/3 and after/3 for all mutations"
     test "returns an error and doesn't apply txn if any changeset returns an error"
+
     test "uses custom table: \"..\" to map local tables to pg ones"
+
     test "uses custom namespaced table: [\"..\", \"..\"] to map local tables to pg ones"
     test "allows for both top-level and per-action callbacks"
+
+    test "supports accepting writes on multiple tables", _ctx do
+      pid = self()
+      todo1_ref = make_ref()
+      todo2_ref = make_ref()
+
+      write =
+        Write.new()
+        |> Write.allow(Support.Todo,
+          load: &todo_get!(&1, pid),
+          changeset: &todo_changeset(&1, &2, &3, {pid, todo1_ref}),
+          insert: [after: &todo_after_insert(&1, &2, &3, {pid, todo1_ref})]
+        )
+        |> Write.allow(Support.Todo,
+          table: "todos_2",
+          load: &todo_get!(&1, pid),
+          changeset: &todo_changeset(&1, &2, &3, {pid, todo2_ref}),
+          insert: [after: &todo_after_insert(&1, &2, &3, {pid, todo2_ref})]
+        )
+
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos"]},
+          "modified" => %{"id" => "98", "title" => "New todo1", "completed" => "false"}
+        },
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos_2"]},
+          "modified" => %{"id" => "99", "title" => "New todo2", "completed" => "false"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+
+      assert_receive {^todo1_ref, {:todo, :changeset, :insert, 98}}
+      assert_receive {^todo1_ref, {:todo, :after_insert, 98}}
+
+      assert_receive {^todo2_ref, {:todo, :changeset, :insert, 99}}
+      assert_receive {^todo2_ref, {:todo, :after_insert, 99}}
+    end
+
+    test "is intelligent about mapping client tables to server", _ctx do
+      pid = self()
+
+      write =
+        Write.new()
+        |> Write.allow(Support.Todo,
+          load: &todo_get!(&1, pid),
+          changeset: &todo_changeset(&1, &2, &3, pid),
+          insert: [after: &todo_after_insert(&1, &2, &3, pid)]
+        )
+
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos"]},
+          "modified" => %{"id" => "98", "title" => "New todo1", "completed" => "false"}
+        },
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["client", "todos"]},
+          "modified" => %{"id" => "99", "title" => "New todo2", "completed" => "false"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} = write |> Write.apply(changes) |> Write.transaction(Repo)
+
+      assert_receive {:todo, :changeset, :insert, 98}
+      assert_receive {:todo, :after_insert, 98}
+
+      assert_receive {:todo, :changeset, :insert, 99}
+      assert_receive {:todo, :after_insert, 99}
+    end
+
+    test "only matches full relation if configured", _ctx do
+      pid = self()
+
+      write =
+        Write.new()
+        |> Write.allow(Support.Todo,
+          table: ["public", "todos"],
+          load: &todo_get!(&1, pid),
+          changeset: &todo_changeset(&1, &2, &3, pid),
+          insert: [after: &todo_after_insert(&1, &2, &3, pid)]
+        )
+
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos"]},
+          "modified" => %{"id" => "98", "title" => "New todo1", "completed" => "false"}
+        },
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["client", "todos"]},
+          "modified" => %{"id" => "99", "title" => "New todo2", "completed" => "false"}
+        }
+      ]
+
+      # we have specified allow/2 with a fully qualified table so only one of the
+      # inserts matches
+      assert {:error, {:invalid, 1}, _msg, _changes} =
+               write |> Write.apply(changes) |> Write.transaction(Repo)
+    end
 
     test "allows for 1-arity delete changeset functions", _ctx do
       pid = self()

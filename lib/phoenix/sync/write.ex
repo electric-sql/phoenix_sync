@@ -132,6 +132,10 @@ defmodule Phoenix.Sync.Write do
     end
   end
 
+  def new do
+    %__MODULE__{}
+  end
+
   def new(schema, config \\ [])
 
   def new(schema, opts) when is_atom(schema) do
