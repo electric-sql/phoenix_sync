@@ -356,7 +356,7 @@ You can also include `replica` (see below) in your static shape definitions:
 sync "/incomplete-todos", Todos.Todo, where: "completed = false", replica: :full
 ```
 
-For anything else more dyanamic, or to use Ecto queries, you should switch from using the `sync` macros in your router to using `sync_render/3` in a controller.
+For anything else more dynamic, or to use Ecto queries, you should switch from using the `sync` macros in your router to using `sync_render/3` in a controller.
 
 ### Using a keyword list
 
@@ -372,4 +372,3 @@ The available options are:
 - `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
 
 See the [Electric Shapes guide](https://electric-sql.com/docs/guides/shapes) for more information.
-
