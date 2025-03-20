@@ -29,10 +29,9 @@ defmodule Phoenix.Sync.WriteTest do
     send(pid, msg)
   end
 
-  def todo_changeset(todo, data, pid) do
+  def todo_changeset(todo, :delete, _data, pid) do
+    notify(pid, {:todo, :changeset, :delete, todo.id})
     todo
-    |> Changeset.cast(data, [:id, :title, :completed])
-    |> tap(&notify(pid, {:todo, :changeset, changeset_id(&1)}))
   end
 
   def todo_changeset(todo, action, data, pid) when action in [:insert, :update, :delete] do
@@ -268,8 +267,8 @@ defmodule Phoenix.Sync.WriteTest do
       assert_receive {:todo, :get, 99}
       assert_receive {:todo, :get, 98}
       # we don't call the load function for inserts
-      refute_receive {:todo, :get, 98}, 100
-      refute_receive {:todo, :get, 99}, 100
+      refute_receive {:todo, :get, 98}, 10
+      refute_receive {:todo, :get, 99}, 10
       assert_receive {:todo, :get, 2}
       assert_receive {:todo, :get, 1}
       assert_receive {:todo, :get, 1}
@@ -319,42 +318,6 @@ defmodule Phoenix.Sync.WriteTest do
       ]
 
       assert {:error, _, _, _} = ctx.mutator |> Write.apply(changes) |> Write.transaction(Repo)
-    end
-
-    test "allows for a generic changeset/2 for all mutations", _ctx do
-      pid = self()
-
-      mutator =
-        Write.mutator(Support.Todo,
-          table: "todos_local",
-          load: &todo_get!(&1, pid),
-          changeset: &todo_changeset(&1, &2, pid)
-        )
-
-      changes = [
-        %{
-          "type" => "insert",
-          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
-          "modified" => %{"id" => "98", "title" => "New todo", "completed" => "false"}
-        },
-        %{
-          "type" => "delete",
-          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
-          "original" => %{"id" => "2"}
-        },
-        %{
-          "type" => "update",
-          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
-          "original" => %{"id" => "1", "title" => "First todo", "completed" => "false"},
-          "changes" => %{"title" => "Changed title"}
-        }
-      ]
-
-      assert {:ok, _txid, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
-
-      assert_receive {:todo, :changeset, 98}
-      assert_receive {:todo, :changeset, 2}
-      assert_receive {:todo, :changeset, 1}
     end
 
     test "allows for a generic changeset/3 for all mutations", _ctx do
@@ -638,5 +601,77 @@ defmodule Phoenix.Sync.WriteTest do
       assert_receive {:after, :delete, 2}
       assert_receive {:after, :update, 1}
     end
+
+    test "supports custom mutation message format", ctx do
+      pid = self()
+
+      changes = [
+        %{
+          "perform" => "insert",
+          "relation" => ["public", "todos"],
+          "updates" => %{"id" => "98", "title" => "New todo", "completed" => "false"}
+        },
+        %{
+          "perform" => "delete",
+          "relation" => ["public", "todos"],
+          "value" => %{"id" => "2"}
+        },
+        %{
+          "perform" => "update",
+          "relation" => ["public", "todos"],
+          "value" => %{"id" => "1", "title" => "First todo", "completed" => "false"},
+          "updates" => %{"title" => "Changed title"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} =
+               Write.mutator(parser: &parse_mutation/1)
+               |> Write.allow(Support.Todo, load: &todo_get!(&1, pid))
+               |> Write.apply(changes)
+               |> Write.transaction(Repo)
+
+      assert [
+               %Support.Todo{id: 1, title: "Changed title", completed: false},
+               %Support.Todo{id: 98, title: "New todo", completed: false}
+             ] = ctx.repo.all(from(t in Support.Todo, order_by: t.id))
+    end
+
+    test "supports custom mutation message format via mfa", ctx do
+      pid = self()
+
+      changes = [
+        %{
+          "perform" => "insert",
+          "relation" => ["public", "todos"],
+          "updates" => %{"id" => "98", "title" => "New todo", "completed" => "false"}
+        },
+        %{
+          "perform" => "delete",
+          "relation" => ["public", "todos"],
+          "value" => %{"id" => "2"}
+        },
+        %{
+          "perform" => "update",
+          "relation" => ["public", "todos"],
+          "value" => %{"id" => "1", "title" => "First todo", "completed" => "false"},
+          "updates" => %{"title" => "Changed title"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} =
+               Write.mutator(parser: {__MODULE__, :parse_mutation, []})
+               |> Write.allow(Support.Todo, load: &todo_get!(&1, pid))
+               |> Write.apply(changes)
+               |> Write.transaction(Repo)
+
+      assert [
+               %Support.Todo{id: 1, title: "Changed title", completed: false},
+               %Support.Todo{id: 98, title: "New todo", completed: false}
+             ] = ctx.repo.all(from(t in Support.Todo, order_by: t.id))
+    end
+  end
+
+  def parse_mutation(m) do
+    Write.Mutation.new(m["perform"], m["relation"], m["value"], m["updates"])
   end
 end
