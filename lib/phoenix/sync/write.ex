@@ -1,5 +1,161 @@
 defmodule Phoenix.Sync.Write do
   @moduledoc """
+  Provides [optimistic write](https://electric-sql.com/docs/guides/writes)
+  support for Phoenix- or Plug-based apps.
+
+  The client uses some local database, e.g. [PGLite](https://pglite.dev/), and
+  syncs changes into this database from the server using
+  [Electric](https://electric-sql.com/).
+
+  Local writes are performed on the local database using
+  [TanStack/optimistic](https://github.com/TanStack/optimistic) which POSTs
+  transactions to the Elixir/Phoenix application.
+
+  A transaction is a list of "mutations", a series of `INSERT`, `UPDATE` and
+  `DELETE` operations. These operations are then written to the server's
+  database via the functions in this module and the transaction id of this
+  write is returned to the client.
+
+  When the client receives this transaction id back through it's Electric sync
+  stream then the client knows that it's up-to-date with the server.
+
+  ## Client Code
+
+  See [TanStack/optimistic](https://github.com/TanStack/optimistic) for more information.
+
+  ```typescript
+  import { useCollection } from "@TanStack/optimistic/useCollection"
+  import { createElectricSync } from '@TanStack/optimistic/electric';
+
+  // Create a collection configuration for todos
+  const todosConfig = {
+      id: 'todos',
+      // Create an ElectricSQL sync configuration
+      sync: createElectricSync(
+        {
+          // The `todo` shape is defined using `Phoenix.Sync.Router.sync/3` or `Phoenix.Sync.Controller.sync_render/3`
+          url: `http://localhost:4000/shapes/todo`,
+          params: {},
+        },
+        {
+          // Primary key for the todos table
+          primaryKey: ['id'],
+        }
+      ),
+    mutationFn: {
+      // Persist mutations to the backend
+      persist: async (mutations, transaction) => {
+        const response = await fetch(`http://localhost:4000/mutations`, {
+          method: `POST`,
+          headers: {
+            "content-type": `application/json`,
+            accept: `application/json`,
+          },
+          body: JSON.stringify({transaction: transaction.mutations}),
+        })
+        if (!response.ok) {
+          // Throwing an error will rollback the optimistic state.
+          throw new Error(`HTTP error! Status: ${response.status}`)
+        }
+
+        const result = await response.json()
+
+        return {
+          txid: result.txid,
+        }
+      },
+      // Wait for a transaction to be synced
+      awaitSync: async ({ config, persistResult: { txid: number } }) => {
+        try {
+          // Use the awaitTxid function from the ElectricSync configuration
+          // This waits for the specific transaction to be synced to the server
+          // The second parameter is an optional timeout in milliseconds
+          await config.sync.awaitTxid(persistResult.txid, 10000)
+          return true;
+        } catch (error) {
+          console.error('Error waiting for transaction to sync:', error);
+          // Throwing an error will rollback the optimistic state.
+          throw error;
+        }
+      },
+    },
+  };
+  ```
+
+  ## Server code
+
+  The `todos` table is represented by the `Ecto.Schema` module `Todo`.
+
+  ```elixir
+  defmodule Todo do
+    use Ecto.Schema
+
+    schema "todos" do
+      field :title, :string
+      field :completed, :boolean, default: false
+    end
+
+    def changeset(todo, data) do
+      todo
+      |> cast(data, [:id, :title, :completed])
+      |> validate_required([:id, :title])
+    end
+  end
+  ```
+
+  Our router maps the `/mutations` path to our `MutationsController.update/2`
+  function.
+
+  ```elixir
+  defmodule MutationsController do
+    use Phoenix.Controller, formats: [:json]
+
+    alias Phoenix.Sync.Write
+
+    def update(conn, %{transaction: transaction} = _params) do
+      {:ok, txid, _changes} =
+        Todo
+        |> Write.allow()
+        |> Write.apply(transaction)
+        |> Write.transaction(Repo)
+      render(conn, :update, txid: txid)
+    end
+  end
+  ```
+
+  - `allow/1` creates a write configuration that allows writes from the `todos`
+    table. You can allow writes from any number of tables by repeatedly calling
+    `allow/3` with the matching `Ecto.Schema`.
+
+        writer =
+          Write.new()
+          |> Write.allow(Todo)
+          |> Write.allow(Note)
+          |> Write.allow(Event)
+
+  - `apply/2` transforms the list of mutations into an `Ecto.Multi` instance
+    containing the set of actions to perform to validate and persist this client
+    transaction to the server database.
+
+  - `transaction/2` calls `c:Ecto.Repo.transaction/2` with the `Ecto.Multi`
+    from the `apply/2` step and extracts the resulting transaction id to return
+    to the client as the JSON `{"txid":...}`.
+
+  Because `Phoenix.Sync.Write` leverages `Ecto.Multi` to do the work of
+  applying changes and managing errors, you're also free to extend the actions
+  that are performed with every transaction using `before` and `after`
+  callbacks configured per-table or per-table per-action (insert, update,
+  delete). See `allow/3` for more information on the configuration options
+  for each table.
+
+  Because the result of `apply/2` is an `Ecto.Multi` instance you can also just append operations using the normal `Ecto.Multi` functions:
+
+      {:ok, txid, _changes} =
+        Todo
+        |> Write.allow()
+        |> Write.apply(transaction)
+        |> Ecto.Multi.insert(:my_action, %Event{})
+        |> Write.transaction(Repo)
   """
 
   alias __MODULE__.Mutation
@@ -26,7 +182,7 @@ defmodule Phoenix.Sync.Write do
   ]
   @action_options_schema NimbleOptions.new!(@action_options)
 
-  @type data() :: %{binary() => binary() | integer()}
+  @type data() :: %{binary() => any()}
   @type mutation() :: %{required(binary()) => any()}
   @type action() :: :insert | :update | :delete
   @actions [:insert, :update, :delete]
@@ -41,18 +197,19 @@ defmodule Phoenix.Sync.Write do
     type_doc: "`t:action_opts/0`"
   ]
 
-  @mutator_schema NimbleOptions.new!(
-                    parser: [
-                      type: {:or, [{:fun, 1}, :mfa]},
-                      doc: """
-                      `parser` should be a function that takes a mutation event
-                      from the client as a map (most probably parsed from JSON) and returns a
-                      `%Mutation{}` struct.
+  @writer_schema NimbleOptions.new!(
+                   parser: [
+                     type: {:or, [{:fun, 1}, :mfa]},
+                     doc: """
+                     `parser` should be a function that takes a mutation event
+                     from the client as a map (most probably parsed from JSON) and returns a
+                     `%Mutation{}` struct.
 
-                      It should use `#{Mutation}.new/4` to validate the mutation data.
-                      """
-                    ]
-                  )
+                     It should use `#{Mutation}.new/4` to validate the mutation data.
+                     """,
+                     type_spec: quote(do: (mutation() -> Mutation.t()))
+                   ]
+                 )
 
   @allow_schema NimbleOptions.new!(
                   table: [
@@ -143,7 +300,7 @@ defmodule Phoenix.Sync.Write do
                     def mutations(%Plug.Conn{} = conn, %{"user_id" => user_id} = params) do
                       {:ok, txid, _changes} =
                         Todos.Todo
-                        |> Phoenix.Sync.Write.mutator(changeset: &todo_changeset(&1, &2, &3, user_id))
+                        |> Phoenix.Sync.Write.new(changeset: &todo_changeset(&1, &2, &3, user_id))
                         |> Phoenix.Sync.Write.apply(params["_json"] || [])
                         |> Phoenix.Sync.Write.transaction(MyApp.Repo)
 
@@ -266,56 +423,55 @@ defmodule Phoenix.Sync.Write do
 
   defstruct parser: &Mutation.tanstack/1, mappings: %{}
 
-  @type mutator_opts() :: [unquote(NimbleOptions.option_typespec(@mutator_schema))]
+  @type writer_opts() :: [unquote(NimbleOptions.option_typespec(@writer_schema))]
   @type allow_opts() :: [unquote(NimbleOptions.option_typespec(@allow_schema))]
 
-  @type t() :: %__MODULE__{}
-  @type mutator() :: t()
+  @type writer() :: %__MODULE__{}
 
   @doc """
-  Create an empty mutator instance with the default options.
+  Create an empty writer instance with the default options.
 
-  Empty mutators will reject writes to any tables. You should configure writes
+  Empty writers will reject writes to any tables. You should configure writes
   to the permitted tables by calling `allow/3`.
   """
-  @spec mutator() :: t()
-  def mutator do
+  @spec new() :: writer()
+  def new do
     %__MODULE__{}
   end
 
   @doc """
-  Create a new mutator with the given global options.
+  Create a new writer with the given global options.
 
   Supported options:
 
-  #{NimbleOptions.docs(@mutator_schema)}
+  #{NimbleOptions.docs(@writer_schema)}
   """
-  @spec mutator(mutator_opts()) :: mutator()
-  def mutator(opts) when is_list(opts) do
-    config = NimbleOptions.validate!(opts, @mutator_schema)
+  @spec new(writer_opts()) :: writer()
+  def new(opts) when is_list(opts) do
+    config = NimbleOptions.validate!(opts, @writer_schema)
     parser = Keyword.get(config, :parser, &Mutation.tanstack/1)
     %__MODULE__{parser: parser}
   end
 
   @doc """
-  Create a mutator config that allows writes to the given `Ecto.Schema` module.
+  Create a writer config that allows writes to the given `Ecto.Schema` module.
 
   This is equivalent to:
 
-      Phoenix.Sync.Write.mutator()
+      Phoenix.Sync.Write.new()
       |> Phoenix.Sync.Write.allow(MyApp.SchemaModule)
   """
-  @spec allow(module()) :: mutator()
+  @spec allow(module()) :: writer()
   def allow(schema) when is_atom(schema) do
-    allow(mutator(), schema, [])
+    allow(new(), schema, [])
   end
 
   @doc """
-  Create a single-table mutator configuration.
+  Create a single-table writer configuration.
 
   Shortcut to:
 
-      Phoenix.Sync.Write.mutator()
+      Phoenix.Sync.Write.new()
       |> Phoenix.Sync.Write.allow(MyApp.SchemaModule, opts)
 
   `opts` can be a list of options, see `allow/3`, or a 2- or 3-arity changeset
@@ -342,7 +498,7 @@ defmodule Phoenix.Sync.Write do
       )
   """
   def allow(schema, opts) when is_atom(schema) and is_list(opts) do
-    allow(mutator(), schema, opts)
+    allow(new(), schema, opts)
   end
 
   def allow(schema, changeset_fun)
@@ -357,12 +513,12 @@ defmodule Phoenix.Sync.Write do
 
   #{NimbleOptions.docs(@allow_schema)}
   """
-  @spec allow(mutator(), module(), allow_opts()) :: mutator()
-  def allow(mutator, schema, opts \\ [])
+  @spec allow(writer(), module(), allow_opts()) :: writer()
+  def allow(writer, schema, opts \\ [])
 
-  def allow(%__MODULE__{} = mutator, schema, changeset_fun)
+  def allow(%__MODULE__{} = writer, schema, changeset_fun)
       when is_atom(schema) and is_function(changeset_fun) do
-    allow(mutator, schema, changeset: changeset_fun)
+    allow(writer, schema, changeset: changeset_fun)
   end
 
   def allow(%__MODULE__{} = write, schema, opts) when is_atom(schema) do
@@ -413,13 +569,9 @@ defmodule Phoenix.Sync.Write do
       get_in(config, [action, :changeset]) || config[:changeset] || default_changeset!(schema) ||
         raise(ArgumentError, message: "No changeset/3 or changeset/2 defined for #{action}s")
 
-    before_fun =
-      get_in(config, [action, :before]) || config[:before] ||
-        fn multi, _action, _changeset, _changes -> multi end
-
-    after_fun =
-      get_in(config, [action, :after]) || config[:after] ||
-        fn multi, _action, _changeset, _changes -> multi end
+    # nil-hooks are just ignored
+    before_fun = get_in(config, [action, :before]) || config[:before]
+    after_fun = get_in(config, [action, :after]) || config[:after]
 
     Map.merge(
       Map.new(extra),
@@ -484,13 +636,13 @@ defmodule Phoenix.Sync.Write do
   end
 
   @doc """
-  Given a mutator configuration created using `allow/3` translate the list of
+  Given a writer configuration created using `allow/3` translate the list of
   mutations into an `Ecto.Multi` operation.
 
   Example:
 
       %Ecto.Multi{} = mutation =
-        Phoenix.Sync.Write.mutator()
+        Phoenix.Sync.Write.new()
         |> Phoenix.Sync.Write.allow(MyApp.Todos.Todo)
         |> Phoenix.Sync.Write.allow(MyApp.Options.Option)
         |> Phoenix.Sync.Write.apply(changes)
@@ -502,7 +654,7 @@ defmodule Phoenix.Sync.Write do
   Use `transaction/3` to apply the changes to the database and return the
   transaction id.
   """
-  @spec apply(mutator(), [mutation()]) :: Ecto.Multi.t()
+  @spec apply(writer(), [mutation()]) :: Ecto.Multi.t()
   def apply(%__MODULE__{} = write, changes) when is_list(changes) do
     changes
     |> Enum.with_index()
@@ -636,6 +788,10 @@ defmodule Phoenix.Sync.Write do
     apply_hook(multi, mutation, n, after_fun, action)
   end
 
+  defp apply_hook(multi, _mutation, _n, nil, _action) do
+    multi
+  end
+
   defp apply_hook(multi, mutation, n, hook_fun, action) do
     Ecto.Multi.merge(multi, fn changes ->
       changeset = Map.fetch!(changes, {:changeset, n})
@@ -751,7 +907,7 @@ defmodule Phoenix.Sync.Write do
   docs](https://hexdocs.pm/ecto/Ecto.Repo.html#c:transaction/2-use-with-ecto-multi)
   for the result if any of your mutations returns an error.
 
-        Phoenix.Sync.Write.mutator()
+        Phoenix.Sync.Write.new()
         |> Phoenix.Sync.Write.allow(MyApp.Todos.Todo)
         |> Phoenix.Sync.Write.allow(MyApp.Options.Option)
         |> Phoenix.Sync.Write.apply(changes)
@@ -785,13 +941,13 @@ defmodule Phoenix.Sync.Write do
   @doc """
   Extract the transaction id from changes returned from `Repo.transaction`.
 
-  This allows you to use a standard `Ecto.Repo.transaction/3` call to apply
+  This allows you to use a standard `c:Ecto.Repo.transaction/2` call to apply
   mutations defined using `apply/2` and extract the transaction id afterwards.
 
   Example
 
       {:ok, changes} =
-        Phoenix.Sync.Write.mutator()
+        Phoenix.Sync.Write.new()
         |> Phoenix.Sync.Write.allow(MyApp.Todos.Todo)
         |> Phoenix.Sync.Write.allow(MyApp.Options.Option)
         |> Phoenix.Sync.Write.apply(changes)
@@ -800,10 +956,16 @@ defmodule Phoenix.Sync.Write do
       {:ok, txid} = Phoenix.Sync.Write.txid(changes)
   """
   @spec txid(Ecto.Multi.changes()) :: {:ok, txid()} | :error
-  def txid(%{@txid_name => txid}), do: {:ok, txid}
+  def txid(%{@txid_name => txid} = _changes), do: {:ok, txid}
   def txid(_), do: :error
 
+  @doc """
+  Returns the transaction id from a `Ecto.Multi.changes()` result or raises if
+  not found.
+
+  See `txid/1`.
+  """
   @spec txid!(Ecto.Multi.changes()) :: txid()
-  def txid!(%{@txid_name => txid}), do: txid
+  def txid!(%{@txid_name => txid} = _changes), do: txid
   def txid!(_), do: raise(ArgumentError, message: "No txid in change data")
 end
