@@ -99,9 +99,9 @@ defmodule Phoenix.Sync.WriteTest do
     multi
   end
 
-  def todo_get!(%{"id" => id} = _change, pid) do
+  def todo_get(%{"id" => id} = _change, pid) do
     notify(pid, {:todo, :get, String.to_integer(id)})
-    Repo.get_by!(Support.Todo, id: id)
+    Repo.get_by(Support.Todo, id: id)
   end
 
   defmodule TodoNoChangeset do
@@ -117,23 +117,23 @@ defmodule Phoenix.Sync.WriteTest do
   # apply creates and applies i.e. new() |> Repo.transaction()
   describe "new/2" do
     test "accepts a schema or a list of schema structs", _ctx do
-      assert %Write{} = Write.mutator(Support.Todo)
+      assert %Write{} = Write.allow(Support.Todo)
     end
 
     test "rejects a schema struct with no changeset/2 function", _ctx do
       assert_raise ArgumentError, fn ->
-        Write.mutator(TodoNoChangeset)
+        Write.allow(TodoNoChangeset)
       end
 
-      assert %Write{} = Write.mutator(TodoNoChangeset, &todo_changeset(&1, &2, &3, nil))
+      assert %Write{} = Write.allow(TodoNoChangeset, &todo_changeset(&1, &2, &3, nil))
 
       assert %Write{} =
-               Write.mutator(TodoNoChangeset, changeset: &todo_changeset(&1, &2, &3, nil))
+               Write.allow(TodoNoChangeset, changeset: &todo_changeset(&1, &2, &3, nil))
     end
 
     test "rejects non-schema module" do
       assert_raise ArgumentError, fn ->
-        Write.mutator(__MODULE__)
+        Write.allow(__MODULE__)
       end
     end
 
@@ -141,11 +141,11 @@ defmodule Phoenix.Sync.WriteTest do
       pid = self()
 
       assert %Write{} =
-               Write.mutator(
+               Write.allow(
                  Support.Todo,
                  table: "todos_local",
                  # defaults to Repo.get!(Todo, <id>)
-                 load: &todo_get!(&1, pid),
+                 load: &todo_get(&1, pid),
                  accept: [:insert, :update, :delete],
                  insert: [
                    changeset: &todo_insert_changeset(&1, &2, pid),
@@ -191,7 +191,7 @@ defmodule Phoenix.Sync.WriteTest do
       mutator_config_todo =
         [
           table: "todos_local",
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           accept: [:insert, :update, :delete],
           insert: [
             changeset: &todo_insert_changeset(&1, &2, pid),
@@ -210,7 +210,7 @@ defmodule Phoenix.Sync.WriteTest do
           ]
         ]
 
-      mutator = Write.mutator(Support.Todo, mutator_config_todo)
+      mutator = Write.allow(Support.Todo, mutator_config_todo)
 
       [mutator: mutator, mutator_config_todo: mutator_config_todo]
     end
@@ -324,9 +324,9 @@ defmodule Phoenix.Sync.WriteTest do
       pid = self()
 
       mutator =
-        Write.mutator(Support.Todo,
+        Write.allow(Support.Todo,
           table: "todos_local",
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid)
         )
 
@@ -356,13 +356,35 @@ defmodule Phoenix.Sync.WriteTest do
       assert_receive {:todo, :changeset, :update, 1}
     end
 
+    test "returns an error if original record is not found" do
+      pid = self()
+
+      mutator =
+        Write.allow(Support.Todo,
+          table: "todos_local",
+          load: &todo_get(&1, pid),
+          changeset: &todo_changeset(&1, &2, &3, pid)
+        )
+
+      changes = [
+        %{
+          "type" => "update",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "111111", "title" => "First todo", "completed" => "false"},
+          "changes" => %{"title" => "Changed title"}
+        }
+      ]
+
+      assert {:error, _, _, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
+    end
+
     test "rejects updates not in :accept list", _ctx do
       pid = self()
 
       mutator =
-        Write.mutator(Support.Todo,
+        Write.allow(Support.Todo,
           table: "todos_local",
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           accept: [:insert, :update],
           changeset: &todo_changeset(&1, &2, &3, pid)
         )
@@ -397,13 +419,13 @@ defmodule Phoenix.Sync.WriteTest do
       mutator =
         Write.mutator()
         |> Write.allow(Support.Todo,
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, {pid, todo1_ref}),
           insert: [after: &todo_after_insert(&1, &2, &3, {pid, todo1_ref})]
         )
         |> Write.allow(Support.Todo,
           table: "todos_2",
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, {pid, todo2_ref}),
           insert: [after: &todo_after_insert(&1, &2, &3, {pid, todo2_ref})]
         )
@@ -436,7 +458,7 @@ defmodule Phoenix.Sync.WriteTest do
       mutator =
         Write.mutator()
         |> Write.allow(Support.Todo,
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid),
           insert: [after: &todo_after_insert(&1, &2, &3, pid)]
         )
@@ -470,7 +492,7 @@ defmodule Phoenix.Sync.WriteTest do
         Write.mutator()
         |> Write.allow(Support.Todo,
           table: ["public", "todos"],
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid),
           insert: [after: &todo_after_insert(&1, &2, &3, pid)]
         )
@@ -498,9 +520,9 @@ defmodule Phoenix.Sync.WriteTest do
       pid = self()
 
       mutator =
-        Write.mutator(Support.Todo,
+        Write.allow(Support.Todo,
           table: "todos_local",
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           delete: [
             changeset: &delete_changeset(&1, pid)
           ]
@@ -524,9 +546,9 @@ defmodule Phoenix.Sync.WriteTest do
       pid = self()
 
       mutator =
-        Write.mutator(Support.Todo,
+        Write.allow(Support.Todo,
           table: "todos_local",
-          load: {__MODULE__, :todo_get!, [pid]},
+          load: {__MODULE__, :todo_get, [pid]},
           accept: [:insert, :update, :delete],
           insert: [
             changeset: {__MODULE__, :todo_insert_changeset, [pid]},
@@ -560,9 +582,9 @@ defmodule Phoenix.Sync.WriteTest do
       pid = self()
 
       mutator =
-        Write.mutator(Support.Todo,
+        Write.allow(Support.Todo,
           table: "todos_local",
-          load: &todo_get!(&1, pid),
+          load: &todo_get(&1, pid),
           before: fn multi, type, changeset, _changes ->
             send(pid, {:before, type, changeset_id(changeset)})
             multi
@@ -626,7 +648,7 @@ defmodule Phoenix.Sync.WriteTest do
 
       assert {:ok, _txid, _changes} =
                Write.mutator(parser: &parse_mutation/1)
-               |> Write.allow(Support.Todo, load: &todo_get!(&1, pid))
+               |> Write.allow(Support.Todo, load: &todo_get(&1, pid))
                |> Write.apply(changes)
                |> Write.transaction(Repo)
 
@@ -660,7 +682,7 @@ defmodule Phoenix.Sync.WriteTest do
 
       assert {:ok, _txid, _changes} =
                Write.mutator(parser: {__MODULE__, :parse_mutation, []})
-               |> Write.allow(Support.Todo, load: &todo_get!(&1, pid))
+               |> Write.allow(Support.Todo, load: &todo_get(&1, pid))
                |> Write.apply(changes)
                |> Write.transaction(Repo)
 
