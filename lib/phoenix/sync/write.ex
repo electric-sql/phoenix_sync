@@ -30,6 +30,7 @@ defmodule Phoenix.Sync.Write do
   @type mutation() :: %{required(binary()) => any()}
   @type action() :: :insert | :update | :delete
   @actions [:insert, :update, :delete]
+  @type txid() :: integer()
 
   @type action_opts() :: unquote([NimbleOptions.option_typespec(@action_options_schema)])
 
@@ -780,4 +781,29 @@ defmodule Phoenix.Sync.Write do
       {:ok, txid, changes}
     end
   end
+
+  @doc """
+  Extract the transaction id from changes returned from `Repo.transaction`.
+
+  This allows you to use a standard `Ecto.Repo.transaction/3` call to apply
+  mutations defined using `apply/2` and extract the transaction id afterwards.
+
+  Example
+
+      {:ok, changes} =
+        Phoenix.Sync.Write.mutator()
+        |> Phoenix.Sync.Write.allow(MyApp.Todos.Todo)
+        |> Phoenix.Sync.Write.allow(MyApp.Options.Option)
+        |> Phoenix.Sync.Write.apply(changes)
+        |> MyApp.Repo.transaction()
+
+      {:ok, txid} = Phoenix.Sync.Write.txid(changes)
+  """
+  @spec txid(Ecto.Multi.changes()) :: {:ok, txid()} | :error
+  def txid(%{@txid_name => txid}), do: {:ok, txid}
+  def txid(_), do: :error
+
+  @spec txid!(Ecto.Multi.changes()) :: txid()
+  def txid!(%{@txid_name => txid}), do: txid
+  def txid!(_), do: raise(ArgumentError, message: "No txid in change data")
 end

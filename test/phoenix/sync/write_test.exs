@@ -14,8 +14,6 @@ defmodule Phoenix.Sync.WriteTest do
 
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)
 
-    # pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Repo, shared: not ctx[:async])
-    # on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
     [repo: Repo]
   end
 
@@ -181,8 +179,6 @@ defmodule Phoenix.Sync.WriteTest do
   end
 
   describe "apply/2" do
-    @describetag wip: true
-
     setup [:with_repo, :with_todos]
 
     setup do
@@ -690,6 +686,38 @@ defmodule Phoenix.Sync.WriteTest do
                %Support.Todo{id: 1, title: "Changed title", completed: false},
                %Support.Todo{id: 98, title: "New todo", completed: false}
              ] = ctx.repo.all(from(t in Support.Todo, order_by: t.id))
+    end
+  end
+
+  describe "txid/1" do
+    setup [:with_repo, :with_todos]
+
+    test "returns the txid", _ctx do
+      pid = self()
+
+      mutator =
+        Write.mutator()
+        |> Write.allow(Support.Todo,
+          load: &todo_get(&1, pid),
+          changeset: &todo_changeset(&1, &2, &3, pid),
+          insert: [after: &todo_after_insert(&1, &2, &3, pid)]
+        )
+
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos"]},
+          "modified" => %{"id" => "98", "title" => "New todo1", "completed" => "false"}
+        }
+      ]
+
+      assert {:ok, changes} = mutator |> Write.apply(changes) |> Repo.transaction()
+
+      assert {:ok, txid} = Write.txid(changes)
+
+      assert is_integer(txid)
+
+      assert txid == Write.txid!(changes)
     end
   end
 
