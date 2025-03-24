@@ -102,6 +102,16 @@ defmodule Phoenix.Sync.WriteTest do
     Repo.get_by(Support.Todo, id: id)
   end
 
+  def todo_get_tuple(data, pid) do
+    case todo_get(data, pid) do
+      nil ->
+        {:error, "custom error message"}
+
+      %_{} = todo ->
+        {:ok, todo}
+    end
+  end
+
   defmodule TodoNoChangeset do
     use Ecto.Schema
 
@@ -686,6 +696,40 @@ defmodule Phoenix.Sync.WriteTest do
                %Support.Todo{id: 1, title: "Changed title", completed: false},
                %Support.Todo{id: 98, title: "New todo", completed: false}
              ] = ctx.repo.all(from(t in Support.Todo, order_by: t.id))
+    end
+
+    test "allows for custom errors from load fun", _ctx do
+      pid = self()
+
+      changes1 = [
+        %{
+          "perform" => "update",
+          "relation" => ["public", "todos"],
+          "value" => %{"id" => "1", "title" => "First todo", "completed" => "false"},
+          "updates" => %{"title" => "Changed title"}
+        }
+      ]
+
+      assert {:ok, _txid, _changes} =
+               Write.new(parser: {__MODULE__, :parse_mutation, []})
+               |> Write.allow(Support.Todo, load: &todo_get_tuple(&1, pid))
+               |> Write.apply(changes1)
+               |> Write.transaction(Repo)
+
+      changes2 = [
+        %{
+          "perform" => "update",
+          "relation" => ["public", "todos"],
+          "value" => %{"id" => "1001", "title" => "First todo", "completed" => "false"},
+          "updates" => %{"title" => "Changed title"}
+        }
+      ]
+
+      assert {:error, _, "custom error message", _} =
+               Write.new(parser: {__MODULE__, :parse_mutation, []})
+               |> Write.allow(Support.Todo, load: &todo_get_tuple(&1, pid))
+               |> Write.apply(changes2)
+               |> Write.transaction(Repo)
     end
   end
 
