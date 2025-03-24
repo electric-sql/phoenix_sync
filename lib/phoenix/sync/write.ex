@@ -3,9 +3,8 @@ defmodule Phoenix.Sync.Write do
   Provides [optimistic write](https://electric-sql.com/docs/guides/writes)
   support for Phoenix- or Plug-based apps.
 
-  The client uses some local database, e.g. [PGLite](https://pglite.dev/), and
-  syncs changes into this database from the server using
-  [Electric](https://electric-sql.com/).
+  The client uses some local database and syncs changes into this database from
+  the server using [Electric](https://electric-sql.com/).
 
   Local writes are performed on the local database using
   [TanStack/optimistic](https://github.com/TanStack/optimistic) which POSTs
