@@ -223,7 +223,14 @@ defmodule Phoenix.Sync.Write do
                     doc: """
                     A 1- or 2-arity function that accepts either the
                     mutation data or an `Ecto.Repo` instance and the mutation data and returns
-                    the original row from the database or `nil` if not found.
+                    the original row from the database.
+
+                    Valid return values are:
+
+                    - `struct()` - an `Ecto.Schema` struct, that must match the module passed to `allow/3`
+                    - `{:ok, struct()}` - as above but wrapped in an `:ok` tuple
+                    - `nil` - if no row matches the search criteria, or
+                    - `{:error, String.t()}` - as `nil` but with a custom error string
 
                     This function is only used for updates or deletes. For
                     inserts, the `__struct__/0` function defined by `Ecto.Schema` is used to
@@ -243,8 +250,13 @@ defmodule Phoenix.Sync.Write do
                     type_spec:
                       quote(
                         do:
-                          (Ecto.Repo.t(), data() -> Ecto.Schema.t() | nil)
-                          | (data() -> Ecto.Schema.t() | nil)
+                          (Ecto.Repo.t(), data() ->
+                             Ecto.Schema.t() | {:ok, Ecto.Schema.t()} | nil | {:error, String.t()})
+                          | (data() ->
+                               Ecto.Schema.t()
+                               | {:ok, Ecto.Schema.t()}
+                               | nil
+                               | {:error, String.t()})
                       )
                   ],
                   accept: [
@@ -709,42 +721,21 @@ defmodule Phoenix.Sync.Write do
     Ecto.Multi.run(multi, {:changeset, n}, fn repo, _ ->
       case action.load.(repo, type, lookup_data) do
         struct when is_struct(struct, schema) ->
-          case changeset_fun do
-            fun3 when is_function(fun3, 3) ->
-              {:ok, fun3.(struct, type, change_data)}
-
-            fun2 when is_function(fun2, 2) ->
-              {:ok, fun2.(struct, change_data)}
-
-            # delete changeset/validation functions can just look at the original
-            fun1 when is_function(fun1, 1) ->
-              {:ok, fun1.(struct)}
-
-            {m, f, a} ->
-              l = length(a)
-
-              cond do
-                function_exported?(m, f, l + 3) ->
-                  {:ok, apply(m, f, [struct, type, change_data | a])}
-
-                function_exported?(m, f, l + 2) ->
-                  {:ok, apply(m, f, [struct, change_data | a])}
-
-                function_exported?(m, f, l + 1) ->
-                  {:ok, apply(m, f, [struct | a])}
-
-                true ->
-                  {:error,
-                   "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}: #{inspect({m, f, a})}"}
-              end
-
-            _ ->
-              {:error, "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}"}
-          end
+          apply_changeset_fun(changeset_fun, struct, type, change_data, action)
 
         struct when is_struct(struct) ->
           {:error,
            "load function returned an inconsistent value. Expected %#{schema}{}, got %#{struct.__struct__}{}"}
+
+        {:ok, struct} when is_struct(struct, schema) ->
+          apply_changeset_fun(changeset_fun, struct, type, change_data, action)
+
+        {:ok, struct} when is_struct(struct) ->
+          {:error,
+           "load function returned an inconsistent value. Expected %#{schema}{}, got %#{struct.__struct__}{}"}
+
+        {:error, _reason} = error ->
+          error
 
         nil ->
           pks = Map.new(action.pks, fn col -> {col, Map.fetch!(lookup_data, to_string(col))} end)
@@ -752,9 +743,44 @@ defmodule Phoenix.Sync.Write do
           {:error, "No original record found for row #{inspect(pks)}"}
 
         invalid ->
-          {:error, "Expected %#{schema}{} struct from load, got: #{inspect(invalid)}"}
+          {:error, "Invalid return value from load(), got: #{inspect(invalid)}"}
       end
     end)
+  end
+
+  defp apply_changeset_fun(changeset_fun, data, type, change_data, action) do
+    case changeset_fun do
+      fun3 when is_function(fun3, 3) ->
+        {:ok, fun3.(data, type, change_data)}
+
+      fun2 when is_function(fun2, 2) ->
+        {:ok, fun2.(data, change_data)}
+
+      # delete changeset/validation functions can just look at the original
+      fun1 when is_function(fun1, 1) ->
+        {:ok, fun1.(data)}
+
+      {m, f, a} ->
+        l = length(a)
+
+        cond do
+          function_exported?(m, f, l + 3) ->
+            {:ok, apply(m, f, [data, type, change_data | a])}
+
+          function_exported?(m, f, l + 2) ->
+            {:ok, apply(m, f, [data, change_data | a])}
+
+          function_exported?(m, f, l + 1) ->
+            {:ok, apply(m, f, [data | a])}
+
+          true ->
+            {:error,
+             "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}: #{inspect({m, f, a})}"}
+        end
+
+      _ ->
+        {:error, "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}"}
+    end
   end
 
   defp validate_pks(multi, %Mutation{type: :insert, changes: changes}, n, action) do
