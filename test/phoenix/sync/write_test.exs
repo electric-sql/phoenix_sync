@@ -124,15 +124,7 @@ defmodule Phoenix.Sync.WriteTest do
   # new creates without applying (so doesn't need a repo)
   # apply creates and applies i.e. new() |> Repo.transaction()
   describe "new/2" do
-    test "accepts a schema or a list of schema structs", _ctx do
-      assert %Write{} = Write.allow(Support.Todo)
-    end
-
-    test "rejects a schema struct with no changeset/2 function", _ctx do
-      assert_raise ArgumentError, fn ->
-        Write.allow(TodoNoChangeset)
-      end
-
+    test "accepts a schema and changeset fun", _ctx do
       assert %Write{} = Write.allow(TodoNoChangeset, &todo_changeset(&1, &2, &3, nil))
 
       assert %Write{} =
@@ -381,7 +373,8 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:error, _, _, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:error, {:__phoenix_sync__, :changeset, 0}, {_message, %Write.Mutation{}}, _changes} =
+               mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
     test "rejects updates not in :accept list", _ctx do
@@ -414,7 +407,8 @@ defmodule Phoenix.Sync.WriteTest do
         }
       ]
 
-      assert {:error, _, _, _changes} = mutator |> Write.apply(changes) |> Write.transaction(Repo)
+      assert {:error, {:error, 1, %{"type" => "delete"}}, _, _changes} =
+               mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
     test "supports accepting writes on multiple tables", _ctx do
@@ -518,7 +512,7 @@ defmodule Phoenix.Sync.WriteTest do
 
       # we have specified allow/2 with a fully qualified table so only one of the
       # inserts matches
-      assert {:error, {:invalid, 1}, _msg, _changes} =
+      assert {:error, {:error, 1, %{"modified" => %{"id" => "99"}}}, _msg, _changes} =
                mutator |> Write.apply(changes) |> Write.transaction(Repo)
     end
 
