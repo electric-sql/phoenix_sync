@@ -6,21 +6,27 @@ defmodule Phoenix.Sync.ApplicationTest do
   Code.ensure_loaded!(Support.ConfigTestRepo)
 
   defp validate_repo_connection_opts!(opts, overrides \\ []) do
-    assert {pass_fun, connection_opts} = Keyword.pop!(opts[:connection_opts], :password)
+    for connection_opts <- [
+          get_in(opts, [:replication_opts, :connection_opts]) || [],
+          opts[:connection_opts]
+        ] do
+      assert {pass_fun, connection_opts} =
+               Keyword.pop!(connection_opts, :password)
 
-    assert pass_fun.() == "password"
+      assert pass_fun.() == "password"
 
-    base_opts = [
-      username: "postgres",
-      hostname: "localhost",
-      database: "electric",
-      port: 5432,
-      sslmode: :disable
-    ]
+      base_opts = [
+        username: "postgres",
+        hostname: "localhost",
+        database: "electric",
+        port: 5432,
+        sslmode: :disable
+      ]
 
-    expected_opts = Keyword.merge(base_opts, overrides)
+      expected_opts = Keyword.merge(base_opts, overrides)
 
-    assert Enum.sort(connection_opts) == Enum.sort(expected_opts)
+      assert Enum.sort(connection_opts) == Enum.sort(expected_opts)
+    end
   end
 
   defp with_modified_config(repo_config_overrides, fun) do
@@ -50,11 +56,13 @@ defmodule Phoenix.Sync.ApplicationTest do
     end
 
     test "embedded mode" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
       config = [
         mode: :embedded,
         env: :prod,
         repo: Support.ConfigTestRepo,
-        storage_dir: "/something"
+        storage_dir: storage_dir
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
@@ -62,8 +70,8 @@ defmodule Phoenix.Sync.ApplicationTest do
       validate_repo_connection_opts!(opts)
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/something"]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
 
@@ -141,12 +149,14 @@ defmodule Phoenix.Sync.ApplicationTest do
     end
 
     test "embedded mode dev env doesn't overwrite explicit storage_dir" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
       config = [
         mode: :embedded,
         env: :dev,
         repo: Support.ConfigTestRepo,
         # don't overwrite this explict config
-        storage_dir: "/something"
+        storage_dir: storage_dir
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
@@ -154,8 +164,8 @@ defmodule Phoenix.Sync.ApplicationTest do
       validate_repo_connection_opts!(opts)
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/something"]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
 
@@ -177,7 +187,60 @@ defmodule Phoenix.Sync.ApplicationTest do
              } = Map.new(opts)
     end
 
+    test "embedded mode with explict replication_connection_opts and query_connection_opts" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
+      config = [
+        mode: :embedded,
+        env: :prod,
+        replication_connection_opts: [
+          username: "postgres",
+          hostname: "localhost",
+          database: "electric",
+          password: "password"
+        ],
+        query_connection_opts: [
+          username: "postgres",
+          hostname: "localhost-pooled",
+          database: "electric",
+          password: "password"
+        ],
+        storage_dir: storage_dir
+      ]
+
+      assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+      assert {pass_fun, connection_opts} =
+               Keyword.pop!(opts[:replication_opts][:connection_opts], :password)
+
+      assert pass_fun.() == "password"
+
+      assert connection_opts == [
+               username: "postgres",
+               hostname: "localhost",
+               database: "electric"
+             ]
+
+      assert {pass_fun, connection_opts} =
+               Keyword.pop!(opts[:connection_opts], :password)
+
+      assert pass_fun.() == "password"
+
+      assert connection_opts == [
+               username: "postgres",
+               hostname: "localhost-pooled",
+               database: "electric"
+             ]
+
+      assert %{
+               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
+             } = Map.new(opts)
+    end
+
     test "embedded mode with explict connection_opts" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
       config = [
         mode: :embedded,
         env: :prod,
@@ -187,7 +250,7 @@ defmodule Phoenix.Sync.ApplicationTest do
           database: "electric",
           password: "password"
         ],
-        storage_dir: "/something"
+        storage_dir: storage_dir
       ]
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
@@ -202,8 +265,8 @@ defmodule Phoenix.Sync.ApplicationTest do
              ]
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: "/something"]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
 
@@ -245,18 +308,20 @@ defmodule Phoenix.Sync.ApplicationTest do
 
   describe "plug_opts/1" do
     test "embedded mode" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
       config = [
         mode: :embedded,
         env: :dev,
         repo: Support.ConfigTestRepo,
-        storage_dir: "/something"
+        storage_dir: storage_dir
       ]
 
       api = App.plug_opts(config)
 
       assert %Electric.Shapes.Api{
-               storage: {Electric.ShapeCache.FileStorage, %{base_path: "/something" <> _}},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: "/something"}
+               storage: {Electric.ShapeCache.FileStorage, %{base_path: ^storage_dir <> _}},
+               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = api
     end
 

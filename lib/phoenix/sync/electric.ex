@@ -320,7 +320,7 @@ defmodule Phoenix.Sync.Electric do
     defp start_embedded(env, mode, db_config_fun, message) do
       db_config =
         db_config_fun.()
-        |> Keyword.update!(:connection_opts, &Electric.Utils.obfuscate_password/1)
+        |> obfuscate_credentials()
 
       electric_config = core_configuration(env, db_config)
 
@@ -366,6 +366,24 @@ defmodule Phoenix.Sync.Electric do
         :error ->
           opts
       end
+    end
+
+    defp obfuscate_credentials(opts) do
+      opts
+      |> Keyword.update!(:replication_connection_opts, &Electric.Utils.obfuscate_password/1)
+      |> then(fn opts ->
+        case Keyword.fetch(opts, :query_connection_opts) do
+          :error ->
+            opts
+
+          {:ok, query_connection_opts} ->
+            Keyword.put(
+              opts,
+              :query_connection_opts,
+              Electric.Utils.obfuscate_password(query_connection_opts)
+            )
+        end
+      end)
     end
   else
     defp start_embedded(_env, _mode, _db_config_fun, _message) do
@@ -428,13 +446,20 @@ defmodule Phoenix.Sync.Electric do
   defp validate_database_config(_env, mode, opts) do
     case Keyword.pop(opts, :repo, nil) do
       {nil, opts} ->
-        case Keyword.fetch(opts, :connection_opts) do
-          {:ok, connection_opts} when is_list(connection_opts) ->
-            # TODO: validate reasonable connection opts?
-            {:start, fn -> opts end,
-             "Starting Electric replication stream from postgresql://#{connection_opts[:host]}:#{connection_opts[:port] || 5432}/#{connection_opts[:database]}"}
+        case {Keyword.get(opts, :connection_opts),
+              Keyword.get(opts, :replication_connection_opts)} do
+          {[_ | _] = connection_opts, _} ->
+            opts =
+              opts
+              |> Keyword.delete(:connection_opts)
+              |> Keyword.put(:replication_connection_opts, connection_opts)
 
-          :error ->
+            {:start, fn -> opts end, start_message(connection_opts)}
+
+          {nil, [_ | _] = connection_opts} ->
+            {:start, fn -> opts end, start_message(connection_opts)}
+
+          {nil, nil} ->
             case mode do
               :embedded ->
                 {:error,
@@ -450,12 +475,19 @@ defmodule Phoenix.Sync.Electric do
           repo_config = apply(repo, :config, [])
 
           {:start,
-           fn -> Keyword.put(opts, :connection_opts, convert_repo_config(repo_config)) end,
-           "Starting Electric replication stream using #{repo} configuration"}
+           fn ->
+             connection_opts = convert_repo_config(repo_config)
+
+             Keyword.put(opts, :replication_connection_opts, connection_opts)
+           end, "Starting Electric replication stream using #{repo} configuration"}
         else
           {:error, "#{inspect(repo)} is not a valid Ecto.Repo module"}
         end
     end
+  end
+
+  defp start_message(connection_opts) do
+    "Starting Electric replication stream from postgresql://#{connection_opts[:host]}:#{connection_opts[:port] || 5432}/#{connection_opts[:database]}"
   end
 
   if @electric_available? do
