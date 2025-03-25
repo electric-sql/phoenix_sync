@@ -3,9 +3,6 @@ defmodule Phoenix.Sync.Write do
   Provides [optimistic write](https://electric-sql.com/docs/guides/writes)
   support for Phoenix- or Plug-based apps.
 
-  The client uses some local database and syncs changes into this database from
-  the server using [Electric](https://electric-sql.com/).
-
   Local writes are performed on the local database using
   [TanStack/optimistic](https://github.com/TanStack/optimistic) which POSTs
   transactions to the Elixir/Phoenix application.
@@ -20,66 +17,18 @@ defmodule Phoenix.Sync.Write do
 
   ## Client Code
 
+  The client needs to convert local writes into a series of transactional
+  mutation lists, that is a series of `insert`, `update` and `delete`
+  operations (see `Phoenix.Sync.Write.Mutation` for details of the required
+  data).
+
+  It then uses some kind of HTTP request (e.g. [`HTTP
+  POST`](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API) or a
+  Websocket/[Phoenix channel](https://hexdocs.pm/phoenix/channels.html) to send
+  each transaction to your Phoenix controller.
+
   See [TanStack/optimistic](https://github.com/TanStack/optimistic) for more information.
 
-  ```typescript
-  import { useCollection } from "@TanStack/optimistic/useCollection"
-  import { createElectricSync } from '@TanStack/optimistic/electric';
-
-  // Create a collection configuration for todos
-  const todosConfig = {
-      id: 'todos',
-      // Create an ElectricSQL sync configuration
-      sync: createElectricSync(
-        {
-          // The `todo` shape is defined using `Phoenix.Sync.Router.sync/3` or `Phoenix.Sync.Controller.sync_render/3`
-          url: `http://localhost:4000/shapes/todo`,
-          params: {},
-        },
-        {
-          // Primary key for the todos table
-          primaryKey: ['id'],
-        }
-      ),
-    mutationFn: {
-      // Persist mutations to the backend
-      persist: async (mutations, transaction) => {
-        const response = await fetch(`http://localhost:4000/mutations`, {
-          method: `POST`,
-          headers: {
-            "content-type": `application/json`,
-            accept: `application/json`,
-          },
-          body: JSON.stringify({transaction: transaction.mutations}),
-        })
-        if (!response.ok) {
-          // Throwing an error will rollback the optimistic state.
-          throw new Error(`HTTP error! Status: ${response.status}`)
-        }
-
-        const result = await response.json()
-
-        return {
-          txid: result.txid,
-        }
-      },
-      // Wait for a transaction to be synced
-      awaitSync: async ({ config, persistResult: { txid: number } }) => {
-        try {
-          // Use the awaitTxid function from the ElectricSync configuration
-          // This waits for the specific transaction to be synced to the server
-          // The second parameter is an optional timeout in milliseconds
-          await config.sync.awaitTxid(persistResult.txid, 10000)
-          return true;
-        } catch (error) {
-          console.error('Error waiting for transaction to sync:', error);
-          // Throwing an error will rollback the optimistic state.
-          throw error;
-        }
-      },
-    },
-  };
-  ```
 
   ## Server code
 
@@ -159,7 +108,7 @@ defmodule Phoenix.Sync.Write do
 
   alias __MODULE__.Mutation
 
-  @action_options [
+  @operation_options [
     changeset: [
       type: {:or, [{:fun, 2}, :mfa]},
       doc: """
@@ -179,21 +128,21 @@ defmodule Phoenix.Sync.Write do
       """
     ]
   ]
-  @action_options_schema NimbleOptions.new!(@action_options)
+  @operation_options_schema NimbleOptions.new!(@operation_options)
 
   @type data() :: %{binary() => any()}
   @type mutation() :: %{required(binary()) => any()}
-  @type action() :: :insert | :update | :delete
-  @actions [:insert, :update, :delete]
+  @type operation() :: :insert | :update | :delete
+  @operations [:insert, :update, :delete]
   @type txid() :: integer()
 
-  @type action_opts() :: unquote([NimbleOptions.option_typespec(@action_options_schema)])
+  @type operation_opts() :: unquote([NimbleOptions.option_typespec(@operation_options_schema)])
 
-  @action_schema [
+  @operation_schema [
     type: :non_empty_keyword_list,
-    keys: @action_options,
-    doc: NimbleOptions.docs(NimbleOptions.new!(@action_options)),
-    type_doc: "`t:action_opts/0`"
+    keys: @operation_options,
+    doc: NimbleOptions.docs(NimbleOptions.new!(@operation_options)),
+    type_doc: "`t:operation_opts/0`"
   ]
 
   @writer_schema NimbleOptions.new!(
@@ -260,9 +209,9 @@ defmodule Phoenix.Sync.Write do
                       )
                   ],
                   accept: [
-                    type: {:list, {:in, @actions}},
+                    type: {:list, {:in, @operations}},
                     doc: """
-                    A list of actions to accept. Defaults to accepting all operations, `#{inspect(@actions)}`.
+                    A list of actions to accept. Defaults to accepting all operations, `#{inspect(@operations)}`.
                     """
                   ],
                   changeset: [
@@ -306,12 +255,15 @@ defmodule Phoenix.Sync.Write do
                     Within our controller we might do:
 
                     ```elixir
-                    # our Plug pipeline verifies that the `user_id` here matches
+                    # Our Plug pipeline verifies that the `user_id` here matches
                     # the logged-in user
                     def mutations(%Plug.Conn{} = conn, %{"user_id" => user_id} = params) do
                       {:ok, txid, _changes} =
                         Todos.Todo
-                        |> Phoenix.Sync.Write.new(changeset: &todo_changeset(&1, &2, &3, user_id))
+                        |> Phoenix.Sync.Write.new(
+                          load: &todo_fetch(&1, user_id),
+                          changeset: &todo_changeset(&1, &2, &3, user_id)
+                        )
                         |> Phoenix.Sync.Write.apply(params["_json"] || [])
                         |> Phoenix.Sync.Write.transaction(MyApp.Repo)
 
@@ -319,14 +271,25 @@ defmodule Phoenix.Sync.Write do
                       render(conn, :mutations, txid: txid)
                     end
 
-                    # for inserts we have to validate that the user_id in the changes
+                    # To validate that each todo being modified belongs to the current user,
+                    # use a load function that includes the user_id in the query
+                    defp todo_fetch(%{"id" => id}, user_id) do
+                      from(t in Todos.Todo, where: t.id == ^id and t.user_id == ^user_id)
+                      |> MyApp.Repo.one()
+                      |> case do
+                        nil -> {:error, "No todo id: \#{inspect(id)} found for user \#{inspect(user_id)}"
+                        %Todos.Todo{} = todo -> {:ok, todo}
+                      end
+                    end
+
+                    # For inserts we have to validate that the user_id in the changes
                     # matches the authenticated user_id
                     defp todo_changeset(todo, :insert, changes, user_id) do
                       todo
                       |> Ecto.Changeset.cast(changes, [:id, :user_id, :title, :completed])
                       |> Ecto.Changeset.validate_required([:id, :title, :user_id])
-                      |> Ecto.Changeset.validate_change(:user_id, fn :user_id, id ->
-                        if id != user_id do
+                      |> Ecto.Changeset.validate_change(:user_id, fn :user_id, insert_user_id ->
+                        if insert_user_id != user_id do
                           [user_id: "is invalid"]
                         else
                           []
@@ -334,32 +297,27 @@ defmodule Phoenix.Sync.Write do
                       end)
                     end
 
-                    # For updates we have to validate the original `user_id`.
+                    # For updates and deletes, we have validated that the
+                    # original row belongs to the current user in `todo_fetch/2`.
+                    #
                     # Because we don't want the user to be able to move a todo from themselves
                     # to another user, we simply disallow changes to `user_id` by removing
                     # it from the list of permitted columns in the call to `cast/3`
-                    defp todo_changeset(%{user_id: user_id} = todo, :update, changes, user_id) do
+                    defp todo_changeset(todo, :update, changes, _user_id) do
                       todo
                       |> Ecto.Changeset.cast(changes, [:id, :title, :completed])
                       |> Ecto.Changeset.validate_required([:id, :title])
                     end
 
-                    # for deletes only the original value matters since we aren't updating 
+                    # For deletes only the original value matters since we aren't updating
                     # any column values
-                    defp todo_changeset(%{user_id: user_id} = todo, :delete, _changes, user_id) do
+                    defp todo_changeset(todo, :delete, _changes, _user_id) do
                       todo
-                    end
-
-                    # the fallback for when the original todo does not belong to the user
-                    defp todo_changeset(todo, _, changes, _user_id) do
-                      todo
-                      |> Ecto.Changeset.change(%{})
-                      |> Ecto.Changeset.add_error(:user_id, "does not belong to the current user")
                     end
                     ```
                     """,
                     type_spec:
-                      quote(do: (Ecto.Schema.t(), action(), data() -> Ecto.Changeset.t()))
+                      quote(do: (Ecto.Schema.t(), operation(), data() -> Ecto.Changeset.t()))
                   ],
                   before: [
                     type: {:or, [{:fun, 4}, :mfa]},
@@ -380,10 +338,22 @@ defmodule Phoenix.Sync.Write do
                     The result should be the `Ecto.Multi` instance which will be
                     [merged](`Ecto.Multi.merge/2`) with the one representing the mutation
                     operation.
+
+                    Because every action in an `Ecto.Multi` must have a unique key, we
+                    recommend using the primary key of the row being modified as part of the
+                    `name` in any additional operations to avoid conflicts.
+
+                        def my_before(multi, :insert, changeset, _changes) do
+                          id = Ecto.Changeset.fetch_field!(changeset, :id)
+                          Ecto.Multi.insert(multi, {:event_insert, id}, %Event{todo_id: id})
+                        end
                     """,
                     type_spec:
                       quote(
-                        do: (Ecto.Multi.t(), action(), Ecto.Changeset.t(), Ecto.Multi.changes() ->
+                        do: (Ecto.Multi.t(),
+                             operation(),
+                             Ecto.Changeset.t(),
+                             Ecto.Multi.changes() ->
                                Ecto.Multi.t())
                       )
                   ],
@@ -398,12 +368,15 @@ defmodule Phoenix.Sync.Write do
                     """,
                     type_spec:
                       quote(
-                        do: (Ecto.Multi.t(), action(), Ecto.Changeset.t(), Ecto.Multi.changes() ->
+                        do: (Ecto.Multi.t(),
+                             operation(),
+                             Ecto.Changeset.t(),
+                             Ecto.Multi.changes() ->
                                Ecto.Multi.t())
                       )
                   ],
                   insert:
-                    Keyword.put(@action_schema, :doc, """
+                    Keyword.put(@operation_schema, :doc, """
                     Callbacks for validating and modifying `insert` operations.
 
                     Accepts definitions for the `changeset`, `before` and
@@ -416,13 +389,13 @@ defmodule Phoenix.Sync.Write do
                     the `action` parameter is redundant and therefore not passed.
                     """),
                   update:
-                    Keyword.put(@action_schema, :doc, """
+                    Keyword.put(@operation_schema, :doc, """
                     Callbacks for validating and modifying `update` operations.
                     See the documentation for `insert`.
                     """),
                   delete:
                     Keyword.update!(
-                      @action_schema,
+                      @operation_schema,
                       :keys,
                       &Keyword.put(&1, :changeset, type: {:or, [{:fun, 1}, {:fun, 2}, :mfa]})
                     )
@@ -440,23 +413,17 @@ defmodule Phoenix.Sync.Write do
   @type writer() :: %__MODULE__{}
 
   @doc """
-  Create an empty writer instance with the default options.
-
-  Empty writers will reject writes to any tables. You should configure writes
-  to the permitted tables by calling `allow/3`.
-  """
-  @spec new() :: writer()
-  def new do
-    %__MODULE__{}
-  end
-
-  @doc """
-  Create a new writer with the given global options.
+  Create a new empty writer with the given global options.
 
   Supported options:
 
   #{NimbleOptions.docs(@writer_schema)}
+
+  Empty writers will reject writes to any tables. You should configure writes
+  to the permitted tables by calling `allow/3`.
   """
+  def new(opts \\ [])
+
   @spec new(writer_opts()) :: writer()
   def new(opts) when is_list(opts) do
     config = NimbleOptions.validate!(opts, @writer_schema)
@@ -540,7 +507,7 @@ defmodule Phoenix.Sync.Write do
     key = config[:table] || table
     load_fun = load_fun(schema, pks, opts)
 
-    accept = Keyword.get(config, :accept, @actions) |> MapSet.new()
+    accept = Keyword.get(config, :accept, @operations) |> MapSet.new()
 
     table_config = %{
       table: table,
@@ -549,7 +516,7 @@ defmodule Phoenix.Sync.Write do
     }
 
     table_config =
-      Enum.reduce(@actions, table_config, fn action, table_config ->
+      Enum.reduce(@operations, table_config, fn action, table_config ->
         Map.put(
           table_config,
           action,
@@ -675,7 +642,7 @@ defmodule Phoenix.Sync.Write do
     )
   end
 
-  @txid_name :__phoenix_sync_txid__
+  @txid_name {:__phoenix_sync__, :txid}
 
   defp start_multi do
     Ecto.Multi.new()
@@ -688,10 +655,10 @@ defmodule Phoenix.Sync.Write do
 
   defp apply_change(multi, {change, n}, %__MODULE__{} = write)
        when is_map(change) do
-    with {:ok, %Mutation{type: type} = mutation} <- parse_change(change, write),
+    with {:ok, %Mutation{operation: operation} = mutation} <- parse_change(change, write),
          {:ok, actions} <- mutation_actions(mutation, write),
-         {:ok, action} <- Map.fetch(actions, type),
-         :ok <- validate_accept(type, actions.accept) do
+         {:ok, action} <- Map.fetch(actions, operation),
+         :ok <- validate_accept(operation, actions.accept) do
       multi
       |> mutation_changeset(mutation, n, action)
       |> validate_pks(mutation, n, action)
@@ -700,7 +667,7 @@ defmodule Phoenix.Sync.Write do
       |> apply_after(mutation, n, action)
     else
       {:error, reason} ->
-        Ecto.Multi.error(multi, {:invalid, n}, reason)
+        Ecto.Multi.error(multi, {:error, n, change}, reason)
     end
   end
 
@@ -716,42 +683,44 @@ defmodule Phoenix.Sync.Write do
 
   defp mutation_changeset(multi, %Mutation{} = mutation, n, action) do
     %{schema: schema, changeset: changeset_fun} = action
-    %{type: type, data: lookup_data, changes: change_data} = mutation
+    %{operation: operation, data: lookup_data, changes: change_data} = mutation
 
-    Ecto.Multi.run(multi, {:changeset, n}, fn repo, _ ->
-      case action.load.(repo, type, lookup_data) do
+    Ecto.Multi.run(multi, {:__phoenix_sync__, :changeset, n}, fn repo, _ ->
+      case action.load.(repo, operation, lookup_data) do
         struct when is_struct(struct, schema) ->
-          apply_changeset_fun(changeset_fun, struct, type, change_data, action)
+          apply_changeset_fun(changeset_fun, struct, operation, change_data, action)
 
         struct when is_struct(struct) ->
           {:error,
-           "load function returned an inconsistent value. Expected %#{schema}{}, got %#{struct.__struct__}{}"}
+           {"load function returned an inconsistent value. Expected %#{schema}{}, got %#{struct.__struct__}{}",
+            mutation}}
 
         {:ok, struct} when is_struct(struct, schema) ->
-          apply_changeset_fun(changeset_fun, struct, type, change_data, action)
+          apply_changeset_fun(changeset_fun, struct, operation, change_data, action)
 
         {:ok, struct} when is_struct(struct) ->
           {:error,
-           "load function returned an inconsistent value. Expected %#{schema}{}, got %#{struct.__struct__}{}"}
+           {"load function returned an inconsistent value. Expected %#{schema}{}, got %#{struct.__struct__}{}",
+            mutation}}
 
-        {:error, _reason} = error ->
-          error
+        {:error, reason} = error ->
+          {:error, {reason, mutation}}
 
         nil ->
           pks = Map.new(action.pks, fn col -> {col, Map.fetch!(lookup_data, to_string(col))} end)
 
-          {:error, "No original record found for row #{inspect(pks)}"}
+          {:error, {"No original record found for row #{inspect(pks)}", mutation}}
 
         invalid ->
-          {:error, "Invalid return value from load(), got: #{inspect(invalid)}"}
+          {:error, {"Invalid return value from load(), got: #{inspect(invalid)}", mutation}}
       end
     end)
   end
 
-  defp apply_changeset_fun(changeset_fun, data, type, change_data, action) do
+  defp apply_changeset_fun(changeset_fun, data, op, change_data, action) do
     case changeset_fun do
       fun3 when is_function(fun3, 3) ->
-        {:ok, fun3.(data, type, change_data)}
+        {:ok, fun3.(data, op, change_data)}
 
       fun2 when is_function(fun2, 2) ->
         {:ok, fun2.(data, change_data)}
@@ -765,7 +734,7 @@ defmodule Phoenix.Sync.Write do
 
         cond do
           function_exported?(m, f, l + 3) ->
-            {:ok, apply(m, f, [data, type, change_data | a])}
+            {:ok, apply(m, f, [data, op, change_data | a])}
 
           function_exported?(m, f, l + 2) ->
             {:ok, apply(m, f, [data, change_data | a])}
@@ -775,15 +744,15 @@ defmodule Phoenix.Sync.Write do
 
           true ->
             {:error,
-             "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}: #{inspect({m, f, a})}"}
+             "Invalid changeset_fun for #{inspect(action.table)} #{inspect(op)}: #{inspect({m, f, a})}"}
         end
 
       _ ->
-        {:error, "Invalid changeset_fun for #{inspect(action.table)} #{inspect(type)}"}
+        {:error, "Invalid changeset_fun for #{inspect(action.table)} #{inspect(op)}"}
     end
   end
 
-  defp validate_pks(multi, %Mutation{type: :insert, changes: changes}, n, action) do
+  defp validate_pks(multi, %Mutation{operation: :insert, changes: changes}, n, action) do
     do_validate_pks(multi, action.pks, changes, n)
   end
 
@@ -800,7 +769,7 @@ defmodule Phoenix.Sync.Write do
         Ecto.Multi.error(
           multi,
           {:error, n},
-          "Mutation data is missing required primary keys: #{inspect(keys)}"
+          {"Mutation data is missing required primary keys: #{inspect(keys)}", data}
         )
     end
   end
@@ -819,7 +788,7 @@ defmodule Phoenix.Sync.Write do
 
   defp apply_hook(multi, mutation, n, hook_fun, action) do
     Ecto.Multi.merge(multi, fn changes ->
-      changeset = Map.fetch!(changes, {:changeset, n})
+      changeset = changeset!(changes, n)
 
       case hook_fun do
         # per-action callback
@@ -828,7 +797,7 @@ defmodule Phoenix.Sync.Write do
 
         # global callback including action
         fun4 when is_function(fun4, 4) ->
-          fun4.(Ecto.Multi.new(), mutation.type, changeset, changes)
+          fun4.(Ecto.Multi.new(), mutation.operation, changeset, changes)
 
         {m, f, a} ->
           l = length(a)
@@ -838,47 +807,48 @@ defmodule Phoenix.Sync.Write do
               apply(m, f, [Ecto.Multi.new(), changeset, changes | a])
 
             function_exported?(m, f, l + 4) ->
-              apply(m, f, [Ecto.Multi.new(), mutation.type, changeset, changes | a])
+              apply(m, f, [Ecto.Multi.new(), mutation.operation, changeset, changes | a])
 
             true ->
-              raise "Invalid after_fun for #{inspect(action.table)} #{inspect(mutation.type)}: #{inspect({m, f, a})}"
+              raise "Invalid after_fun for #{inspect(action.table)} #{inspect(mutation.operation)}: #{inspect({m, f, a})}"
           end
 
         _ ->
-          raise "Invalid after_fun for #{inspect(action.table)} #{inspect(mutation.type)}"
+          raise "Invalid after_fun for #{inspect(action.table)} #{inspect(mutation.operation)}"
       end
-      |> validate_callback!(mutation.type, action)
+      |> validate_callback!(mutation.operation, action)
     end)
   end
 
-  defp apply_changeset(multi, %Mutation{type: :insert}, n, _action) do
+  defp changeset!(changes, n) do
+    Map.fetch!(changes, {:__phoenix_sync__, :changeset, n})
+  end
+
+  defp apply_changeset(multi, %Mutation{operation: :insert}, n, _action) do
     Ecto.Multi.merge(multi, fn changes ->
-      changeset = Map.fetch!(changes, {:changeset, n})
-      Ecto.Multi.insert(Ecto.Multi.new(), {:insert, n}, changeset)
+      Ecto.Multi.insert(Ecto.Multi.new(), {:__phoenix_sync__, :insert, n}, changeset!(changes, n))
     end)
   end
 
-  defp apply_changeset(multi, %Mutation{type: :update}, n, _action) do
+  defp apply_changeset(multi, %Mutation{operation: :update}, n, _action) do
     Ecto.Multi.merge(multi, fn changes ->
-      changeset = Map.fetch!(changes, {:changeset, n})
-      Ecto.Multi.update(Ecto.Multi.new(), {:update, n}, changeset)
+      Ecto.Multi.update(Ecto.Multi.new(), {:__phoenix_sync__, :update, n}, changeset!(changes, n))
     end)
   end
 
-  defp apply_changeset(multi, %Mutation{type: :delete}, n, _action) do
+  defp apply_changeset(multi, %Mutation{operation: :delete}, n, _action) do
     Ecto.Multi.merge(multi, fn changes ->
-      changeset = Map.fetch!(changes, {:changeset, n})
-      Ecto.Multi.delete(Ecto.Multi.new(), {:delete, n}, changeset)
+      Ecto.Multi.delete(Ecto.Multi.new(), {:__phoenix_sync__, :delete, n}, changeset!(changes, n))
     end)
   end
 
-  defp validate_callback!(%Ecto.Multi{} = multi, _type, _action), do: multi
+  defp validate_callback!(%Ecto.Multi{} = multi, _op, _action), do: multi
 
-  defp validate_callback!(value, type, action),
+  defp validate_callback!(value, op, action),
     do:
       raise(ArgumentError,
         message:
-          "Invalid return type #{inspect(value)} for #{type} into #{inspect(action.table)}. Expected %Ecto.Multi{}"
+          "Invalid return type #{inspect(value)} for #{op} into #{inspect(action.table)}. Expected %Ecto.Multi{}"
       )
 
   defp mutation_actions(%Mutation{relation: [prefix, name] = relation}, write)
@@ -915,12 +885,12 @@ defmodule Phoenix.Sync.Write do
     end
   end
 
-  defp validate_accept(type, allowed) do
-    if type in allowed do
+  defp validate_accept(op, allowed) do
+    if op in allowed do
       :ok
     else
       {:error,
-       "Action #{inspect(type)} not in :accept list: #{MapSet.to_list(allowed) |> inspect()}"}
+       "Action #{inspect(op)} not in :accept list: #{MapSet.to_list(allowed) |> inspect()}"}
     end
   end
 
