@@ -54,7 +54,8 @@ defmodule Phoenix.Sync.MixProject do
 
   defp deps_for_env(:dev) do
     [
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:makeup_ts, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
@@ -65,8 +66,22 @@ defmodule Phoenix.Sync.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "LICENSE"]
+      extras: ["README.md", "LICENSE"],
+      before_closing_head_tag: docs_before_closing_head_tag()
     ]
+  end
+
+  defp docs_live? do
+    System.get_env("MIX_DOCS_LIVE", "false") == "true"
+  end
+
+  defp docs_before_closing_head_tag do
+    if docs_live?(),
+      do: fn
+        :html -> ~s[<script type="text/javascript" src="http://livejs.com/live.js"></script>]
+        _ -> ""
+      end,
+      else: fn _ -> "" end
   end
 
   defp package do
