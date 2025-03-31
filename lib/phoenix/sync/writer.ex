@@ -20,14 +20,14 @@ defmodule Phoenix.Sync.Writer do
             Writer.new(format: Writer.Format.TanstackOptimistic)
             |> Writer.allow(
               Projects.Project,
-              # authorizes writes against a Project just as your controller code would
-              authorize: &Projects.authorize_project(&1, conn.assigns),
+              # preflight writes against a Project just as your controller code would
+              preflight: &Projects.preflight_project(&1, conn.assigns),
               # you can re-use your existing changeset/2 functions
               changeset: &Projects.Project.changeset/2
             )
             |> Writer.allow(
               Projects.Issue,
-              authorize: &Projects.authorize_issue(&1, conn.assigns),
+              preflight: &Projects.preflight_issue(&1, conn.assigns),
               # changeset defaults to Projects.Issue.changeset/2
             )
             |> Writer.apply(transaction, Repo)
@@ -95,7 +95,7 @@ defmodule Phoenix.Sync.Writer do
 
   - [`load`](#module-load-function) - a function that takes the original data and returns the
     existing model from the database.
-  - [`authorize`](#module-authorize-function) - a function that tests operations against the
+  - [`preflight`](#module-preflight-function) - a function that tests operations against the
     application's authentication/authorization logic.
   - [`changeset`](#module-changeset-function) - create and validate an `Ecto.Changeset` from the
     source data and mutation changes.
@@ -111,9 +111,9 @@ defmodule Phoenix.Sync.Writer do
       writer = #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
 
       # allow writes to the `Todos.Todo` table
-      # using `Todos.authorize_mutation/3` to validate mutation data before
+      # using `Todos.preflight_mutation/1` to validate mutation data before
       # touching the database
-      writer = #{inspect(__MODULE__)}.allow(writer, Todos.Todo, authorize: &Todos.authorize_mutation/3)
+      writer = #{inspect(__MODULE__)}.allow(writer, Todos.Todo, preflight: &Todos.preflight_mutation/1)
 
   If the table name on the client differs from the Postgres table, then you add
   a `table` option that specifies the client table name that this `allow/3`
@@ -157,9 +157,9 @@ defmodule Phoenix.Sync.Writer do
   is created by calling the `__struct__/0` function on the `Ecto.Schema`
   module.
 
-  ### Authorize function
+  ### Preflight function
 
-  The `authorize` option should be a 1-arity function whose purpose is to test
+  The `preflight` option should be a 1-arity function whose purpose is to test
   the mutation data against the authorization rules for the application and
   model before attempting any database access.
 
@@ -173,7 +173,7 @@ defmodule Phoenix.Sync.Writer do
   quick check of the data from the clients before any reads or writes to the
   database.
 
-      def authorize(%#{inspect(__MODULE__.Operation)}{} = operation) do
+      def preflight(%#{inspect(__MODULE__.Operation)}{} = operation) do
         # :ok or {:error, "..."}
       end
 
@@ -313,7 +313,7 @@ defmodule Phoenix.Sync.Writer do
             Write.new(format: Writer.Format.TanstackOptimistic)
             |> Write.allow(
               Todos.Todo,
-              authorize: &validate_params(&1, user_id),
+              preflight: &validate_params(&1, user_id),
               load: &Todos.fetch_for_user(&1, user_id),
             )
             |> Write.apply(transaction, Repo)
@@ -395,12 +395,6 @@ defmodule Phoenix.Sync.Writer do
       type: {:fun, 2},
       doc: """
       A 2-arity function that returns a changeset for the given mutation data.
-      """
-    ],
-    authorize: [
-      type: {:fun, 1},
-      doc: """
-      A 1-arity function that validates the Write.Operation
       """
     ],
     before: [
@@ -515,7 +509,7 @@ defmodule Phoenix.Sync.Writer do
                                | {:error, String.t()})
                       )
                   ],
-                  authorize: [
+                  preflight: [
                     type: {:fun, 1},
                     doc: """
                     A function that checks the pending %#{inspect(__MODULE__.Operation)}{}
@@ -659,11 +653,11 @@ defmodule Phoenix.Sync.Writer do
   ## Examples
 
       # allow writes to the Todo table using
-      # `MyApp.Todos.Todo.authorize_mutation/1` to validate operations
+      # `MyApp.Todos.Todo.preflight_mutation/1` to validate operations
       Phoenix.Sync.Writer.new(format: MyApp.OperationFormat)
       |> Phoenix.Sync.Writer.allow(
         MyApp.Todos.Todo,
-        authorize: &MyApp.Todos.authorize_mutation/1
+        preflight: &MyApp.Todos.preflight_mutation/1
       )
 
       # A more complex configuration adding an `after` callback to inserts
@@ -672,7 +666,7 @@ defmodule Phoenix.Sync.Writer do
       |> Phoenix.Sync.Writer.allow(
         MyApp.Todos..Todo,
         load: &MyApp.Todos.get_for_mutation/1,
-        authorize: &MyApp.Todos.authorize_mutation/1,
+        preflight: &MyApp.Todos.preflight_mutation/1,
         insert: [
           after: &MyApp.Todos.after_insert_mutation/3
         ]
@@ -693,7 +687,7 @@ defmodule Phoenix.Sync.Writer do
 
     key = config[:table] || table
     load_fun = load_fun(schema, pks, opts)
-    authorize_fun = authorize_fun(opts)
+    preflight_fun = preflight_fun(opts)
 
     accept = Keyword.get(config, :accept, @operations) |> MapSet.new()
 
@@ -702,7 +696,7 @@ defmodule Phoenix.Sync.Writer do
       table: table,
       pks: pks,
       accept: accept,
-      authorize: authorize_fun
+      preflight: preflight_fun
     }
 
     table_config =
@@ -800,8 +794,8 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  defp authorize_fun(opts) do
-    case opts[:authorize] do
+  defp preflight_fun(opts) do
+    case opts[:preflight] do
       nil ->
         fn _ -> :ok end
 
@@ -813,12 +807,12 @@ defmodule Phoenix.Sync.Writer do
 
         raise ArgumentError,
           message:
-            "Invalid authorize function. Expected a 1-arity function but got arity #{info[:arity]}"
+            "Invalid preflight function. Expected a 1-arity function but got arity #{info[:arity]}"
 
       invalid ->
         raise ArgumentError,
           message:
-            "Invalid authorize function. Expected a 1-arity function but #{inspect(invalid)}"
+            "Invalid preflight function. Expected a 1-arity function but #{inspect(invalid)}"
     end
   end
 
@@ -858,8 +852,8 @@ defmodule Phoenix.Sync.Writer do
 
       %Ecto.Multi{} = multi =
         #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
-        |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, authorize: &my_authz_function/1)
-        |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, authorize: &my_authz_function/1)
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, preflight: &my_preflight_function/1)
+        |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, preflight: &my_preflight_function/1)
         |> #{inspect(__MODULE__)}.apply(changes)
 
   If you want to add extra operations to the mutation transaction, beyond those
@@ -872,14 +866,14 @@ defmodule Phoenix.Sync.Writer do
   @spec apply(writer(), transaction_data()) :: Ecto.Multi.t()
   def apply(%__MODULE__{} = writer, changes) do
     # Want to return a multi here but have that multi fail without contacting
-    # the db if any of the authorize calls fail.
+    # the db if any of the preflight calls fail.
     #
     # Looking at `Ecto.Multi.__apply__/4` it first checks for invalid
     # operations before doing anything. So i can just add an error to a blank
     # multi and return that and the transaction step will fail before touching
     # the repo.
     with {:parse, {:ok, %Transaction{} = txn}} <- {:parse, parse_transaction(writer, changes)},
-         {:authorize, :ok} <- {:authorize, authorize_transaction(writer, txn)} do
+         {:preflight, :ok} <- {:preflight, preflight_transaction(writer, txn)} do
       txn.operations
       |> Enum.reduce(
         start_multi(txn),
@@ -909,14 +903,14 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  defp authorize_transaction(%__MODULE__{} = writer, %Transaction{} = txn) do
+  defp preflight_transaction(%__MODULE__{} = writer, %Transaction{} = txn) do
     Enum.reduce_while(txn.operations, :ok, fn operation, :ok ->
       case mutation_actions(operation, writer) do
         {:ok, actions} ->
-          %{authorize: authorize, accept: accept} = actions
+          %{preflight: preflight, accept: accept} = actions
 
           if MapSet.member?(accept, operation.operation) do
-            case authorize.(operation) do
+            case preflight.(operation) do
               :ok -> {:cont, :ok}
               {:error, reason} -> {:halt, {:error, %Error{message: reason, operation: operation}}}
             end
