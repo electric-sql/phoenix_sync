@@ -230,6 +230,20 @@ defmodule Phoenix.Sync.WriterTest do
       [writer: writer, writer_config_todo: writer_config_todo]
     end
 
+    test "has sensible defaults for load and changeset functions" do
+      writer = writer() |> Writer.allow(Support.Todo)
+
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos"]},
+          "modified" => %{"id" => "98", "title" => "New todo", "completed" => "false"}
+        }
+      ]
+
+      assert {:ok, _txid, _values} = Writer.apply(writer, changes, Repo)
+    end
+
     test "writes valid changes", ctx do
       changes = [
         %{
