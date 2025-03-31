@@ -405,11 +405,22 @@ defmodule Phoenix.Sync.Writer do
   alias __MODULE__.Transaction
   alias __MODULE__.Format
 
+  @type pre_post_func() :: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t())
+
   @operation_options [
     changeset: [
       type: {:fun, 2},
       doc: """
       A 2-arity function that returns a changeset for the given mutation data.
+
+      Arguments:
+
+      - `schema` the original `Ecto.Schema` model returned from the `load` function
+      - `changes` a map of changes from the mutation operation
+
+      Return value:
+
+      - an `Ecto.Changeset`
       """,
       type_spec: quote(do: (Ecto.Schema.t(), data() -> Ecto.Changeset.t()))
     ],
@@ -417,15 +428,21 @@ defmodule Phoenix.Sync.Writer do
       type: {:fun, 3},
       doc: """
       An optional callback that allows for the pre-pending of operations to the `Ecto.Multi`.
+
+      Arguments and return value  as per the global `pre_apply` callback.
       """,
-      type_spec: quote(do: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t()))
+      type_spec: quote(do: pre_post_func()),
+      type_doc: "`t:pre_post_func/0`"
     ],
     post_apply: [
       type: {:fun, 3},
       doc: """
       An optional callback that allows for the appending of operations to the `Ecto.Multi`.
+
+      Arguments and return value as per the global `post_apply` callback.
       """,
-      type_spec: quote(do: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t()))
+      type_spec: quote(do: pre_post_func()),
+      type_doc: "`t:pre_post_func/0`"
     ]
   ]
   @operation_options_schema NimbleOptions.new!(@operation_options)
@@ -446,9 +463,10 @@ defmodule Phoenix.Sync.Writer do
   @type operation_opts() :: unquote([NimbleOptions.option_typespec(@operation_options_schema)])
 
   @operation_schema [
-    type: :non_empty_keyword_list,
+    type: :keyword_list,
     keys: @operation_options,
     doc: NimbleOptions.docs(NimbleOptions.new!(@operation_options)),
+    type_spec: quote(do: operation_opts()),
     type_doc: "`t:operation_opts/0`"
   ]
 
@@ -482,15 +500,39 @@ defmodule Phoenix.Sync.Writer do
                     doc: """
                     Override the table name of the `Ecto.Schema` struct to
                     allow for mapping between table names on the client and within Postgres.
-                    """
+
+                    If you pass just a table name, then any schema prefix in the client tables is ignored, so
+
+                        Writer.allow(Todos, table: "todos")
+
+                    will match client operations for `["public", "todos"]` and `["application", "todos"]` etc.
+
+                    If you provide a 2-element list then the mapping will be exact and only
+                    client relations matching the full `[schema, table]` pair will match the
+                    given schema.
+
+                        Writer.allow(Todos, table: ["public", "todos"])
+
+                    Will match client operations for `["public", "todos"]` but
+                    **not** `["application", "todos"]` etc.
+
+                    Defaults to `Model.__schema__(:source)`, or if the Ecto schema
+                    module has specified a `namespace` `[Model.__schema__(:prefix),
+                    Model.__schema__(:source)]`.
+                    """,
+                    type_doc: "`String.t() | [String.t(), ...]`",
+                    type_spec: quote(do: String.t() | [String.t(), ...])
                   ],
                   accept: [
                     type: {:list, {:in, @operations}},
                     doc: """
-                    A list of actions to accept. Defaults to accepting all operations, `#{inspect(@operations)}`.
+                    A list of actions to accept.
 
                     A transaction containing an operation not in the accept list will be rejected.
-                    """
+
+                    Defaults to accepting all operations, `#{inspect(@operations)}`.
+                    """,
+                    type_spec: quote(do: [operation(), ...])
                   ],
                   preflight: [
                     type: {:fun, 1},
@@ -500,6 +542,8 @@ defmodule Phoenix.Sync.Writer do
 
                     This is run before any database access is performed and so provides an
                     efficient way to prevent malicious writes without loading your database.
+
+                    Defaults to a function that allows all operations: `fn _ -> :ok end`.
                     """,
                     type_spec: quote(do: (Operation.t() -> :ok | {:error, term()}))
                   ],
@@ -521,6 +565,8 @@ defmodule Phoenix.Sync.Writer do
                     Return value:
 
                     - `Ecto.Multi` struct with associated data
+
+                    Defaults to no callback.
                     """,
                     type_spec: quote(do: (Ecto.Multi.t() -> Ecto.Multi.t()))
                   ],
@@ -530,6 +576,11 @@ defmodule Phoenix.Sync.Writer do
                     A 1- or 2-arity function that accepts either the mutation
                     operation's data or an `Ecto.Repo` instance and the mutation data and
                     returns the original row from the database.
+
+                    Arguments:
+
+                    - `repo` the `Ecto.Repo` instance passed to `apply/4` or `transaction/3`
+                    - `data` the original operation data
 
                     Valid return values are:
 
@@ -571,15 +622,15 @@ defmodule Phoenix.Sync.Writer do
                   changeset: [
                     type: {:or, [{:fun, 2}, {:fun, 3}]},
                     doc: """
-                    a 2- or 3-arity function that returns
-                    an `Ecto.Changeset` for a given mutation.
+                    a 2- or 3-arity function that returns an `Ecto.Changeset` for a given mutation.
 
                     ### Callback params
 
                     - `data` an Ecto.Schema struct matching the one used when
                       calling `allow/2` returned from the `load` function.
                     - `changes` a map of changes to apply to the `data`.
-                    - `operation` the operation action, one of `:insert`, `:update` or `:delete`
+                    - `operation` (for 3-arity callbacks only) the operation
+                      action, one of `:insert`, `:update` or `:delete`
 
                     At absolute minimum, this should call
                     `Ecto.Changeset.cast/3` to validate the proposed data:
@@ -587,6 +638,9 @@ defmodule Phoenix.Sync.Writer do
                         def my_changeset(data, changes, _operation) do
                           Ecto.Changeset.cast(data, changes, @permitted_columns)
                         end
+
+                    Defaults to the given model's `changeset/2` function if
+                    defined, raises if no changeset function can be found.
                     """,
                     type_spec:
                       quote(
@@ -622,9 +676,11 @@ defmodule Phoenix.Sync.Writer do
                           name = Phoenix.Sync.Writer.operation_name(context, :event_insert)
                           Ecto.Multi.insert(multi, name, %Event{todo_id: id})
                         end
+
+                    Defaults to no `nil`.
                     """,
-                    type_spec:
-                      quote(do: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t()))
+                    type_spec: quote(do: pre_post_func()),
+                    type_doc: "`t:pre_post_func/0`"
                   ],
                   post_apply: [
                     type: {:fun, 3},
@@ -634,9 +690,11 @@ defmodule Phoenix.Sync.Writer do
                     transaction.
 
                     See the docs for `:pre_apply` for the function signature and arguments.
+
+                    Defaults to no `nil`.
                     """,
-                    type_spec:
-                      quote(do: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t()))
+                    type_spec: quote(do: pre_post_func()),
+                    type_doc: "`t:pre_post_func/0`"
                   ],
                   insert:
                     Keyword.put(@operation_schema, :doc, """
@@ -650,6 +708,8 @@ defmodule Phoenix.Sync.Writer do
 
                     The only difference with these callback functions is that
                     the `action` parameter is redundant and therefore not passed.
+
+                    Defaults to `[]`, using the top-level functions for all operations.
                     """),
                   update:
                     Keyword.put(@operation_schema, :doc, """
