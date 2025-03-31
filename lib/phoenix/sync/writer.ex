@@ -439,15 +439,24 @@ defmodule Phoenix.Sync.Writer do
   @writer_schema NimbleOptions.new!(
                    format: [
                      type: {:or, [:atom, {:fun, 1}, :mfa]},
-                     required: true,
                      doc: """
                      A module implementing the `#{inspect(__MODULE__.Format)}`
                      behaviour or a function that takes mutation data from the client and
                      returns a `%#{inspect(__MODULE__.Transaction)}{}` struct.
 
                      See `#{inspect(__MODULE__.Format)}`
+                     """
+                   ],
+                   parser: [
+                     type: {:or, [{:fun, 1}, :mfa]},
+                     doc: """
+                     A function that parses some input data and returns a
+                     #{inspect(__MODULE__.Transaction)} struct or an error.
                      """,
-                     type_spec: quote(do: (mutation() -> Operation.t()))
+                     type_spec:
+                       quote(
+                         do: (transaction_data() -> {:ok, Transaction.t()} | {:error, term()})
+                       )
                    ]
                  )
 
@@ -634,7 +643,7 @@ defmodule Phoenix.Sync.Writer do
                     """)
                 )
 
-  defstruct format: nil, mappings: %{}
+  defstruct format: nil, parser: nil, mappings: %{}
 
   @type writer_opts() :: [unquote(NimbleOptions.option_typespec(@writer_schema))]
   @type allow_opts() :: [unquote(NimbleOptions.option_typespec(@allow_schema))]
@@ -657,8 +666,26 @@ defmodule Phoenix.Sync.Writer do
   @spec new(writer_opts()) :: writer()
   def new(opts) when is_list(opts) do
     config = NimbleOptions.validate!(opts, @writer_schema)
-    format = Keyword.fetch!(config, :format)
-    %__MODULE__{format: format}
+
+    format = Keyword.get(config, :format)
+
+    parser_func =
+      Keyword.get(config, :parser) || format_parser(format) ||
+        raise ArgumentError, message: "Missing `:format` or `:parser` configuration"
+
+    %__MODULE__{format: format, parser: parser_func}
+  end
+
+  defp format_parser(nil), do: nil
+
+  defp format_parser(format) when is_atom(format) do
+    if Code.ensure_loaded?(format) && function_exported?(format, :parse_transaction, 1) do
+      Function.capture(format, :parse_transaction, 1)
+    else
+      raise ArgumentError,
+        message:
+          "#{inspect(format)} does not implement the #{inspect(__MODULE__.Format)} behaviour"
+    end
   end
 
   @doc """
@@ -912,15 +939,7 @@ defmodule Phoenix.Sync.Writer do
   end
 
   defp parse_transaction(%__MODULE__{} = writer, changes) do
-    case writer.format do
-      module when is_atom(module) ->
-        if Code.ensure_loaded?(module) && function_exported?(module, :parse_transaction, 1) do
-          module.parse_transaction(changes)
-        else
-          {:error,
-           "#{inspect(module)} does not implement the #{inspect(__MODULE__.Format)} behaviour"}
-        end
-
+    case writer.parser do
       fun when is_function(fun, 1) ->
         fun.(changes)
 

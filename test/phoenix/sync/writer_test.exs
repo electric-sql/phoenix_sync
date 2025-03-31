@@ -663,7 +663,7 @@ defmodule Phoenix.Sync.WriterTest do
       ]
 
       assert {:ok, _txid, _changes} =
-               Writer.new(format: &parse_transaction/1)
+               Writer.new(parser: &parse_transaction/1)
                |> Writer.allow(Support.Todo, load: &todo_get(&1, pid))
                |> Writer.apply(changes)
                |> Writer.transaction(Repo)
@@ -697,7 +697,7 @@ defmodule Phoenix.Sync.WriterTest do
       ]
 
       assert {:ok, _txid, _changes} =
-               Writer.new(format: {__MODULE__, :parse_transaction, []})
+               Writer.new(parser: {__MODULE__, :parse_transaction, []})
                |> Writer.allow(Support.Todo, load: &todo_get(&1, pid))
                |> Writer.apply(changes)
                |> Writer.transaction(Repo)
@@ -735,7 +735,7 @@ defmodule Phoenix.Sync.WriterTest do
       ]
 
       assert {:ok, _txid, _changes} =
-               Writer.new(format: {__MODULE__, :parse_transaction, []})
+               Writer.new(parser: {__MODULE__, :parse_transaction, []})
                |> Writer.allow(Support.Todo, load: &todo_get(&1, pid))
                |> Writer.apply(changes, Repo)
 
@@ -769,7 +769,7 @@ defmodule Phoenix.Sync.WriterTest do
       ]
 
       assert {:error, _txid, _, _changes} =
-               Writer.new(format: {__MODULE__, :parse_transaction, []})
+               Writer.new(parser: {__MODULE__, :parse_transaction, []})
                |> Writer.allow(Support.Todo, load: &todo_get(&1, pid))
                |> Writer.apply(changes, Repo)
     end
@@ -799,7 +799,7 @@ defmodule Phoenix.Sync.WriterTest do
     #   ]
     #
     #   assert {:ok, _txid, _changes} =
-    #            Writer.new(format: {__MODULE__, :parse_transaction, []})
+    #            Writer.new(parser: {__MODULE__, :parse_transaction, []})
     #            |> Writer.allow(Support.Todo,
     #              load: &todo_get(&1, pid),
     #              pre_apply: fn
@@ -827,7 +827,7 @@ defmodule Phoenix.Sync.WriterTest do
       ]
 
       assert {:ok, _txid, _changes} =
-               Writer.new(format: {__MODULE__, :parse_transaction, []})
+               Writer.new(parser: {__MODULE__, :parse_transaction, []})
                |> Writer.allow(Support.Todo, load: &todo_get_tuple(&1, pid))
                |> Writer.apply(changes1)
                |> Writer.transaction(Repo)
@@ -842,7 +842,7 @@ defmodule Phoenix.Sync.WriterTest do
       ]
 
       assert {:error, _, %Writer.Error{message: "custom error message"}, _} =
-               Writer.new(format: {__MODULE__, :parse_transaction, []})
+               Writer.new(parser: {__MODULE__, :parse_transaction, []})
                |> Writer.allow(Support.Todo, load: &todo_get_tuple(&1, pid))
                |> Writer.apply(changes2)
                |> Writer.transaction(Repo)
