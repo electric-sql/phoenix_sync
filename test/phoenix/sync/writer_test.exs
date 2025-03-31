@@ -102,8 +102,8 @@ defmodule Phoenix.Sync.WriterTest do
     Repo.get_by(Support.Todo, id: id)
   end
 
-  def todo_authorize(operation, pid) do
-    notify(pid, {:todo, :authorize, operation})
+  def todo_preflight(operation, pid) do
+    notify(pid, {:todo, :preflight, operation})
     :ok
   end
 
@@ -162,7 +162,7 @@ defmodule Phoenix.Sync.WriterTest do
                  # defaults to Repo.get!(Todo, <id>)
                  load: &todo_get(&1, pid),
                  accept: [:insert, :update, :delete],
-                 authorize: &todo_authorize(&1, pid),
+                 preflight: &todo_preflight(&1, pid),
                  insert: [
                    changeset: &todo_insert_changeset(&1, &2, pid),
                    after: &todo_after_insert(&1, &2, &3, pid),
@@ -207,7 +207,7 @@ defmodule Phoenix.Sync.WriterTest do
           table: "todos_local",
           load: &todo_get(&1, pid),
           accept: [:insert, :update, :delete],
-          authorize: &todo_authorize(&1, pid),
+          preflight: &todo_preflight(&1, pid),
           insert: [
             changeset: &todo_insert_changeset(&1, &2, pid),
             after: &todo_after_insert(&1, &2, &3, pid),
@@ -423,18 +423,18 @@ defmodule Phoenix.Sync.WriterTest do
         }
       ]
 
-      assert {:error, :authorize, %Writer.Error{}, _changes} =
+      assert {:error, :preflight, %Writer.Error{}, _changes} =
                writer |> Writer.apply(changes) |> Writer.transaction(Repo)
     end
 
-    test "rejects any txn that fails the authorize test" do
+    test "rejects any txn that fails the preflight test" do
       pid = self()
 
       writer =
         Writer.allow(writer(), Support.Todo,
           table: "todos_local",
           load: &todo_get(&1, pid),
-          authorize: fn
+          preflight: fn
             %{operation: :delete} -> {:error, "no deletes!"}
             _op -> :ok
           end,
@@ -460,7 +460,7 @@ defmodule Phoenix.Sync.WriterTest do
         }
       ]
 
-      assert {:error, :authorize, %Writer.Error{message: "no deletes!"}, _changes} =
+      assert {:error, :preflight, %Writer.Error{message: "no deletes!"}, _changes} =
                writer |> Writer.apply(changes) |> Writer.transaction(Repo)
     end
 
@@ -565,7 +565,7 @@ defmodule Phoenix.Sync.WriterTest do
 
       # we have specified allow/2 with a fully qualified table so only one of the
       # inserts matches
-      assert {:error, :authorize, %Writer.Error{}, _changes} =
+      assert {:error, :preflight, %Writer.Error{}, _changes} =
                writer |> Writer.apply(changes) |> Writer.transaction(Repo)
     end
 
@@ -802,7 +802,7 @@ defmodule Phoenix.Sync.WriterTest do
                |> Writer.allow(Support.Todo,
                  load: &todo_get(&1, pid),
                  before: fn
-                   multi, changeset, %{index: 1} = ctx ->
+                   multi, _changeset, %{index: 1} = ctx ->
                      assert {:ok, %Support.Todo{id: 98}} = Writer.fetch_or_load(ctx, id: 98)
                      multi
 
