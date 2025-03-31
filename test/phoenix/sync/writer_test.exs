@@ -32,7 +32,7 @@ defmodule Phoenix.Sync.WriterTest do
     todo
   end
 
-  def todo_changeset(todo, action, data, pid) when action in [:insert, :update, :delete] do
+  def todo_changeset(todo, data, action, pid) when action in [:insert, :update, :delete] do
     todo
     |> Changeset.cast(data, [:id, :title, :completed])
     |> tap(&notify(pid, {:todo, :changeset, action, changeset_id(&1)}))
