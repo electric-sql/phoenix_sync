@@ -88,6 +88,7 @@ defmodule Phoenix.Sync.Writer.Format do
   """
   alias Phoenix.Sync.Writer.Transaction
 
+  @type t() :: module()
   @typedoc "Raw data from a client that will be parsed to a `#{inspect(__MODULE__.Transaction)}` by the Writer's format parser"
   @type transaction_data() :: term()
   @type parse_transaction_result() :: {:ok, Transaction.t()} | {:error, term()}

@@ -458,16 +458,19 @@ defmodule Phoenix.Sync.Writer do
                      doc: """
                      A module implementing the `#{inspect(__MODULE__.Format)}`
                      behaviour or a function that takes mutation data from the client and
-                     returns a `%#{inspect(__MODULE__.Transaction)}{}` struct.
+                     returns a [`%Transaction{}`](`#{inspect(__MODULE__.Transaction)}`) struct.
 
-                     See `#{inspect(__MODULE__.Format)}`
-                     """
+                     See `#{inspect(__MODULE__.Format)}`.
+                     """,
+                     type_spec: quote(do: Format.t()),
+                     type_doc: "[`Format.t()`](`t:#{inspect(Format)}.t/0`)"
                    ],
                    parser: [
                      type: {:or, [{:fun, 1}, :mfa]},
                      doc: """
                      A function that parses some input data and returns a
-                     #{inspect(__MODULE__.Transaction)} struct or an error.
+                     [`%Transaction{}`](`#{inspect(__MODULE__.Transaction)}`) struct or an error.
+                     See `c:#{inspect(__MODULE__.Format)}.parse_transaction/1`.
                      """,
                      type_spec: quote(do: Format.parser_fun())
                    ]
@@ -683,7 +686,6 @@ defmodule Phoenix.Sync.Writer do
   Supported options:
 
   #{NimbleOptions.docs(@writer_schema)}
-
 
   You can either pass a `parser` function or a `format`.
 
