@@ -99,7 +99,7 @@ defmodule Phoenix.Sync.Writer do
     application's authentication/authorization logic.
   - [`changeset`](#module-changeset-function) - create and validate an `Ecto.Changeset` from the
     source data and mutation changes.
-  - [`before` and `after`](#module-before-and-after-callbacks) - add arbitrary
+  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply-callbacks) - add arbitrary
     `Ecto.Multi` operations to the transaction based on the current operation.
 
   Calling `new/1` creates an empty writer configuration with the given mutation
@@ -219,7 +219,7 @@ defmodule Phoenix.Sync.Writer do
   your `insert` changes, then you should use UUID primary keys for your models
   to prevent conflicts.
 
-  ### Before and after callbacks
+  ### pre_apply and post_apply callbacks
 
   These callbacks, run before or after the actual `insert`, `update` or
   `delete` operation allow for the addition of side effects to the transaction.
@@ -231,7 +231,7 @@ defmodule Phoenix.Sync.Writer do
   within the callback that returns an "invalid" operation will abort the entire
   transaction.
 
-      def before_or_after(%Ecto.Multi{} = multi, %Ecto.Changeset{} = change, %Writer.Context{} = context) do
+      def pre_or_post_apply(%Ecto.Multi{} = multi, %Ecto.Changeset{} = change, %Writer.Context{} = context) do
         multi
         # add some side-effects
         # |> Ecto.Multi.run(Writer.operation_name(context, :image), fn _changes ->
@@ -259,19 +259,19 @@ defmodule Phoenix.Sync.Writer do
       #{inspect(__MODULE__)}.allow(
         Todos.Todo,
         load: &Todos.fetch_for_user(&1, user_id),
-        validate: &Todos.validate_mutation(&1, &2, user_id),
+        preflight: &Todos.preflight_mutation(&1, &2, user_id),
         changeset: &Todos.Todo.changeset/2,
         update: [
           # for inserts and deletes, use &Todos.Todo.changeset/2 but for updates
           # use this function
           changeset: &Todos.Todo.update_changeset/2,
-          before: &Todos.before_update_todo/3
+          pre_apply: &Todos.pre_apply_update_todo/3
         ],
         insert: [
-          # optional load, validate, changeset, before and after overrides for insert operations
+          # optional load, validate, changeset, pre_apply and post_apply overrides for insert operations
         ],
         delete: [
-          # optional load, validate, changeset, before and after overrides for delete operations
+          # optional load, validate, changeset, pre_apply and post_apply overrides for delete operations
         ],
       )
 
@@ -339,7 +339,7 @@ defmodule Phoenix.Sync.Writer do
 
   Because `Phoenix.Sync.Write` leverages `Ecto.Multi` to do the work of
   applying changes and managing errors, you're also free to extend the actions
-  that are performed with every transaction using `before` and `after`
+  that are performed with every transaction using `pre_apply` and `post_apply`
   callbacks configured per-table or per-table per-action (insert, update,
   delete). See `allow/3` for more information on the configuration options
   for each table.
@@ -365,7 +365,7 @@ defmodule Phoenix.Sync.Writer do
       * `index` - the 0-indexed position of the current operation within the transaction
       * `changes` - the current `Ecto.Multi` changes so far
       * `operation` - the current `#{inspect(__MODULE__.Operation)}`
-      * `callback` - the name of the current callback `:before` or `:after`
+      * `callback` - the name of the current callback, `:pre_apply` or `:post_apply`
       * `schema` - the `Ecto.Schema` module associated with the current operation
     """
 
@@ -397,13 +397,13 @@ defmodule Phoenix.Sync.Writer do
       A 2-arity function that returns a changeset for the given mutation data.
       """
     ],
-    before: [
+    pre_apply: [
       type: {:fun, 3},
       doc: """
       An optional callback that allows for the pre-pending of operations to the `Ecto.Multi`.
       """
     ],
-    after: [
+    post_apply: [
       type: {:fun, 3},
       doc: """
       An optional callback that allows for the appending of operations to the `Ecto.Multi`.
@@ -424,7 +424,7 @@ defmodule Phoenix.Sync.Writer do
           changes: Ecto.Mult.changes(),
           schema: Ecto.Schema.t(),
           operation: :insert | :update | :delete,
-          callback: :load | :changeset | :before | :after
+          callback: :load | :changeset | :pre_apply | :post_apply
         }
 
   @type operation_opts() :: unquote([NimbleOptions.option_typespec(@operation_options_schema)])
@@ -543,7 +543,7 @@ defmodule Phoenix.Sync.Writer do
                     type_spec:
                       quote(do: (Ecto.Schema.t(), operation(), data() -> Ecto.Changeset.t()))
                   ],
-                  before: [
+                  pre_apply: [
                     type: {:fun, 3},
                     doc: """
                     an optional callback that allows for the pre-pending of
@@ -566,7 +566,7 @@ defmodule Phoenix.Sync.Writer do
                     key, we advise using the `operation_name/2` function to generate a unique
                     operation name based on the `context`.
 
-                        def my_before(multi, :insert, changeset, context) do
+                        def my_pre_apply(multi, :insert, changeset, context) do
                           name = Writer.operation_name(context, :event_insert)
                           Ecto.Multi.insert(multi, name, %Event{todo_id: id})
                         end
@@ -574,14 +574,14 @@ defmodule Phoenix.Sync.Writer do
                     type_spec:
                       quote(do: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t()))
                   ],
-                  after: [
+                  post_apply: [
                     type: {:fun, 3},
                     doc: """
                     an optional callback function that allows for the
                     appending of operations to the `Ecto.Multi` representing a mutation
                     transaction.
 
-                    See the docs for `:before` for the function signature and arguments.
+                    See the docs for `:pre_apply` for the function signature and arguments.
                     """,
                     type_spec:
                       quote(do: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t()))
@@ -591,7 +591,7 @@ defmodule Phoenix.Sync.Writer do
                     Callbacks for validating and modifying `insert` operations.
 
                     Accepts definitions for the `changeset`, `before` and
-                    `after` functions for `insert` operations that will override the
+                    `post_apply` functions for `insert` operations that will override the
                     top-level equivalents.
 
                     See the documentation for `allow/3`.
@@ -660,7 +660,7 @@ defmodule Phoenix.Sync.Writer do
         preflight: &MyApp.Todos.preflight_mutation/1
       )
 
-      # A more complex configuration adding an `after` callback to inserts
+      # A more complex configuration adding an `post_apply` callback to inserts
       # and using a custom query to load the original database value.
       Phoenix.Sync.Writer.new(format: MyApp.OperationFormat)
       |> Phoenix.Sync.Writer.allow(
@@ -668,7 +668,7 @@ defmodule Phoenix.Sync.Writer do
         load: &MyApp.Todos.get_for_mutation/1,
         preflight: &MyApp.Todos.preflight_mutation/1,
         insert: [
-          after: &MyApp.Todos.after_insert_mutation/3
+          post_apply: &MyApp.Todos.post_apply_insert_mutation/3
         ]
       )
 
@@ -732,12 +732,17 @@ defmodule Phoenix.Sync.Writer do
         raise(ArgumentError, message: "No changeset/3 or changeset/2 defined for #{action}s")
 
     # nil-hooks are just ignored
-    before_fun = get_in(config, [action, :before]) || config[:before]
-    after_fun = get_in(config, [action, :after]) || config[:after]
+    pre_apply_fun = get_in(config, [action, :pre_apply]) || config[:pre_apply]
+    post_apply_fun = get_in(config, [action, :post_apply]) || config[:post_apply]
 
     Map.merge(
       Map.new(extra),
-      %{schema: schema, changeset: changeset_fun, before: before_fun, after: after_fun}
+      %{
+        schema: schema,
+        changeset: changeset_fun,
+        pre_apply: pre_apply_fun,
+        post_apply: post_apply_fun
+      }
     )
   end
 
@@ -857,7 +862,7 @@ defmodule Phoenix.Sync.Writer do
         |> #{inspect(__MODULE__)}.apply(changes)
 
   If you want to add extra operations to the mutation transaction, beyond those
-  applied by any `before` or `after` callbacks in your mutation config then use
+  applied by any `pre_apply` or `post_apply` callbacks in your mutation config then use
   the functions in `Ecto.Multi` to do those as normal.
 
   Use `transaction/3` to apply the changes to the database and return the
@@ -1055,12 +1060,12 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  defp apply_before(multi, operation, ctx, %{before: before_fun} = action) do
-    apply_hook(multi, operation, ctx, {:before, before_fun}, action)
+  defp apply_before(multi, operation, ctx, %{pre_apply: pre_apply_fun} = action) do
+    apply_hook(multi, operation, ctx, {:pre_apply, pre_apply_fun}, action)
   end
 
-  defp apply_after(multi, operation, ctx, %{after: after_fun} = action) do
-    apply_hook(multi, operation, ctx, {:after, after_fun}, action)
+  defp apply_after(multi, operation, ctx, %{post_apply: post_apply_fun} = action) do
+    apply_hook(multi, operation, ctx, {:post_apply, post_apply_fun}, action)
   end
 
   defp apply_hook(multi, _operation, _ctx, {_, nil}, _action) do
@@ -1078,7 +1083,7 @@ defmodule Phoenix.Sync.Writer do
           fun3.(Ecto.Multi.new(), changeset, ctx)
 
         _ ->
-          raise "Invalid after_fun for #{inspect(action.table)} #{inspect(operation.operation)}"
+          raise "Invalid #{hook_name} for #{inspect(action.table)} #{inspect(operation.operation)}"
       end
       |> validate_callback!(operation.operation, action)
     end)
