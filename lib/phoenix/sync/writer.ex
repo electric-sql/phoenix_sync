@@ -17,20 +17,20 @@ defmodule Phoenix.Sync.Writer do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Writer.new(format: Writer.Format.TanstackOptimistic)
-            |> Writer.allow(
+            Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+            |> Phoenix.Sync.Writer.allow(
               Projects.Project,
               # preflight writes against a Project just as your controller code would
               preflight: &Projects.preflight_project(&1, conn.assigns),
               # you can re-use your existing changeset/2 functions
               changeset: &Projects.Project.changeset/2
             )
-            |> Writer.allow(
+            |> Phoenix.Sync.Writer.allow(
               Projects.Issue,
               preflight: &Projects.preflight_issue(&1, conn.assigns),
               # changeset defaults to Projects.Issue.changeset/2
             )
-            |> Writer.apply(transaction, Repo)
+            |> Phoenix.Sync.Writer.apply(transaction, Repo)
 
           render(conn, :mutations, txid: txid)
         end
@@ -231,17 +231,17 @@ defmodule Phoenix.Sync.Writer do
   within the callback that returns an "invalid" operation will abort the entire
   transaction.
 
-      def pre_or_post_apply(%Ecto.Multi{} = multi, %Ecto.Changeset{} = change, %Writer.Context{} = context) do
+      def pre_or_post_apply(%Ecto.Multi{} = multi, %Ecto.Changeset{} = change, %Phoenix.Sync.Writer.Context{} = context) do
         multi
         # add some side-effects
-        # |> Ecto.Multi.run(Writer.operation_name(context, :image), fn _changes ->
+        # |> Ecto.Multi.run(Phoenix.Sync.Writer.operation_name(context, :image), fn _changes ->
         #   with :ok <- File.write(image.name, image.contents) do
         #    {:ok, nil}
         #   end
         # end)
         #
         # validate the current transaction and abort using an {:error, value} tuple
-        # |> Ecto.Multi.run(Writer.operation_name(context, :my_validation), fn _changes ->
+        # |> Ecto.Multi.run(Phoenix.Sync.Writer.operation_name(context, :my_validation), fn _changes ->
         #   {:error, "reject entire transaction"}
         # end)
       end
@@ -310,13 +310,13 @@ defmodule Phoenix.Sync.Writer do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Write.new(format: Writer.Format.TanstackOptimistic)
-            |> Write.allow(
+            Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+            |> Phoenix.Sync.Writer.allow(
               Todos.Todo,
               preflight: &validate_params(&1, user_id),
               load: &Todos.fetch_for_user(&1, user_id),
             )
-            |> Write.apply(transaction, Repo)
+            |> Phoenix.Sync.Writer.apply(transaction, Repo)
 
           render(conn, :mutations, txid: txid)
         end
@@ -348,10 +348,10 @@ defmodule Phoenix.Sync.Writer do
 
       {:ok, txid, _changes} =
         Todo
-        |> Write.allow()
-        |> Write.apply(transaction)
+        |> Phoenix.Sync.Writer.allow()
+        |> Phoenix.Sync.Writer.apply(transaction)
         |> Ecto.Multi.insert(:my_action, %Event{})
-        |> Write.transaction(Repo)
+        |> Phoenix.Sync.Writer.transaction(Repo)
   """
 
   import Kernel, except: [apply: 2, apply: 3]
@@ -467,6 +467,24 @@ defmodule Phoenix.Sync.Writer do
                     A transaction containing an operation not in the accept list will be rejected.
                     """
                   ],
+                  before_all: [
+                    type: {:fun, 1},
+                    doc: """
+                    Run only once after the parsing and preflight checks.
+
+                    Use this to pre-load data that will be useful for
+                    authorization or validation checks for all following mutations.
+
+                    Arguments:
+
+                    - `multi` an `Ecto.Multi` struct
+
+                    Return value:
+
+                    - `Ecto.Multi` struct
+                    """,
+                    type_spec: quote(do: (Ecto.Multi.t() -> Ecto.Multi.t()))
+                  ],
                   load: [
                     type: {:or, [{:fun, 1}, {:fun, 2}]},
                     doc: """
@@ -549,7 +567,7 @@ defmodule Phoenix.Sync.Writer do
                     an optional callback that allows for the pre-pending of
                     operations to the `Ecto.Multi` representing a mutation transaction.
 
-                    If should be a 4-arity function.
+                    If should be a 3-arity function.
 
                     ### Arguments
 
@@ -567,7 +585,7 @@ defmodule Phoenix.Sync.Writer do
                     operation name based on the `context`.
 
                         def my_pre_apply(multi, :insert, changeset, context) do
-                          name = Writer.operation_name(context, :event_insert)
+                          name = Phoenix.Sync.Writer.operation_name(context, :event_insert)
                           Ecto.Multi.insert(multi, name, %Event{todo_id: id})
                         end
                     """,
@@ -735,10 +753,13 @@ defmodule Phoenix.Sync.Writer do
     pre_apply_fun = get_in(config, [action, :pre_apply]) || config[:pre_apply]
     post_apply_fun = get_in(config, [action, :post_apply]) || config[:post_apply]
 
+    before_all_fun = config[:before_all]
+
     Map.merge(
       Map.new(extra),
       %{
         schema: schema,
+        before_all: before_all_fun,
         changeset: changeset_fun,
         pre_apply: pre_apply_fun,
         post_apply: post_apply_fun
@@ -960,6 +981,7 @@ defmodule Phoenix.Sync.Writer do
       }
 
       multi
+      |> apply_before_all(action)
       |> mutation_changeset(op, ctx, action)
       |> validate_pks(op, ctx, action)
       |> apply_before(op, ctx, action)
@@ -969,6 +991,24 @@ defmodule Phoenix.Sync.Writer do
       {:error, reason} ->
         Ecto.Multi.error(multi, {:error, op.index}, %Error{message: reason, operation: op})
     end
+  end
+
+  defp apply_before_all(multi, %{before_all: nil} = _action) do
+    multi
+  end
+
+  defp apply_before_all(multi, %{before_all: before_all_fun} = action)
+       when is_function(before_all_fun, 1) do
+    key = {action.schema, :before_all}
+
+    Ecto.Multi.merge(multi, fn
+      %{^key => true} = _changes ->
+        Ecto.Multi.new()
+
+      _changes ->
+        before_all_fun.(Ecto.Multi.new())
+        |> Ecto.Multi.put({action.schema, :before_all}, true)
+    end)
   end
 
   defp mutation_changeset(multi, %Operation{} = op, %Context{} = ctx, action) do
@@ -1194,11 +1234,11 @@ defmodule Phoenix.Sync.Writer do
   docs](https://hexdocs.pm/ecto/Ecto.Repo.html#c:transaction/2-use-with-ecto-multi)
   for the result if any of your mutations returns an error.
 
-        Phoenix.Sync.Write.new()
-        |> Phoenix.Sync.Write.allow(MyApp.Todos.Todo)
-        |> Phoenix.Sync.Write.allow(MyApp.Options.Option)
-        |> Phoenix.Sync.Write.apply(changes)
-        |> Phoenix.Sync.Write.transaction(MyApp.Repo)
+        Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+        |> Phoenix.Sync.Writer.allow(MyApp.Todos.Todo)
+        |> Phoenix.Sync.Writer.allow(MyApp.Options.Option)
+        |> Phoenix.Sync.Writer.apply(changes)
+        |> Phoenix.Sync.Writer.transaction(MyApp.Repo)
         |> case do
           {:ok, txid, _changes} ->
             # return the txid to the client
@@ -1234,13 +1274,13 @@ defmodule Phoenix.Sync.Writer do
   Example
 
       {:ok, changes} =
-        Phoenix.Sync.Write.new()
-        |> Phoenix.Sync.Write.allow(MyApp.Todos.Todo)
-        |> Phoenix.Sync.Write.allow(MyApp.Options.Option)
-        |> Phoenix.Sync.Write.apply(changes)
+        Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+        |> Phoenix.Sync.Writer.allow(MyApp.Todos.Todo)
+        |> Phoenix.Sync.Writer.allow(MyApp.Options.Option)
+        |> Phoenix.Sync.Writer.apply(changes)
         |> MyApp.Repo.transaction()
 
-      {:ok, txid} = Phoenix.Sync.Write.txid(changes)
+      {:ok, txid} = Phoenix.Sync.Writer.txid(changes)
   """
   @spec txid(Ecto.Multi.changes()) :: {:ok, txid()} | :error
   def txid(%{@txid_name => txid} = _changes), do: {:ok, txid}
@@ -1256,25 +1296,44 @@ defmodule Phoenix.Sync.Writer do
   def txid!(%{@txid_name => txid} = _changes), do: txid
   def txid!(_), do: raise(ArgumentError, message: "No txid in change data")
 
+  @doc """
+  Return a unique operation name for use in `pre_apply` or `post_apply` callbacks.
+
+  `Ecto.Multi` requires that all operation names be unique within a
+  transaction. This function gives you a simple way to generate a name for your
+  own operations that is guarateed not to conflict with any other.
+
+  Example:
+
+      Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+      |> Phoenix.Sync.Writer.allow(
+        MyModel,
+        pre_apply: fn multi, changeset, context ->
+          name = Phoenix.Sync.Writer.operation_name(context)
+          Ecto.Multi.insert(multi name, AuditEvent.for_changeset(changeset))
+        end
+      )
+  """
   def operation_name(%Context{} = ctx) do
     {ctx.schema, ctx.operation.operation, ctx.index}
   end
 
   @doc """
-  ## TODO
+  Like `operation_name/1` but allows for a custom label.
   """
   @spec operation_name(context(), term()) :: term()
   def operation_name(%Context{} = ctx, label) do
     {operation_name(ctx), label}
   end
 
-  @doc """
-  ## TODO
-  """
-  @spec fetch_or_load(context(), map()) :: {:ok, Ecto.Schema.t()} | {:error, term()}
-  def fetch_or_load(%Context{} = _ctx, _attrs) do
-    raise "implement"
-  end
+  # @doc """
+  # ## TODO
+  # """
+  # @spec fetch_or_load(context(), map()) :: {:ok, Ecto.Schema.t()} | {:error, term()}
+  # def fetch_or_load(%Context{} = ctx, _attrs) do
+  #   dbg(ctx)
+  #   :error
+  # end
 
   defp load_key(ctx, pk) do
     opkey(schema: ctx.schema, operation: ctx.operation.operation, index: ctx.index, pk: pk)
