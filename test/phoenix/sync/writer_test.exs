@@ -66,34 +66,34 @@ defmodule Phoenix.Sync.WriterTest do
     |> Changeset.validate_required([:id])
   end
 
-  def todo_before_insert(multi, changeset, _changes, pid) do
-    notify(pid, {:todo, :before_insert, changeset_id(changeset)})
+  def todo_pre_apply_insert(multi, changeset, _changes, pid) do
+    notify(pid, {:todo, :pre_apply_insert, changeset_id(changeset)})
     multi
   end
 
-  def todo_before_update(multi, changeset, _changes, pid) do
-    notify(pid, {:todo, :before_update, changeset_id(changeset)})
+  def todo_pre_apply_update(multi, changeset, _changes, pid) do
+    notify(pid, {:todo, :pre_apply_update, changeset_id(changeset)})
 
     multi
   end
 
-  def todo_before_delete(multi, changeset, _changes, pid) do
-    notify(pid, {:todo, :before_delete, changeset_id(changeset)})
+  def todo_pre_apply_delete(multi, changeset, _changes, pid) do
+    notify(pid, {:todo, :pre_apply_delete, changeset_id(changeset)})
     multi
   end
 
-  def todo_after_insert(multi, changeset, _changes, pid) do
-    notify(pid, {:todo, :after_insert, changeset_id(changeset)})
+  def todo_post_apply_insert(multi, changeset, _changes, pid) do
+    notify(pid, {:todo, :post_apply_insert, changeset_id(changeset)})
     multi
   end
 
-  def todo_after_update(multi, changeset, _changes, pid) do
-    notify(pid, {:todo, :after_update, changeset_id(changeset)})
+  def todo_post_apply_update(multi, changeset, _changes, pid) do
+    notify(pid, {:todo, :post_apply_update, changeset_id(changeset)})
     multi
   end
 
-  def todo_after_delete(multi, changeset, _changes, pid) do
-    notify(pid, {:todo, :after_delete, changeset_id(changeset)})
+  def todo_post_apply_delete(multi, changeset, _changes, pid) do
+    notify(pid, {:todo, :post_apply_delete, changeset_id(changeset)})
     multi
   end
 
@@ -165,18 +165,18 @@ defmodule Phoenix.Sync.WriterTest do
                  preflight: &todo_preflight(&1, pid),
                  insert: [
                    changeset: &todo_insert_changeset(&1, &2, pid),
-                   after: &todo_after_insert(&1, &2, &3, pid),
-                   before: &todo_before_insert(&1, &2, &3, pid)
+                   post_apply: &todo_post_apply_insert(&1, &2, &3, pid),
+                   pre_apply: &todo_pre_apply_insert(&1, &2, &3, pid)
                  ],
                  update: [
                    changeset: &todo_update_changeset(&1, &2, pid),
-                   after: &todo_after_update(&1, &2, &3, pid),
-                   before: &todo_before_update(&1, &2, &3, pid)
+                   post_apply: &todo_post_apply_update(&1, &2, &3, pid),
+                   pre_apply: &todo_pre_apply_update(&1, &2, &3, pid)
                  ],
                  delete: [
                    changeset: &todo_delete_changeset(&1, &2, pid),
-                   after: &todo_after_delete(&1, &2, &3, pid),
-                   before: &todo_before_delete(&1, &2, &3, pid)
+                   post_apply: &todo_post_apply_delete(&1, &2, &3, pid),
+                   pre_apply: &todo_pre_apply_delete(&1, &2, &3, pid)
                  ]
                )
     end
@@ -210,18 +210,18 @@ defmodule Phoenix.Sync.WriterTest do
           preflight: &todo_preflight(&1, pid),
           insert: [
             changeset: &todo_insert_changeset(&1, &2, pid),
-            after: &todo_after_insert(&1, &2, &3, pid),
-            before: &todo_before_insert(&1, &2, &3, pid)
+            post_apply: &todo_post_apply_insert(&1, &2, &3, pid),
+            pre_apply: &todo_pre_apply_insert(&1, &2, &3, pid)
           ],
           update: [
             changeset: &todo_update_changeset(&1, &2, pid),
-            after: &todo_after_update(&1, &2, &3, pid),
-            before: &todo_before_update(&1, &2, &3, pid)
+            post_apply: &todo_post_apply_update(&1, &2, &3, pid),
+            pre_apply: &todo_pre_apply_update(&1, &2, &3, pid)
           ],
           delete: [
             changeset: &todo_delete_changeset(&1, &2, pid),
-            after: &todo_after_delete(&1, &2, &3, pid),
-            before: &todo_before_delete(&1, &2, &3, pid)
+            post_apply: &todo_post_apply_delete(&1, &2, &3, pid),
+            pre_apply: &todo_pre_apply_delete(&1, &2, &3, pid)
           ]
         ]
 
@@ -288,32 +288,32 @@ defmodule Phoenix.Sync.WriterTest do
       assert_receive {:todo, :get, 1}
 
       assert_receive {:todo, :insert, 98}
-      assert_receive {:todo, :before_insert, 98}
-      assert_receive {:todo, :after_insert, 98}
+      assert_receive {:todo, :pre_apply_insert, 98}
+      assert_receive {:todo, :post_apply_insert, 98}
 
       assert_receive {:todo, :insert, 99}
-      assert_receive {:todo, :before_insert, 99}
-      assert_receive {:todo, :after_insert, 99}
+      assert_receive {:todo, :pre_apply_insert, 99}
+      assert_receive {:todo, :post_apply_insert, 99}
 
       assert_receive {:todo, :delete, 2}
-      assert_receive {:todo, :before_delete, 2}
-      assert_receive {:todo, :after_delete, 2}
+      assert_receive {:todo, :pre_apply_delete, 2}
+      assert_receive {:todo, :post_apply_delete, 2}
 
       assert_receive {:todo, :update, 1, %{"completed" => "true"}}
-      assert_receive {:todo, :before_update, 1}
-      assert_receive {:todo, :after_update, 1}
+      assert_receive {:todo, :pre_apply_update, 1}
+      assert_receive {:todo, :post_apply_update, 1}
 
       assert_receive {:todo, :update, 1, %{"title" => "Changed title"}}
-      assert_receive {:todo, :before_update, 1}
-      assert_receive {:todo, :after_update, 1}
+      assert_receive {:todo, :pre_apply_update, 1}
+      assert_receive {:todo, :post_apply_update, 1}
 
       assert_receive {:todo, :delete, 99}
-      assert_receive {:todo, :before_delete, 99}
-      assert_receive {:todo, :after_delete, 99}
+      assert_receive {:todo, :pre_apply_delete, 99}
+      assert_receive {:todo, :post_apply_delete, 99}
 
       assert_receive {:todo, :update, 98, %{"title" => "Working todo", "completed" => "true"}}
-      assert_receive {:todo, :before_update, 98}
-      assert_receive {:todo, :after_update, 98}
+      assert_receive {:todo, :pre_apply_update, 98}
+      assert_receive {:todo, :post_apply_update, 98}
 
       assert [
                %Support.Todo{id: 1, title: "Changed title", completed: true},
@@ -474,13 +474,13 @@ defmodule Phoenix.Sync.WriterTest do
         |> Writer.allow(Support.Todo,
           load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, {pid, todo1_ref}),
-          insert: [after: &todo_after_insert(&1, &2, &3, {pid, todo1_ref})]
+          insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, {pid, todo1_ref})]
         )
         |> Writer.allow(Support.Todo,
           table: "todos_2",
           load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, {pid, todo2_ref}),
-          insert: [after: &todo_after_insert(&1, &2, &3, {pid, todo2_ref})]
+          insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, {pid, todo2_ref})]
         )
 
       changes = [
@@ -499,10 +499,10 @@ defmodule Phoenix.Sync.WriterTest do
       assert {:ok, _txid, _changes} = writer |> Writer.apply(changes) |> Writer.transaction(Repo)
 
       assert_receive {^todo1_ref, {:todo, :changeset, :insert, 98}}
-      assert_receive {^todo1_ref, {:todo, :after_insert, 98}}
+      assert_receive {^todo1_ref, {:todo, :post_apply_insert, 98}}
 
       assert_receive {^todo2_ref, {:todo, :changeset, :insert, 99}}
-      assert_receive {^todo2_ref, {:todo, :after_insert, 99}}
+      assert_receive {^todo2_ref, {:todo, :post_apply_insert, 99}}
     end
 
     test "is intelligent about mapping client tables to server", _ctx do
@@ -513,7 +513,7 @@ defmodule Phoenix.Sync.WriterTest do
         |> Writer.allow(Support.Todo,
           load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid),
-          insert: [after: &todo_after_insert(&1, &2, &3, pid)]
+          insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, pid)]
         )
 
       changes = [
@@ -532,10 +532,10 @@ defmodule Phoenix.Sync.WriterTest do
       assert {:ok, _txid, _changes} = writer |> Writer.apply(changes) |> Writer.transaction(Repo)
 
       assert_receive {:todo, :changeset, :insert, 98}
-      assert_receive {:todo, :after_insert, 98}
+      assert_receive {:todo, :post_apply_insert, 98}
 
       assert_receive {:todo, :changeset, :insert, 99}
-      assert_receive {:todo, :after_insert, 99}
+      assert_receive {:todo, :post_apply_insert, 99}
     end
 
     test "only matches full relation if configured", _ctx do
@@ -547,7 +547,7 @@ defmodule Phoenix.Sync.WriterTest do
           table: ["public", "todos"],
           load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid),
-          insert: [after: &todo_after_insert(&1, &2, &3, pid)]
+          insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, pid)]
         )
 
       changes = [
@@ -594,19 +594,19 @@ defmodule Phoenix.Sync.WriterTest do
       assert_receive {:todo, :delete, %Support.Todo{id: 2}}
     end
 
-    test "allows for a generic before/3 and after/3 for all mutations" do
+    test "allows for a generic pre_apply/3 and post_apply/3 for all mutations" do
       pid = self()
 
       writer =
         Writer.allow(writer(), Support.Todo,
           table: "todos_local",
           load: &todo_get(&1, pid),
-          before: fn multi, changeset, ctx ->
-            send(pid, {:before, ctx.operation.operation, changeset_id(changeset)})
+          pre_apply: fn multi, changeset, ctx ->
+            send(pid, {:pre_apply, ctx.operation.operation, changeset_id(changeset)})
             multi
           end,
-          after: fn multi, changeset, ctx ->
-            send(pid, {:after, ctx.operation.operation, changeset_id(changeset)})
+          post_apply: fn multi, changeset, ctx ->
+            send(pid, {:post_apply, ctx.operation.operation, changeset_id(changeset)})
             multi
           end
         )
@@ -632,12 +632,12 @@ defmodule Phoenix.Sync.WriterTest do
 
       assert {:ok, _txid, _changes} = writer |> Writer.apply(changes) |> Writer.transaction(Repo)
 
-      assert_receive {:before, :insert, 98}
-      assert_receive {:before, :delete, 2}
-      assert_receive {:before, :update, 1}
-      assert_receive {:after, :insert, 98}
-      assert_receive {:after, :delete, 2}
-      assert_receive {:after, :update, 1}
+      assert_receive {:pre_apply, :insert, 98}
+      assert_receive {:pre_apply, :delete, 2}
+      assert_receive {:pre_apply, :update, 1}
+      assert_receive {:post_apply, :insert, 98}
+      assert_receive {:post_apply, :delete, 2}
+      assert_receive {:post_apply, :update, 1}
     end
 
     test "supports custom mutation message format", ctx do
@@ -774,7 +774,7 @@ defmodule Phoenix.Sync.WriterTest do
                |> Writer.apply(changes, Repo)
     end
 
-    test "before/after callbacks can use the model load function" do
+    test "pre_apply/post_apply callbacks can use the model load function" do
       pid = self()
 
       changes = [
@@ -801,7 +801,7 @@ defmodule Phoenix.Sync.WriterTest do
                Writer.new(format: {__MODULE__, :parse_transaction, []})
                |> Writer.allow(Support.Todo,
                  load: &todo_get(&1, pid),
-                 before: fn
+                 pre_apply: fn
                    multi, _changeset, %{index: 1} = ctx ->
                      assert {:ok, %Support.Todo{id: 98}} = Writer.fetch_or_load(ctx, id: 98)
                      multi
@@ -859,7 +859,7 @@ defmodule Phoenix.Sync.WriterTest do
         |> Writer.allow(Support.Todo,
           load: &todo_get(&1, pid),
           changeset: &todo_changeset(&1, &2, &3, pid),
-          insert: [after: &todo_after_insert(&1, &2, &3, pid)]
+          insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, pid)]
         )
 
       changes = [
