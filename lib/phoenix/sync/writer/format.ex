@@ -88,9 +88,11 @@ defmodule Phoenix.Sync.Writer.Format do
   """
   alias Phoenix.Sync.Writer.Transaction
 
+  @type parse_transaction_result() :: {:ok, Transaction.t()} | {:error, term()}
+
   @doc """
   Translate some data format into a `Phoenix.Sync.Writer.Transaction` with a
   list of operations to apply.
   """
-  @callback parse_transaction(term()) :: {:ok, Transaction.t()} | {:error, term()}
+  @callback parse_transaction(term()) :: parse_transaction_result()
 end

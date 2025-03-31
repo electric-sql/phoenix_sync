@@ -389,6 +389,7 @@ defmodule Phoenix.Sync.Writer do
 
   alias __MODULE__.Operation
   alias __MODULE__.Transaction
+  alias __MODULE__.Format
 
   @operation_options [
     changeset: [
@@ -438,7 +439,7 @@ defmodule Phoenix.Sync.Writer do
 
   @writer_schema NimbleOptions.new!(
                    format: [
-                     type: {:or, [:atom, {:fun, 1}, :mfa]},
+                     type: :atom,
                      doc: """
                      A module implementing the `#{inspect(__MODULE__.Format)}`
                      behaviour or a function that takes mutation data from the client and
@@ -455,7 +456,9 @@ defmodule Phoenix.Sync.Writer do
                      """,
                      type_spec:
                        quote(
-                         do: (transaction_data() -> {:ok, Transaction.t()} | {:error, term()})
+                         do:
+                           (transaction_data() -> Format.parse_transaction_result())
+                           | mfa()
                        )
                    ]
                  )
@@ -657,6 +660,9 @@ defmodule Phoenix.Sync.Writer do
   Supported options:
 
   #{NimbleOptions.docs(@writer_schema)}
+
+
+  You can either pass a `parser` function or a `format`.
 
   Empty writers will reject writes to any tables. You should configure writes
   to the permitted tables by calling `allow/3`.
