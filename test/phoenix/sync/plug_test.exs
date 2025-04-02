@@ -1,6 +1,7 @@
 defmodule Phoenix.Sync.PlugTest do
   use ExUnit.Case, async: true
-  use Plug.Test
+
+  import Plug.Test
 
   require Phoenix.ConnTest
 
