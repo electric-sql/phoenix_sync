@@ -79,12 +79,10 @@ defmodule Phoenix.Sync.Writer do
 
   This allows clients to monitor the read-path sync stream and match on the
   arrival of the same transaction id. When the client receives this transaction id
-  back through it's sync, it knows that it can discard the optimistic state for that
-  transaction.
-
-  This is a more robust way of managing optimistic state that just matching on
-  instant IDs, as it allows for local changes to be rebased on concurrent changes
-  to the same date from other users that stream through before the local transaction.
+  back through its sync stream, it knows that it can discard the local optimistic
+  state for that transaction. (This is a more robust way of managing optimistic state
+  than just matching on instance IDs, as it allows for local changes to be rebased
+  on concurrent changes to the same date from other users).
 
   `#{inspect(__MODULE__)}` uses `Ecto.Multi`'s transaction update mechanism
   under the hood, which means that either all the operations in a client
