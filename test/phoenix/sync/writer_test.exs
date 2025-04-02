@@ -135,14 +135,10 @@ defmodule Phoenix.Sync.WriterTest do
   describe "new/2" do
     test "accepts a schema and changeset fun", _ctx do
       assert %Writer{} =
-               Writer.allow(writer(), TodoNoChangeset,
-                 validate: &todo_changeset(&1, &2, &3, nil)
-               )
+               Writer.allow(writer(), TodoNoChangeset, validate: &todo_changeset(&1, &2, &3, nil))
 
       assert %Writer{} =
-               Writer.allow(writer(), TodoNoChangeset,
-                 validate: &todo_changeset(&1, &2, &3, nil)
-               )
+               Writer.allow(writer(), TodoNoChangeset, validate: &todo_changeset(&1, &2, &3, nil))
     end
 
     test "rejects non-schema module" do
