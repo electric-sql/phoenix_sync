@@ -1,7 +1,8 @@
 # Phoenix.Sync
 
+Real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications.
+
 <p>
-  <br />
   <a href="https://hexdocs.pm/phoenix_sync" target="_blank">
     <picture>
       <img alt="Phoenix sync illustration"
@@ -9,7 +10,6 @@
       />
     </picture>
   </a>
-  <br />
 </p>
 
 [![Hex.pm](https://img.shields.io/hexpm/v/phoenix_sync.svg)](https://hex.pm/packages/phoenix_sync)
@@ -18,25 +18,26 @@
 [![Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/electric-sql/phoenix_sync)
 [![Discord](https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord)](https://discord.electric-sql.com)
 
-Sync is the best way of building modern apps. Phoenix.Sync enables real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications.
-
 Documentation is available at [hexdocs.pm/phoenix_sync](https://hexdocs.pm/phoenix_sync).
 
-## Build real-time apps on locally synced data
+## Build real-time apps on sync
 
-- sync data into Elixir, `LiveView` and frontend web and mobile applications
+Phoenix.Sync is a library that adds real-time sync to Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications. Use it to sync data into both LiveView and front-end web and mobile applications.
+
 - integrates with `Plug` and `Phoenix.{Controller, LiveView, Router, Stream}`
-- uses [ElectricSQL](https://electric-sql.com) for scalable data delivery and fan out
-- maps `Ecto` queries to [Shapes](https://electric-sql.com/docs/guides/shapes) for partial replication
+- uses [ElectricSQL](https://electric-sql.com) for core sync, fan-out and data delivery
+- maps `Ecto.Query`s to [Shapes](https://electric-sql.com/docs/guides/shapes) for partial replication
 
-## Usage
-
-There are four key APIs:
+There are four key APIs for [read-path sync](#read-path-sync) out of Postgres:
 
 - [`Phoenix.Sync.Client.stream/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Client.html#stream/2) for low level usage in Elixir
-- [`Phoenix.Sync.LiveView.sync_stream/4`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.LiveView.html#sync_stream/4) to sync into a LiveView stream
-- [`Phoenix.Sync.Router.sync/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Router.html#sync/2) macro to expose a statically defined shape in your Router
-- [`Phoenix.Sync.Controller.sync_render/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Controller.html#sync_render/3) to expose dynamically constructed shapes from a Controller
+- [`Phoenix.Sync.LiveView.sync_stream/4`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.LiveView.html#sync_stream/4) to sync into a LiveView
+- [`Phoenix.Sync.Router.sync/2`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Router.html#sync/2) macro to expose a shape in your Router
+- [`Phoenix.Sync.Controller.sync_render/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Controller.html#sync_render/3) to return shapes from a Controller
+
+And a [`Phoenix.Sync.Writer`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html) module for handling [write-path sync](#write-path-sync) back into Postgres.
+
+## Read-path sync
 
 ### Low level usage in Elixir
 
@@ -151,6 +152,52 @@ const MyComponent = () => {
 ```
 
 See the Electric [demos](https://electric-sql.com/demos) and [documentation](https://electric-sql.com/demos) for more client-side usage examples.
+
+## Write-path sync
+
+The [`Phoenix.Sync.Writer`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html) module allows you to ingest batches of writes from the client.
+
+The idea is that the front-end can batch up [local optimistic writes](https://electric-sql.com/docs/guides/writes). For example using a library like [@TanStack/optimistic](https://github.com/TanStack/optimistic) or by [monitoring changes to a local embedded database](https://electric-sql.com/docs/guides/writes#through-the-db).
+
+These changes can be POSTed to a `Phoenix.Controller`, which then constructs a `Phoenix.Sync.Writer` instance. The writer instance authorizes and validates the writes before applying them to the database. Under the hood this uses `Ecto.Multi`, to ensure that transactions (batches of writes) are applied atomically.
+
+For example, the controller below handles local writes made to a project management app. It constructs a writer instance and pipes it through a series of [`Writer.allow/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html#allow/3) calls. These register functions against `Ecto.Schema`s (in this case `Projects.Project` and `Projects.Issue`):
+
+```elixir
+defmodule MutationController do
+  use Phoenix.Controller, formats: [:json]
+
+  alias Phoenix.Sync.Writer
+  alias Phoenix.Sync.Writer.Format
+
+  def mutate(conn, %{"transaction" => transaction} = _params) do
+    user_id = conn.assigns.user_id
+
+    {:ok, txid, _changes} =
+      Phoenix.Sync.Writer.new(format: Format.TanstackOptimistic)
+      |> Phoenix.Sync.Writer.allow(
+        Projects.Project,
+        check: reject_invalid_params/2,
+        load: &Projects.load_for_user(&1, user_id),
+        validate: &Projects.Project.changeset/2
+      )
+      |> Phoenix.Sync.Writer.allow(
+        Projects.Issue,
+        # Use the sensible defaults:
+        # load: Ecto.Repo.get_by(Projects.Issue, id: ^issue_id)
+        # validate: Projects.Issue.changeset/2
+        # etc.
+      )
+      |> Phoenix.Sync.Writer.apply(transaction, Repo)
+
+    render(conn, :mutations, txid: txid)
+  end
+end
+```
+
+This facilitates incrementally adding bi-directional sync support to a Phoenix application, re-using your existing auth and schema/validation logic.
+
+See the [`Phoenix.Sync.Writer`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html) module docs for more information.
 
 ## Installation and configuration
 
