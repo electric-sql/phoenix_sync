@@ -1,34 +1,48 @@
 defmodule Phoenix.Sync.Writer do
   @moduledoc """
-  Provides [optimistic write](https://electric-sql.com/docs/guides/writes)
-  support for Phoenix- or Plug-based apps.
+  Provides [write-path sync](https://electric-sql.com/docs/guides/writes) support for
+  Phoenix- or Plug-based apps.
 
-  Clients collect local transactional updates and then
-  submit these transactions as a list of database operations to the Phoenix/Plug
-  application.
+  Imagine you're building an application on sync. You've used the
+  [read-path sync utilities](https://hexdocs.pm/phoenix_sync/readme.md#read-path-sync)
+  to sync data into the front-end. If the client then changes the data locally, these
+  writes can be batched up and sent back to the server.
 
+  `#{inspect(__MODULE__)}` provides a principled way of ingesting these local writes
+  and applying them to Postgres. In a way that works-with and re-uses your existing
+  authorization logic and your existing `Ecto.Schema`s and `Ecto.Changeset` validation
+  functions.
+
+  This allows you to build instant, offline-capable applications that work with
+  [local optimistic state](https://electric-sql.com/docs/guides/writes).
+
+  For example, take a project management app that's using
+  [@TanStack/optimistic](https://github.com/TanStack/optimistic) to batch up local
+  optimistic writes and POST them to the `Phoenix.Controller` below:
 
       defmodule MutationController do
         use Phoenix.Controller, formats: [:json]
 
-        alias #{inspect(__MODULE__)}
+        alias Phoenix.Sync.Writer
+        alias Phoenix.Sync.Writer.Format
 
         def mutate(conn, %{"transaction" => transaction} = _params) do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+            Phoenix.Sync.Writer.new(format: Format.TanstackOptimistic)
             |> Phoenix.Sync.Writer.allow(
               Projects.Project,
-              # check writes against a Project just as your controller code would
-              check: &Projects.check_project(&1, conn.assigns),
-              # you can re-use your existing changeset/2 functions
+              check: reject_invalid_params/2,
+              load: &Projects.load_for_user(&1, user_id),
               validate: &Projects.Project.changeset/2
             )
             |> Phoenix.Sync.Writer.allow(
               Projects.Issue,
-              check: &Projects.check_issue(&1, conn.assigns),
-              # validate: defaults to Projects.Issue.changeset/2
+              # Use the sensible defaults:
+              # load: Ecto.Repo.get_by(Projects.Issue, id: ^issue_id)
+              # validate: Projects.Issue.changeset/2
+              # etc.
             )
             |> Phoenix.Sync.Writer.apply(transaction, Repo)
 
@@ -36,43 +50,58 @@ defmodule Phoenix.Sync.Writer do
         end
       end
 
+  The controller constructs a `#{inspect(__MODULE__)}` instance and pipes it
+  through a series of [`Writer.allow/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html#allow/3)
+  calls, registering functions against `Ecto.Schema`s (in this case `Projects.Project`
+  and `Projects.Issue`) to validate and authorize each of these mutation operations
+  before applying them as a single transaction.
+
   Local client writes are sent to the server as a list of mutations — a series
   of `INSERT`, `UPDATE` and `DELETE` operations and their associated data —
   with a single transaction represented by a single list of mutations.
 
-  Using `#{inspect(__MODULE__)}` your application can then validate each of
-  these mutation operations against its authentication and
-  authorization logic and then apply them as a single transaction.
+  > #### Warning {: .warning}
+  >
+  > The mutation operations received from clients MUST be considered as **untrusted**.
+  >
+  > Though the HTTP operation that uploaded them will have been authenticated and
+  > authorized by your existing Plug middleware as usual, the actual content of the
+  > request that is turned into writes against your database needs to be validated
+  > very carefully against the privileges of the current user.
+  >
+  > That's what `#{inspect(__MODULE__)}` is for: specifying which resources can be
+  > updated and registering functions to authorize and validate the mutation payload.
 
-  The Postgres transaction id is returned to the client so that its optimistic
-  update system can watch the Electric stream and match on the arrival of this
-  transaction id.
+  ## Transactions
 
-  When the client receives this transaction id back through it's Electric sync
-  stream then the client knows that it's up-to-date with the server.
+  The `{:ok, txid, changes}` return value from `Phoenix.Sync.Writer.apply/3`
+  allows the Postgres transaction ID to be returned to the client in the response data.
+
+  This allows clients to monitor the read-path sync stream and match on the
+  arrival of the same transaction id. When the client receives this transaction id
+  back through it's sync, it knows that it can discard the optimistic state for that
+  transaction.
+
+  This is a more robust way of managing optimistic state that just matching on
+  instant IDs, as it allows for local changes to be rebased on concurrent changes
+  to the same date from other users that stream through before the local transaction.
 
   `#{inspect(__MODULE__)}` uses `Ecto.Multi`'s transaction update mechanism
   under the hood, which means that either all the operations in a client
   transaction are accepted or none are. See `apply/2` for how you can hook
   into the `Ecto.Multi` after applying your change data.
 
-  > #### Warning {: .warning}
-  >
-  > The mutation operations received from clients should be considered as **untrusted**.
-  >
-  > Though the HTTP operation that uploaded them will have been authenticated and
-  > authorized by your existing Plug middleware as usual, the actual content of the
-  > request that is turned into writes against your database needs to be validated
-  > very carefully against the privileges of the current user.
-
   ## Client Libraries
 
-  `#{inspect(__MODULE__)}` does not require any particular client-side
-  implementation, see Electric's [write pattern guides and example
-  code](https://electric-sql.com/docs/guides/writes) for implementation
-  strategies and examples.
+  `#{inspect(__MODULE__)}` is not coupled to any particular client-side implementation.
+  See Electric's [write pattern guides and example code](https://electric-sql.com/docs/guides/writes)
+  for implementation strategies and examples.
 
-  ### Existing libraries
+  Instead, `#{inspect(__MODULE__)}` provides an adapter pattern where you can register
+  a `format` adapter to parse the expected payload format from a client side library
+  into the struct that `#{inspect(__MODULE__)}` expects.
+
+  The currently supported format adapters are:
 
   - [TanStack/optimistic](https://github.com/TanStack/optimistic) "A library
     for creating fast optimistic updates with flexible backend support that pairs
@@ -84,32 +113,38 @@ defmodule Phoenix.Sync.Writer do
 
   ## Usage
 
-  Much as every controller action must be both authenticated and authorized to
-  prevent users affecting data that they do not have permission to modify,
-  mutations **MUST** be validated for both correctness — are the given values
-  valid? — and permissions: is the current user allowed to perform the given
-  mutation?
+  Much as every controller action must be authenticated, authorized and validated
+  to prevent users writing invalid data or data that they do not have permission
+  to modify, mutations **MUST** be validated for both correctness (are the given
+  values valid?) and permissions (is the current user allowed to apply the given
+  mutation?).
 
-  This dual verification, data and permissions, is performed by the combination
-  of 5 application-defined callbacks for every model that you allow writes to:
+  This dual verification -- of data and permissions -- is performed by a pipeline
+  of application-defined callbacks for every model that you allow writes to:
 
-  - [`check`](#module-check-function) - a function that tests operations against the
-    application's authentication/authorization logic.
-  - [`load`](#module-load-function) - a function that takes the original data and returns the
-    existing model from the database.
-  - [`validate`](#module-validate-function) - create and validate an `Ecto.Changeset` from the
-    source data and mutation changes.
-  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply-callbacks) - add arbitrary
-    `Ecto.Multi` operations to the transaction based on the current operation.
+  - [`check`](#module-check-function) - a function that performs a "pre-flight"
+    sanity check of the user-provided data in the mutation; this should just
+    validate the data and not usually hit the database; checks are performed on
+    all operations in a transaction before proceeding to the next steps in the
+    pipeline; this allows for fast rejection of invalid data before performing
+    more expensive operations
+  - [`load`](#module-load-function) - a function that takes the original data
+    and returns the existing model from the database, if it exists, for an update
+    or delete operation
+  - [`validate`](#module-validate-function) - create and validate an `Ecto.Changeset`
+    from the source data and mutation changes; this is intended to be compatible with
+    using existing schema changeset functions; note that, as per any changeset function,
+    the validate function can perform both authorization and validation
+  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply-callbacks) - add
+    arbitrary `Ecto.Multi` operations to the transaction based on the current operation
 
-  See `apply/2` for how the transaction is processed internally and so how best
-  to use these callback functions to express your apps authoriziation
+  See `apply/2` for how the transaction is processed internally and how best to
+  use these callback functions to express your app's authorization and validation
   requirements.
 
   Calling `new/1` creates an empty writer configuration with the given mutation
-  parser. But this alone does not permit any mutations. In order to allow
-  writes from clients you must call `allow/3` with a schema module and some
-  callback functions.
+  parser. But this alone does not permit any mutations. In order to allow writes
+  from clients you must call `allow/3` with a schema module and some callback functions.
 
       # create an empty writer configuration which accepts writes in the given format
       writer = #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
@@ -119,8 +154,8 @@ defmodule Phoenix.Sync.Writer do
       # touching the database
       writer = #{inspect(__MODULE__)}.allow(writer, Todos.Todo, check: &Todos.check_mutation/1)
 
-  If the table name on the client differs from the Postgres table, then you add
-  a `table` option that specifies the client table name that this `allow/3`
+  If the table name on the client differs from the Postgres table, then you can
+  add a `table` option that specifies the client table name that this `allow/3`
   call applies to:
 
       # `client_todos` is the name of the `todos` table on the clients
@@ -150,15 +185,18 @@ defmodule Phoenix.Sync.Writer do
   quick check of the data from the clients before any reads or writes to the
   database.
 
+  Note that the writer pipeline checks all the operations before proceeding to
+  load, validate and apply each operation in turn.
+
       def check(%#{inspect(__MODULE__.Operation)}{} = operation) do
         # :ok or {:error, "..."}
       end
 
   ### Load
 
-  The `load` callback takes the `data` in `update` or `delete` mutations, that is the original
-  data before changes, and uses it to retreive the original `Ecto.Struct` model
-  from the database.
+  The `load` callback takes the `data` in `update` or `delete` mutations (i.e.:
+  the original data before changes), and uses it to retrieve the original
+  `Ecto.Struct` model from the database.
 
   It can be a 1- or 2-arity function. The 1-arity version receives just the
   `data` parameters. The 2-arity version receives the `Ecto.Repo` that the
@@ -177,8 +215,8 @@ defmodule Phoenix.Sync.Writer do
   If not provided defaults to using `c:Ecto.Repo.get_by/3` using the primary
   key(s) defined on the model.
 
-  For `insert` operations this load function is not used, the original struct
-  is created by calling the `__struct__/0` function on the `Ecto.Schema`
+  For `insert` operations this load function is not used. Instead, the original
+  struct is created by calling the `__struct__/0` function on the `Ecto.Schema`
   module.
 
   ### Validate
