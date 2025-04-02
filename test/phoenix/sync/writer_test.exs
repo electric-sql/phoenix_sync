@@ -102,8 +102,8 @@ defmodule Phoenix.Sync.WriterTest do
     Repo.get_by(Support.Todo, id: id)
   end
 
-  def todo_preflight(operation, pid) do
-    notify(pid, {:todo, :preflight, operation})
+  def todo_check(operation, pid) do
+    notify(pid, {:todo, :check, operation})
     :ok
   end
 
@@ -136,12 +136,12 @@ defmodule Phoenix.Sync.WriterTest do
     test "accepts a schema and changeset fun", _ctx do
       assert %Writer{} =
                Writer.allow(writer(), TodoNoChangeset,
-                 changeset: &todo_changeset(&1, &2, &3, nil)
+                 validate: &todo_changeset(&1, &2, &3, nil)
                )
 
       assert %Writer{} =
                Writer.allow(writer(), TodoNoChangeset,
-                 changeset: &todo_changeset(&1, &2, &3, nil)
+                 validate: &todo_changeset(&1, &2, &3, nil)
                )
     end
 
@@ -162,19 +162,19 @@ defmodule Phoenix.Sync.WriterTest do
                  # defaults to Repo.get!(Todo, <id>)
                  load: &todo_get(&1, pid),
                  accept: [:insert, :update, :delete],
-                 preflight: &todo_preflight(&1, pid),
+                 check: &todo_check(&1, pid),
                  insert: [
-                   changeset: &todo_insert_changeset(&1, &2, pid),
+                   validate: &todo_insert_changeset(&1, &2, pid),
                    post_apply: &todo_post_apply_insert(&1, &2, &3, pid),
                    pre_apply: &todo_pre_apply_insert(&1, &2, &3, pid)
                  ],
                  update: [
-                   changeset: &todo_update_changeset(&1, &2, pid),
+                   validate: &todo_update_changeset(&1, &2, pid),
                    post_apply: &todo_post_apply_update(&1, &2, &3, pid),
                    pre_apply: &todo_pre_apply_update(&1, &2, &3, pid)
                  ],
                  delete: [
-                   changeset: &todo_delete_changeset(&1, &2, pid),
+                   validate: &todo_delete_changeset(&1, &2, pid),
                    post_apply: &todo_post_apply_delete(&1, &2, &3, pid),
                    pre_apply: &todo_pre_apply_delete(&1, &2, &3, pid)
                  ]
@@ -207,19 +207,19 @@ defmodule Phoenix.Sync.WriterTest do
           table: "todos_local",
           load: &todo_get(&1, pid),
           accept: [:insert, :update, :delete],
-          preflight: &todo_preflight(&1, pid),
+          check: &todo_check(&1, pid),
           insert: [
-            changeset: &todo_insert_changeset(&1, &2, pid),
+            validate: &todo_insert_changeset(&1, &2, pid),
             post_apply: &todo_post_apply_insert(&1, &2, &3, pid),
             pre_apply: &todo_pre_apply_insert(&1, &2, &3, pid)
           ],
           update: [
-            changeset: &todo_update_changeset(&1, &2, pid),
+            validate: &todo_update_changeset(&1, &2, pid),
             post_apply: &todo_post_apply_update(&1, &2, &3, pid),
             pre_apply: &todo_pre_apply_update(&1, &2, &3, pid)
           ],
           delete: [
-            changeset: &todo_delete_changeset(&1, &2, pid),
+            validate: &todo_delete_changeset(&1, &2, pid),
             post_apply: &todo_post_apply_delete(&1, &2, &3, pid),
             pre_apply: &todo_pre_apply_delete(&1, &2, &3, pid)
           ]
@@ -355,7 +355,7 @@ defmodule Phoenix.Sync.WriterTest do
         Writer.allow(writer(), Support.Todo,
           table: "todos_local",
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, pid)
+          validate: &todo_changeset(&1, &2, &3, pid)
         )
 
       changes = [
@@ -391,7 +391,7 @@ defmodule Phoenix.Sync.WriterTest do
         Writer.allow(writer(), Support.Todo,
           table: "todos_local",
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, pid)
+          validate: &todo_changeset(&1, &2, &3, pid)
         )
 
       changes = [
@@ -415,7 +415,7 @@ defmodule Phoenix.Sync.WriterTest do
           table: "todos_local",
           load: &todo_get(&1, pid),
           accept: [:insert, :update],
-          changeset: &todo_changeset(&1, &2, &3, pid)
+          validate: &todo_changeset(&1, &2, &3, pid)
         )
 
       changes = [
@@ -437,22 +437,22 @@ defmodule Phoenix.Sync.WriterTest do
         }
       ]
 
-      assert {:error, :preflight, %Writer.Error{}, _changes} =
+      assert {:error, :check, %Writer.Error{}, _changes} =
                writer |> Writer.apply(changes) |> Writer.transaction(Repo)
     end
 
-    test "rejects any txn that fails the preflight test" do
+    test "rejects any txn that fails the check test" do
       pid = self()
 
       writer =
         Writer.allow(writer(), Support.Todo,
           table: "todos_local",
           load: &todo_get(&1, pid),
-          preflight: fn
+          check: fn
             %{operation: :delete} -> {:error, "no deletes!"}
             _op -> :ok
           end,
-          changeset: &todo_changeset(&1, &2, &3, pid)
+          validate: &todo_changeset(&1, &2, &3, pid)
         )
 
       changes = [
@@ -474,7 +474,7 @@ defmodule Phoenix.Sync.WriterTest do
         }
       ]
 
-      assert {:error, :preflight, %Writer.Error{message: "no deletes!"}, _changes} =
+      assert {:error, :check, %Writer.Error{message: "no deletes!"}, _changes} =
                writer |> Writer.apply(changes) |> Writer.transaction(Repo)
     end
 
@@ -487,13 +487,13 @@ defmodule Phoenix.Sync.WriterTest do
         writer()
         |> Writer.allow(Support.Todo,
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, {pid, todo1_ref}),
+          validate: &todo_changeset(&1, &2, &3, {pid, todo1_ref}),
           insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, {pid, todo1_ref})]
         )
         |> Writer.allow(Support.Todo,
           table: "todos_2",
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, {pid, todo2_ref}),
+          validate: &todo_changeset(&1, &2, &3, {pid, todo2_ref}),
           insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, {pid, todo2_ref})]
         )
 
@@ -526,7 +526,7 @@ defmodule Phoenix.Sync.WriterTest do
         writer()
         |> Writer.allow(Support.Todo,
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, pid),
+          validate: &todo_changeset(&1, &2, &3, pid),
           insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, pid)]
         )
 
@@ -560,7 +560,7 @@ defmodule Phoenix.Sync.WriterTest do
         |> Writer.allow(Support.Todo,
           table: ["public", "todos"],
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, pid),
+          validate: &todo_changeset(&1, &2, &3, pid),
           insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, pid)]
         )
 
@@ -579,7 +579,7 @@ defmodule Phoenix.Sync.WriterTest do
 
       # we have specified allow/2 with a fully qualified table so only one of the
       # inserts matches
-      assert {:error, :preflight, %Writer.Error{}, _changes} =
+      assert {:error, :check, %Writer.Error{}, _changes} =
                writer |> Writer.apply(changes) |> Writer.transaction(Repo)
     end
 
@@ -591,7 +591,7 @@ defmodule Phoenix.Sync.WriterTest do
           table: "todos_local",
           load: &todo_get(&1, pid),
           delete: [
-            changeset: &delete_changeset(&1, pid)
+            validate: &delete_changeset(&1, pid)
           ]
         )
 
@@ -911,7 +911,7 @@ defmodule Phoenix.Sync.WriterTest do
         writer()
         |> Writer.allow(Support.Todo,
           load: &todo_get(&1, pid),
-          changeset: &todo_changeset(&1, &2, &3, pid),
+          validate: &todo_changeset(&1, &2, &3, pid),
           insert: [post_apply: &todo_post_apply_insert(&1, &2, &3, pid)]
         )
 
