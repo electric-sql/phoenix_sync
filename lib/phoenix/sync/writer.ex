@@ -573,8 +573,7 @@ defmodule Phoenix.Sync.Writer do
                   check: [
                     type: {:fun, 1},
                     doc: """
-                    A function for check checks that validate the parameters passed to the
-                    pending %#{inspect(__MODULE__.Operation)}{}.
+                    A function that validates every %#{inspect(__MODULE__.Operation)}{} in the transaction for correctness.
 
                     This is run before any database access is performed and so provides an
                     efficient way to prevent malicious writes without hitting your database.
