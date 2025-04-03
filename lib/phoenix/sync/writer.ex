@@ -585,7 +585,7 @@ defmodule Phoenix.Sync.Writer do
                   before_all: [
                     type: {:fun, 1},
                     doc: """
-                    Run only once (per transaction) after the parsing and check checks have
+                    Run only once (per transaction) after the parsing and `check` callback have
                     completed and before load and validation functions run.
 
                     Useful for pre-loading data from the database that can be shared across
