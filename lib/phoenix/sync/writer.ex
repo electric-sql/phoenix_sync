@@ -988,7 +988,8 @@ defmodule Phoenix.Sync.Writer do
 
       invalid ->
         raise ArgumentError,
-          message: "Invalid check function. Expected a 1-arity function but got #{inspect(invalid)}"
+          message:
+            "Invalid check function. Expected a 1-arity function but got #{inspect(invalid)}"
     end
   end
 
