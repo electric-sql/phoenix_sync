@@ -150,7 +150,7 @@ const MyComponent = () => {
 };
 ```
 
-See the Electric [demos](https://electric-sql.com/demos) and [documentation](https://electric-sql.com/demos) for more client-side usage examples.
+See the Electric [demos](https://electric-sql.com/demos) and [documentation](https://electric-sql.com/docs) for more client-side usage examples.
 
 ## Installation and configuration
 
