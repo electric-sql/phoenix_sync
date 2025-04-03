@@ -586,7 +586,7 @@ defmodule Phoenix.Sync.Writer do
                     type: {:fun, 1},
                     doc: """
                     Run only once (per transaction) after the parsing and `check` callback have
-                    completed and before load and validation functions run.
+                    completed and before `load` and `validate` functions run.
 
                     Useful for pre-loading data from the database that can be shared across
                     all operation callbacks for all the mutations.
