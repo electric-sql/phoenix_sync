@@ -929,6 +929,38 @@ defmodule Phoenix.Sync.WriterTest do
     end
   end
 
+  describe "transaction/3" do
+    setup [:with_repo, :with_todos]
+
+    test "supports a function and returns the {:ok, txid, result} tuple" do
+      changeset =
+        Ecto.Changeset.change(%Support.Todo{}, %{id: 1111, title: "my todo", completed: false})
+
+      assert {:ok, txid, %Support.Todo{title: "my todo"}} =
+               Writer.transaction(
+                 fn repo ->
+                   assert repo == Repo
+                   repo.insert!(changeset)
+                 end,
+                 Repo
+               )
+
+      assert is_integer(txid)
+    end
+
+    test "supports any Ecto.Multi argument and returns the txid" do
+      changeset =
+        Ecto.Changeset.change(%Support.Todo{}, %{id: 1111, title: "my todo", completed: false})
+
+      multi = Ecto.Multi.insert(Ecto.Multi.new(), :todo, changeset)
+
+      assert {:ok, txid, %{todo: %Support.Todo{title: "my todo"}}} =
+               Writer.transaction(multi, Repo)
+
+      assert is_integer(txid)
+    end
+  end
+
   def parse_transaction(m) when is_list(m) do
     with {:ok, operations} <-
            Writer.Transaction.parse_operations(m, fn op ->

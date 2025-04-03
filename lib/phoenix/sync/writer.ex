@@ -1160,15 +1160,26 @@ defmodule Phoenix.Sync.Writer do
 
   @txn_name {:__phoenix_sync__, :txn}
   @txid_name {:__phoenix_sync__, :txid}
+  @txid_query "SELECT txid_current() as txid"
 
   defp start_multi(txn) do
     Ecto.Multi.new()
+    |> txid_step()
     |> Ecto.Multi.put(@txn_name, txn)
-    |> Ecto.Multi.run(@txid_name, fn repo, _ ->
-      with {:ok, %{rows: [[txid]]}} <- repo.query("SELECT txid_current() as txid") do
+  end
+
+  defp txid_step(multi \\ Ecto.Multi.new()) do
+    Ecto.Multi.run(multi, @txid_name, fn repo, _ ->
+      with {:ok, %{rows: [[txid]]}} <- repo.query(@txid_query) do
         {:ok, txid}
       end
     end)
+  end
+
+  defp has_txid_step?(multi) do
+    multi
+    |> Ecto.Multi.to_list()
+    |> Enum.any?(fn {name, _} -> name == @txid_name end)
   end
 
   defp apply_change(multi, %Operation{} = op, %__MODULE__{} = writer) do
@@ -1455,15 +1466,50 @@ defmodule Phoenix.Sync.Writer do
               end)
             Plug.Conn.send_resp(conn, 400, Jason.encode!(error))
           end
+
+  Also supports normal fun/0 or fun/1 style transactions much like
+  `Ecto.Repo.transaction/2`, returning the txid of the operation:
+
+      {:ok, txid, todo} =
+        Phoenix.Sync.Writer.transaction(fn ->
+          Repo.insert!(changeset)
+        end, Repo)
   """
   @spec transaction(Ecto.Multi.t(), Ecto.Repo.t(), keyword()) ::
           {:ok, txid(), Ecto.Multi.changes()} | Ecto.Multi.failure()
   def transaction(multi, repo, opts \\ [])
 
   def transaction(%Ecto.Multi{} = multi, repo, opts) when is_atom(repo) do
-    with {:ok, changes} <- repo.transaction(multi, opts) do
+    wrapped_multi =
+      if has_txid_step?(multi) do
+        multi
+      else
+        Ecto.Multi.prepend(multi, txid_step())
+      end
+
+    with {:ok, changes} <- repo.transaction(wrapped_multi, opts) do
       {txid, changes} = Map.pop!(changes, @txid_name)
       {:ok, txid, changes}
+    end
+  end
+
+  def transaction(fun, repo, opts) when is_function(fun) and is_atom(repo) do
+    with {:ok, {txid, result}} <-
+           repo.transaction(
+             fn ->
+               %{rows: [[txid]]} = repo.query!(@txid_query)
+
+               result =
+                 case fun do
+                   fun0 when is_function(fun0, 0) -> fun.()
+                   fun1 when is_function(fun1, 1) -> fun1.(repo)
+                 end
+
+               {txid, result}
+             end,
+             opts
+           ) do
+      {:ok, txid, result}
     end
   end
 
