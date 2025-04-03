@@ -96,7 +96,7 @@ defmodule Phoenix.Sync.Writer do
   for implementation strategies and examples.
 
   Instead, `#{inspect(__MODULE__)}` provides an adapter pattern where you can register
-  a `format` adapter to parse the expected payload format from a client side library
+  a `format` adapter or `parser` function to parse the expected payload format from a client side library
   into the struct that `#{inspect(__MODULE__)}` expects.
 
   The currently supported format adapters are:
