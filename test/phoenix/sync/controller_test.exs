@@ -17,8 +17,9 @@ defmodule Phoenix.Sync.ControllerTest do
       }
     ]
 
-  use Plug.Test
   use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
+
+  import Plug.Test
 
   require Phoenix.ConnTest
 
