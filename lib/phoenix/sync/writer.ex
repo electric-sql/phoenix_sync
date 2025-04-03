@@ -89,6 +89,12 @@ defmodule Phoenix.Sync.Writer do
   transaction are accepted or none are. See `apply/2` for how you can hook
   into the `Ecto.Multi` after applying your change data.
 
+  > #### Compatibility {: .info}
+  >
+  > `#{inspect(__MODULE__)}` can only return transaction ids when connecting to
+  > a Postgres database (a repo with `adapter: Ecto.Adapters.Postgres`). You can
+  > use this module for other databases, but the returned txid will be `nil`.
+
   ## Client Libraries
 
   `#{inspect(__MODULE__)}` is not coupled to any particular client-side implementation.
@@ -434,6 +440,7 @@ defmodule Phoenix.Sync.Writer do
   end
 
   require Record
+  require Logger
 
   Record.defrecordp(:opkey, schema: nil, operation: nil, index: 0, pk: nil)
 
@@ -1171,8 +1178,15 @@ defmodule Phoenix.Sync.Writer do
 
   defp txid_step(multi \\ Ecto.Multi.new()) do
     Ecto.Multi.run(multi, @txid_name, fn repo, _ ->
-      with {:ok, %{rows: [[txid]]}} <- repo.query(@txid_query) do
-        {:ok, txid}
+      case repo.__adapter__() do
+        Ecto.Adapters.Postgres ->
+          with {:ok, %{rows: [[txid]]}} <- repo.query(@txid_query) do
+            {:ok, txid}
+          end
+
+        adapter ->
+          Logger.warning("Unsupported adapter #{adapter}. txid will be nil")
+          {:ok, nil}
       end
     end)
   end
@@ -1469,7 +1483,7 @@ defmodule Phoenix.Sync.Writer do
           end
 
   Also supports normal fun/0 or fun/1 style transactions much like
-  `Ecto.Repo.transaction/2`, returning the txid of the operation:
+  `c:Ecto.Repo.transaction/2`, returning the txid of the operation:
 
       {:ok, txid, todo} =
         Phoenix.Sync.Writer.transaction(fn ->
