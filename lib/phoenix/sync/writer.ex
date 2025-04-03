@@ -1,34 +1,48 @@
 defmodule Phoenix.Sync.Writer do
   @moduledoc """
-  Provides [optimistic write](https://electric-sql.com/docs/guides/writes)
-  support for Phoenix- or Plug-based apps.
+  Provides [write-path sync](https://electric-sql.com/docs/guides/writes) support for
+  Phoenix- or Plug-based apps.
 
-  Clients collect local transactional updates and then
-  submit these transactions as a list of database operations to the Phoenix/Plug
-  application.
+  Imagine you're building an application on sync. You've used the
+  [read-path sync utilities](https://hexdocs.pm/phoenix_sync/readme.md#read-path-sync)
+  to sync data into the front-end. If the client then changes the data locally, these
+  writes can be batched up and sent back to the server.
 
+  `#{inspect(__MODULE__)}` provides a principled way of ingesting these local writes
+  and applying them to Postgres. In a way that works-with and re-uses your existing
+  authorization logic and your existing `Ecto.Schema`s and `Ecto.Changeset` validation
+  functions.
+
+  This allows you to build instant, offline-capable applications that work with
+  [local optimistic state](https://electric-sql.com/docs/guides/writes).
+
+  For example, take a project management app that's using
+  [@TanStack/optimistic](https://github.com/TanStack/optimistic) to batch up local
+  optimistic writes and POST them to the `Phoenix.Controller` below:
 
       defmodule MutationController do
         use Phoenix.Controller, formats: [:json]
 
-        alias #{inspect(__MODULE__)}
+        alias Phoenix.Sync.Writer
+        alias Phoenix.Sync.Writer.Format
 
         def mutate(conn, %{"transaction" => transaction} = _params) do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+            Phoenix.Sync.Writer.new(format: Format.TanstackOptimistic)
             |> Phoenix.Sync.Writer.allow(
               Projects.Project,
-              # preflight writes against a Project just as your controller code would
-              preflight: &Projects.preflight_project(&1, conn.assigns),
-              # you can re-use your existing changeset/2 functions
-              changeset: &Projects.Project.changeset/2
+              check: reject_invalid_params/2,
+              load: &Projects.load_for_user(&1, user_id),
+              validate: &Projects.Project.changeset/2
             )
             |> Phoenix.Sync.Writer.allow(
               Projects.Issue,
-              preflight: &Projects.preflight_issue(&1, conn.assigns),
-              # changeset defaults to Projects.Issue.changeset/2
+              # Use the sensible defaults:
+              # load: Ecto.Repo.get_by(Projects.Issue, id: ^issue_id)
+              # validate: Projects.Issue.changeset/2
+              # etc.
             )
             |> Phoenix.Sync.Writer.apply(transaction, Repo)
 
@@ -36,43 +50,56 @@ defmodule Phoenix.Sync.Writer do
         end
       end
 
+  The controller constructs a `#{inspect(__MODULE__)}` instance and pipes it
+  through a series of [`Writer.allow/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html#allow/3)
+  calls, registering functions against `Ecto.Schema`s (in this case `Projects.Project`
+  and `Projects.Issue`) to validate and authorize each of these mutation operations
+  before applying them as a single transaction.
+
   Local client writes are sent to the server as a list of mutations — a series
   of `INSERT`, `UPDATE` and `DELETE` operations and their associated data —
   with a single transaction represented by a single list of mutations.
 
-  Using `#{inspect(__MODULE__)}` your application can then validate each of
-  these mutation operations against its authentication and
-  authorization logic and then apply them as a single transaction.
+  > #### Warning {: .warning}
+  >
+  > The mutation operations received from clients MUST be considered as **untrusted**.
+  >
+  > Though the HTTP operation that uploaded them will have been authenticated and
+  > authorized by your existing Plug middleware as usual, the actual content of the
+  > request that is turned into writes against your database needs to be validated
+  > very carefully against the privileges of the current user.
+  >
+  > That's what `#{inspect(__MODULE__)}` is for: specifying which resources can be
+  > updated and registering functions to authorize and validate the mutation payload.
 
-  The Postgres transaction id is returned to the client so that its optimistic
-  update system can watch the Electric stream and match on the arrival of this
-  transaction id.
+  ## Transactions
 
-  When the client receives this transaction id back through it's Electric sync
-  stream then the client knows that it's up-to-date with the server.
+  The `{:ok, txid, changes}` return value from `Phoenix.Sync.Writer.apply/3`
+  allows the Postgres transaction ID to be returned to the client in the response data.
+
+  This allows clients to monitor the read-path sync stream and match on the
+  arrival of the same transaction id. When the client receives this transaction id
+  back through its sync stream, it knows that it can discard the local optimistic
+  state for that transaction. (This is a more robust way of managing optimistic state
+  than just matching on instance IDs, as it allows for local changes to be rebased
+  on concurrent changes to the same date from other users).
 
   `#{inspect(__MODULE__)}` uses `Ecto.Multi`'s transaction update mechanism
   under the hood, which means that either all the operations in a client
   transaction are accepted or none are. See `apply/2` for how you can hook
   into the `Ecto.Multi` after applying your change data.
 
-  > #### Warning {: .warning}
-  >
-  > The mutation operations received from clients should be considered as **untrusted**.
-  >
-  > Though the HTTP operation that uploaded them will have been authenticated and
-  > authorized by your existing Plug middleware as usual, the actual content of the
-  > request that is turned into writes against your database needs to be validated
-  > very carefully against the privileges of the current user.
-
   ## Client Libraries
 
-  `#{inspect(__MODULE__)}` does not require any particular client-side
-  implementation, see Electric's [write pattern guides and example
-  code](https://electric-sql.com/docs/guides/writes) for implementation
-  strategies and examples.
+  `#{inspect(__MODULE__)}` is not coupled to any particular client-side implementation.
+  See Electric's [write pattern guides and example code](https://electric-sql.com/docs/guides/writes)
+  for implementation strategies and examples.
 
-  ### Existing libraries
+  Instead, `#{inspect(__MODULE__)}` provides an adapter pattern where you can register
+  a `format` adapter or `parser` function to parse the expected payload format from a client side library
+  into the struct that `#{inspect(__MODULE__)}` expects.
+
+  The currently supported format adapters are:
 
   - [TanStack/optimistic](https://github.com/TanStack/optimistic) "A library
     for creating fast optimistic updates with flexible backend support that pairs
@@ -84,43 +111,49 @@ defmodule Phoenix.Sync.Writer do
 
   ## Usage
 
-  Much as every controller action must be both authenticated and authorized to
-  prevent users affecting data that they do not have permission to modify,
-  mutations **MUST** be validated for both correctness — are the given values
-  valid? — and permissions: is the current user allowed to perform the given
-  mutation?
+  Much as every controller action must be authenticated, authorized and validated
+  to prevent users writing invalid data or data that they do not have permission
+  to modify, mutations **MUST** be validated for both correctness (are the given
+  values valid?) and permissions (is the current user allowed to apply the given
+  mutation?).
 
-  This dual verification, data and permissions, is performed by the combination
-  of 5 application-defined callbacks for every model that you allow writes to:
+  This dual verification -- of data and permissions -- is performed by a pipeline
+  of application-defined callbacks for every model that you allow writes to:
 
-  - [`preflight`](#module-preflight-function) - a function that tests operations against the
-    application's authentication/authorization logic.
-  - [`load`](#module-load-function) - a function that takes the original data and returns the
-    existing model from the database.
-  - [`changeset`](#module-changeset-function) - create and validate an `Ecto.Changeset` from the
-    source data and mutation changes.
-  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply-callbacks) - add arbitrary
-    `Ecto.Multi` operations to the transaction based on the current operation.
+  - [`check`](#module-check-function) - a function that performs a "pre-flight"
+    sanity check of the user-provided data in the mutation; this should just
+    validate the data and not usually hit the database; checks are performed on
+    all operations in a transaction before proceeding to the next steps in the
+    pipeline; this allows for fast rejection of invalid data before performing
+    more expensive operations
+  - [`load`](#module-load-function) - a function that takes the original data
+    and returns the existing model from the database, if it exists, for an update
+    or delete operation
+  - [`validate`](#module-validate-function) - create and validate an `Ecto.Changeset`
+    from the source data and mutation changes; this is intended to be compatible with
+    using existing schema changeset functions; note that, as per any changeset function,
+    the validate function can perform both authorization and validation
+  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply-callbacks) - add
+    arbitrary `Ecto.Multi` operations to the transaction based on the current operation
 
-  See `apply/2` for how the transaction is processed internally and so how best
-  to use these callback functions to express your apps authoriziation
+  See `apply/2` for how the transaction is processed internally and how best to
+  use these callback functions to express your app's authorization and validation
   requirements.
 
   Calling `new/1` creates an empty writer configuration with the given mutation
-  parser. But this alone does not permit any mutations. In order to allow
-  writes from clients you must call `allow/3` with a schema module and some
-  callback functions.
+  parser. But this alone does not permit any mutations. In order to allow writes
+  from clients you must call `allow/3` with a schema module and some callback functions.
 
       # create an empty writer configuration which accepts writes in the given format
       writer = #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
 
       # allow writes to the `Todos.Todo` table
-      # using `Todos.preflight_mutation/1` to validate mutation data before
+      # using `Todos.check_mutation/1` to validate mutation data before
       # touching the database
-      writer = #{inspect(__MODULE__)}.allow(writer, Todos.Todo, preflight: &Todos.preflight_mutation/1)
+      writer = #{inspect(__MODULE__)}.allow(writer, Todos.Todo, check: &Todos.check_mutation/1)
 
-  If the table name on the client differs from the Postgres table, then you add
-  a `table` option that specifies the client table name that this `allow/3`
+  If the table name on the client differs from the Postgres table, then you can
+  add a `table` option that specifies the client table name that this `allow/3`
   call applies to:
 
       # `client_todos` is the name of the `todos` table on the clients
@@ -134,9 +167,9 @@ defmodule Phoenix.Sync.Writer do
 
   ## Callbacks
 
-  ### Preflight function
+  ### Check
 
-  The `preflight` option should be a 1-arity function whose purpose is to test
+  The `check` option should be a 1-arity function whose purpose is to test
   the mutation data against the authorization rules for the application and
   model before attempting any database access.
 
@@ -150,15 +183,18 @@ defmodule Phoenix.Sync.Writer do
   quick check of the data from the clients before any reads or writes to the
   database.
 
-      def preflight(%#{inspect(__MODULE__.Operation)}{} = operation) do
+  Note that the writer pipeline checks all the operations before proceeding to
+  load, validate and apply each operation in turn.
+
+      def check(%#{inspect(__MODULE__.Operation)}{} = operation) do
         # :ok or {:error, "..."}
       end
 
-  ### Load function
+  ### Load
 
-  The `load` callback takes the `data` in `update` or `delete` mutations, that is the original
-  data before changes, and uses it to retreive the original `Ecto.Struct` model
-  from the database.
+  The `load` callback takes the `data` in `update` or `delete` mutations (i.e.:
+  the original data before changes), and uses it to retrieve the original
+  `Ecto.Struct` model from the database.
 
   It can be a 1- or 2-arity function. The 1-arity version receives just the
   `data` parameters. The 2-arity version receives the `Ecto.Repo` that the
@@ -177,13 +213,13 @@ defmodule Phoenix.Sync.Writer do
   If not provided defaults to using `c:Ecto.Repo.get_by/3` using the primary
   key(s) defined on the model.
 
-  For `insert` operations this load function is not used, the original struct
-  is created by calling the `__struct__/0` function on the `Ecto.Schema`
+  For `insert` operations this load function is not used. Instead, the original
+  struct is created by calling the `__struct__/0` function on the `Ecto.Schema`
   module.
 
-  ### Changeset function
+  ### Validate
 
-  The `changeset` callback performs the usual role of a changeset function: to
+  The `validate` callback performs the usual role of a changeset function: to
   validate the changes against the model's data constraints using the functions
   in `Ecto.Changeset`.
 
@@ -191,7 +227,7 @@ defmodule Phoenix.Sync.Writer do
   schema struct in the case of `delete`s). If any of the transaction's
   changeset's are marked as invalid, then the entire transaction is aborted.
 
-  If not specified, the `changeset` function is defaults to the model's
+  If not specified, the `validate` function is defaulted to the schema model's
   standard `changeset/2` function if available.
 
   The callback can be either a 2- or 3-arity function.
@@ -223,7 +259,7 @@ defmodule Phoenix.Sync.Writer do
   your `insert` changes, then you should use UUID primary keys for your models
   to prevent conflicts.
 
-  ### pre_apply and post_apply callbacks
+  ### pre_apply and post_apply
 
   These callbacks, run before or after the actual `insert`, `update` or
   `delete` operation allow for the addition of side effects to the transaction.
@@ -263,27 +299,27 @@ defmodule Phoenix.Sync.Writer do
       #{inspect(__MODULE__)}.allow(
         Todos.Todo,
         load: &Todos.fetch_for_user(&1, user_id),
-        preflight: &Todos.preflight_mutation(&1, &2, user_id),
-        changeset: &Todos.Todo.changeset/2,
+        check: &Todos.check_mutation(&1, &2, user_id),
+        validate: &Todos.Todo.changeset/2,
         update: [
           # for inserts and deletes, use &Todos.Todo.changeset/2 but for updates
           # use this function
-          changeset: &Todos.Todo.update_changeset/2,
+          validate: &Todos.Todo.update_changeset/2,
           pre_apply: &Todos.pre_apply_update_todo/3
         ],
         insert: [
-          # optional load, validate, changeset, pre_apply and post_apply
+          # optional validate, pre_apply and post_apply
           # overrides for insert operations
         ],
         delete: [
-          # optional load, validate, changeset, pre_apply and post_apply overrides
-          # for delete operations
+          # optional validate, pre_apply and post_apply
+          # overrides for delete operations
         ],
       )
 
   ## End-to-end usage
 
-  The combination of the `preflight`, `load`, `changeset`, `pre_apply` and
+  The combination of the `check`, `load`, `validate`, `pre_apply` and
   `post_apply` functions can be composed to provide strong guarantees of
   validity.
 
@@ -322,7 +358,7 @@ defmodule Phoenix.Sync.Writer do
             Writer.new(format: Writer.Format.TanstackOptimistic)
             |> Writer.allow(
               Todos.Todo,
-              preflight: &validate_mutation(&1, user_id),
+              check: &validate_mutation(&1, user_id),
               load: &fetch_for_user(&1, user_id),
             )
             |> Writer.apply(transaction, Repo)
@@ -408,7 +444,7 @@ defmodule Phoenix.Sync.Writer do
   @type pre_post_func() :: (Ecto.Multi.t(), Ecto.Changeset.t(), context() -> Ecto.Multi.t())
 
   @operation_options [
-    changeset: [
+    validate: [
       type: {:fun, 2},
       doc: """
       A 2-arity function that returns a changeset for the given mutation data.
@@ -457,7 +493,7 @@ defmodule Phoenix.Sync.Writer do
           changes: Ecto.Mult.changes(),
           schema: Ecto.Schema.t(),
           operation: :insert | :update | :delete,
-          callback: :load | :changeset | :pre_apply | :post_apply
+          callback: :load | :validate | :pre_apply | :post_apply
         }
 
   @type operation_opts() :: unquote([NimbleOptions.option_typespec(@operation_options_schema)])
@@ -534,14 +570,13 @@ defmodule Phoenix.Sync.Writer do
                     """,
                     type_spec: quote(do: [operation(), ...])
                   ],
-                  preflight: [
+                  check: [
                     type: {:fun, 1},
                     doc: """
-                    A function that checks the pending %#{inspect(__MODULE__.Operation)}{}
-                    against your application's authorization logic.
+                    A function that validates every %#{inspect(__MODULE__.Operation)}{} in the transaction for correctness.
 
                     This is run before any database access is performed and so provides an
-                    efficient way to prevent malicious writes without loading your database.
+                    efficient way to prevent malicious writes without hitting your database.
 
                     Defaults to a function that allows all operations: `fn _ -> :ok end`.
                     """,
@@ -550,13 +585,11 @@ defmodule Phoenix.Sync.Writer do
                   before_all: [
                     type: {:fun, 1},
                     doc: """
-                    Run only once after the parsing and preflight checks and
-                    before processing the mutation operations against the database. Useful
-                    for pre-loading data from the database that can be shared between all
-                    operation callbacks.
+                    Run only once (per transaction) after the parsing and `check` callback have
+                    completed and before `load` and `validate` functions run.
 
-                    Use this to pre-load data that will be useful for authorization
-                    or validation checks for all following mutations.
+                    Useful for pre-loading data from the database that can be shared across
+                    all operation callbacks for all the mutations.
 
                     Arguments:
 
@@ -619,7 +652,7 @@ defmodule Phoenix.Sync.Writer do
                                | {:error, String.t()})
                       )
                   ],
-                  changeset: [
+                  validate: [
                     type: {:or, [{:fun, 2}, {:fun, 3}]},
                     doc: """
                     a 2- or 3-arity function that returns an `Ecto.Changeset` for a given mutation.
@@ -700,7 +733,7 @@ defmodule Phoenix.Sync.Writer do
                     Keyword.put(@operation_schema, :doc, """
                     Callbacks for validating and modifying `insert` operations.
 
-                    Accepts definitions for the `changeset`, `pre_apply` and
+                    Accepts definitions for the `validate`, `pre_apply` and
                     `post_apply` functions for `insert` operations that will override the
                     top-level equivalents.
 
@@ -720,7 +753,7 @@ defmodule Phoenix.Sync.Writer do
                     Keyword.update!(
                       @operation_schema,
                       :keys,
-                      &Keyword.put(&1, :changeset, type: {:or, [{:fun, 1}, {:fun, 2}]})
+                      &Keyword.put(&1, :validate, type: {:or, [{:fun, 1}, {:fun, 2}]})
                     )
                     |> Keyword.put(:doc, """
                     Callbacks for validating and modifying `delete` operations.
@@ -789,11 +822,11 @@ defmodule Phoenix.Sync.Writer do
   ## Examples
 
       # allow writes to the Todo table using
-      # `MyApp.Todos.Todo.preflight_mutation/1` to validate operations
+      # `MyApp.Todos.Todo.check_mutation/1` to validate operations
       Phoenix.Sync.Writer.new(format: MyApp.OperationFormat)
       |> Phoenix.Sync.Writer.allow(
         MyApp.Todos.Todo,
-        preflight: &MyApp.Todos.preflight_mutation/1
+        check: &MyApp.Todos.check_mutation/1
       )
 
       # A more complex configuration adding an `post_apply` callback to inserts
@@ -802,7 +835,7 @@ defmodule Phoenix.Sync.Writer do
       |> Phoenix.Sync.Writer.allow(
         MyApp.Todos..Todo,
         load: &MyApp.Todos.get_for_mutation/1,
-        preflight: &MyApp.Todos.preflight_mutation/1,
+        check: &MyApp.Todos.check_mutation/1,
         insert: [
           post_apply: &MyApp.Todos.post_apply_insert_mutation/3
         ]
@@ -823,7 +856,7 @@ defmodule Phoenix.Sync.Writer do
 
     key = config[:table] || table
     load_fun = load_fun(schema, pks, opts)
-    preflight_fun = preflight_fun(opts)
+    check_fun = check_fun(opts)
 
     accept = Keyword.get(config, :accept, @operations) |> MapSet.new()
 
@@ -832,7 +865,7 @@ defmodule Phoenix.Sync.Writer do
       table: table,
       pks: pks,
       accept: accept,
-      preflight: preflight_fun
+      check: check_fun
     }
 
     table_config =
@@ -863,9 +896,9 @@ defmodule Phoenix.Sync.Writer do
   end
 
   defp action_config(schema, config, action, extra) do
-    changeset_fun =
-      get_in(config, [action, :changeset]) || config[:changeset] || default_changeset!(schema) ||
-        raise(ArgumentError, message: "No changeset/3 or changeset/2 defined for #{action}s")
+    validate_fun =
+      get_in(config, [action, :validate]) || config[:validate] || default_changeset!(schema) ||
+        raise(ArgumentError, message: "No validate/3 or validate/2 defined for #{action}s")
 
     # nil-hooks are just ignored
     pre_apply_fun = get_in(config, [action, :pre_apply]) || config[:pre_apply]
@@ -878,7 +911,7 @@ defmodule Phoenix.Sync.Writer do
       %{
         schema: schema,
         before_all: before_all_fun,
-        changeset: changeset_fun,
+        validate: validate_fun,
         pre_apply: pre_apply_fun,
         post_apply: post_apply_fun
       }
@@ -938,8 +971,8 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  defp preflight_fun(opts) do
-    case opts[:preflight] do
+  defp check_fun(opts) do
+    case opts[:check] do
       nil ->
         fn _ -> :ok end
 
@@ -951,12 +984,11 @@ defmodule Phoenix.Sync.Writer do
 
         raise ArgumentError,
           message:
-            "Invalid preflight function. Expected a 1-arity function but got arity #{info[:arity]}"
+            "Invalid check function. Expected a 1-arity function but got arity #{info[:arity]}"
 
       invalid ->
         raise ArgumentError,
-          message:
-            "Invalid preflight function. Expected a 1-arity function but #{inspect(invalid)}"
+          message: "Invalid check function. Expected a 1-arity function but got #{inspect(invalid)}"
     end
   end
 
@@ -996,8 +1028,8 @@ defmodule Phoenix.Sync.Writer do
 
       %Ecto.Multi{} = multi =
         #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
-        |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, preflight: &my_preflight_function/1)
-        |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, preflight: &my_preflight_function/1)
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, check: &my_check_function/1)
+        |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, check: &my_check_function/1)
         |> #{inspect(__MODULE__)}.apply(changes)
 
   If you want to add extra operations to the mutation transaction, beyond those
@@ -1014,17 +1046,18 @@ defmodule Phoenix.Sync.Writer do
 
   ### 1. Parse
 
-  The transaction data is parsed, using either the `format` or the `parser` function supplied in `new/1`
+  The transaction data is parsed, using either the `format` or the `parser` function
+  supplied in `new/1`.
 
-  ### 2. Preflight
+  ### 2. Check
 
-  The each of the operations in the transaction are tested for validity via the `preflight` function.
+  The user input data in each operation in the transaction is tested for validity
+  via the `check` function.
 
   At this point no database operations have taken place. Errors at the parse or
-  `preflight` stage result in an early exit. The purpose of the `preflight`
-  callback is to test the incoming mutation data against basic sanitization
-  rules, much as you would do with `Plug` middleware and controller params
-  pattern matching.
+  `check` stage result in an early exit. The purpose of the `check` callback is
+  sanity check the incoming mutation data against basic sanitization rules, much
+  as you would do with `Plug` middleware and controller params pattern matching.
 
   Now that we have a list of validated mutation operations, the next step is:
 
@@ -1043,15 +1076,15 @@ defmodule Phoenix.Sync.Writer do
   (for `update` and `delete` operations), or the schema's `__struct__/0`
   function is called to instantiate an empty struct (`insert`).
 
-  ### 5. Changeset
+  ### 5. Validate
 
-  The `changeset` function is called with the result of the `load` function and
-  the operation's changes.
+  The `validate` function is called with the result of the `load` function
+  and the operation's changes.
 
   ### 6. Pre-apply
 
   The `pre_apply` callback is called with a `multi` instance, the result of the
-  `changeset` function and the current `Context`. The result is
+  `validate` function and the current `Context`. The result is
   [merged](`Ecto.Multi.merge/2`) into the transaction's ongoing `Ecto.Multi`.
 
   ### 7. Apply
@@ -1069,14 +1102,14 @@ defmodule Phoenix.Sync.Writer do
   @spec apply(t(), Format.transaction_data()) :: Ecto.Multi.t()
   def apply(%__MODULE__{} = writer, changes) do
     # Want to return a multi here but have that multi fail without contacting
-    # the db if any of the preflight calls fail.
+    # the db if any of the check calls fail.
     #
     # Looking at `Ecto.Multi.__apply__/4` it first checks for invalid
     # operations before doing anything. So i can just add an error to a blank
     # multi and return that and the transaction step will fail before touching
     # the repo.
     with {:parse, {:ok, %Transaction{} = txn}} <- {:parse, parse_transaction(writer, changes)},
-         {:preflight, :ok} <- {:preflight, preflight_transaction(writer, txn)} do
+         {:check, :ok} <- {:check, check_transaction(writer, txn)} do
       txn.operations
       |> Enum.reduce(
         start_multi(txn),
@@ -1098,14 +1131,14 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  defp preflight_transaction(%__MODULE__{} = writer, %Transaction{} = txn) do
+  defp check_transaction(%__MODULE__{} = writer, %Transaction{} = txn) do
     Enum.reduce_while(txn.operations, :ok, fn operation, :ok ->
       case mutation_actions(operation, writer) do
         {:ok, actions} ->
-          %{preflight: preflight, accept: accept} = actions
+          %{check: check, accept: accept} = actions
 
           if MapSet.member?(accept, operation.operation) do
-            case preflight.(operation) do
+            case check.(operation) do
               :ok -> {:cont, :ok}
               {:error, reason} -> {:halt, {:error, %Error{message: reason, operation: operation}}}
             end
@@ -1181,7 +1214,7 @@ defmodule Phoenix.Sync.Writer do
   end
 
   defp mutation_changeset(multi, %Operation{} = op, %Context{} = ctx, action) do
-    %{schema: schema, changeset: changeset_fun} = action
+    %{schema: schema, validate: changeset_fun} = action
     %{index: idx, operation: operation, data: lookup_data, changes: change_data} = op
 
     Ecto.Multi.run(multi, {:__phoenix_sync__, :changeset, idx}, fn repo, changes ->
