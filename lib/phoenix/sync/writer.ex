@@ -393,7 +393,7 @@ defmodule Phoenix.Sync.Writer do
   delete). See `allow/3` for more information on the configuration options
   for each table.
 
-  Because the result of `apply/2` is an `Ecto.Multi` instance you can also just
+  The result of `apply/2` is an `Ecto.Multi` instance so you can also just
   append operations using the normal `Ecto.Multi` functions:
 
       {:ok, txid, _changes} =
