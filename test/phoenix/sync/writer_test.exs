@@ -959,6 +959,86 @@ defmodule Phoenix.Sync.WriterTest do
 
       assert is_integer(txid)
     end
+
+    test "supports any unparsed mutation data" do
+      changes = [
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "modified" => %{"id" => "98", "title" => "New todo", "completed" => "false"}
+        },
+        %{
+          "type" => "insert",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "modified" => %{"id" => "99", "title" => "Disposable todo", "completed" => "false"}
+        },
+        %{
+          "type" => "delete",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "2"}
+        },
+        %{
+          "type" => "update",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "1", "title" => "First todo", "completed" => "false"},
+          "changes" => %{"title" => "Changed title"}
+        },
+        %{
+          "type" => "update",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "1", "title" => "Changed title", "completed" => "false"},
+          "changes" => %{"completed" => "true"}
+        },
+        %{
+          "type" => "delete",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "99", "title" => "New todo", "completed" => "false"}
+        },
+        %{
+          "type" => "update",
+          "syncMetadata" => %{"relation" => ["public", "todos_local"]},
+          "original" => %{"id" => "98", "title" => "Working todo", "completed" => "false"},
+          "changes" => %{"title" => "Working todo", "completed" => "true"}
+        }
+      ]
+
+      parent = self()
+
+      assert {:ok, txid} =
+               writer()
+               |> Writer.transaction(
+                 changes,
+                 Repo,
+                 fn
+                   %Writer.Operation{
+                     operation: op,
+                     relation: relation,
+                     data: data,
+                     changes: changes
+                   } ->
+                     send(parent, {op, relation, data, changes})
+                 end
+               )
+
+      assert is_integer(txid)
+      assert_receive {:insert, ["public", "todos_local"], %{}, %{"id" => "98"}}
+      assert_receive {:insert, ["public", "todos_local"], %{}, %{"id" => "99"}}
+      assert_receive {:delete, ["public", "todos_local"], %{"id" => "2"}, %{}}
+      assert_receive {:update, ["public", "todos_local"], %{"id" => "1"}, %{"title" => _}}
+      assert_receive {:update, ["public", "todos_local"], %{"id" => "1"}, %{"completed" => _}}
+      assert_receive {:delete, ["public", "todos_local"], %{"id" => "99"}, %{}}
+
+      assert_receive {:update, ["public", "todos_local"], %{"id" => "98"},
+                      %{"title" => _, "completed" => _}}
+    end
+
+    test "parse errors return an error tuple" do
+      writer = Writer.new(parser: fn _ -> {:error, "no"} end)
+
+      assert_raise Writer.Error, fn ->
+        Writer.transaction(writer, [], Repo, fn _ -> nil end)
+      end
+    end
   end
 
   def parse_transaction(m) when is_list(m) do

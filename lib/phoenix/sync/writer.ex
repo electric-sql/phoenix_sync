@@ -1116,8 +1116,7 @@ defmodule Phoenix.Sync.Writer do
     # operations before doing anything. So i can just add an error to a blank
     # multi and return that and the transaction step will fail before touching
     # the repo.
-    with {:parse, {:ok, %Transaction{} = txn}} <- {:parse, parse_transaction(writer, changes)},
-         {:check, :ok} <- {:check, check_transaction(writer, txn)} do
+    with {:ok, %Transaction{} = txn} <- parse_check(writer, changes) do
       txn.operations
       |> Enum.reduce(
         start_multi(txn),
@@ -1129,7 +1128,34 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  defp parse_transaction(%__MODULE__{} = writer, changes) do
+  defp parse_check(%__MODULE__{} = writer, changes) do
+    with {:parse, {:ok, %Transaction{} = txn}} <- {:parse, parse_transaction(writer, changes)},
+         {:check, :ok} <- {:check, check_transaction(writer, txn)} do
+      {:ok, txn}
+    end
+  end
+
+  @doc """
+  Use the parser configured in the given [`Writer`](`#{inspect(__MODULE__)}`)
+  instance to decode the given transaction data.
+
+  This can be used to handle mutation operations explicitly:
+
+      {:ok, txn} = #{inspect(__MODULE__)}.parse_transaction(writer, my_json_tx_data)
+
+      {:ok, txid} =
+        Repo.transaction(fn ->
+          Enum.each(txn.operations, fn operation ->
+            # do something wih the given operation
+            # raise if something is wrong...
+          end)
+          # return the transaction id
+          #{inspect(__MODULE__)}.txid!(Repo)
+        end)
+  """
+  @spec parse_transaction(t(), Format.transaction_data()) ::
+          {:ok, Transaction.t()} | {:error, term()}
+  def parse_transaction(%__MODULE__{} = writer, changes) do
     case writer.parser do
       fun when is_function(fun, 1) ->
         fun.(changes)
@@ -1529,7 +1555,80 @@ defmodule Phoenix.Sync.Writer do
   end
 
   @doc """
-  Extract the transaction id from changes returned from `Repo.transaction`.
+  Apply operations from a mutation transaction directly via a transaction.
+
+  `operation_fun` is a 1-arity function that receives each of the
+  `%#{inspect(__MODULE__.Operation)}{}` structs within the mutation data and
+  should apply them appropriately.
+
+  The `operation_fun` callback is done within a `c:Ecto.Repo.transaction/2` so
+  any exceptions will cause the entire transaction to be aborted.
+
+  This function will also raise if the transaction data fails to parse.
+
+      {:ok, txid} =
+        #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        |> #{inspect(__MODULE__)}.transaction(
+          my_encoded_txn,
+          MyApp.Repo,
+          fn
+            %{operation: :insert, relation: [_, "todos"], change: change} ->
+              # insert a Todo
+            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
+              # update a Todo
+            %{operation: :delete, relation: [_, "todos"], data: data} ->
+              # delete a Todo
+          end
+        )
+
+  The `opts` are passed onto the `c:Ecto.Repo.transaction/2` call.
+
+  This is equivalent to the below:
+
+      {:ok, txn} =
+        #{inspect(__MODULE__.Format.TanstackOptimistic)}.parse_transaction(my_encoded_txn)
+
+      {:ok, txid} =
+        MyApp.Repo.transaction(fn ->
+          Enum.each(txn.operations, fn
+            %{operation: :insert, relation: [_, "todos"], change: change} ->
+              # insert a Todo
+            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
+              # update a Todo
+            %{operation: :delete, relation: [_, "todos"], data: data} ->
+              # delete a Todo
+          end)
+          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
+        end)
+  """
+  @spec transaction(
+          t(),
+          Format.transaction_data(),
+          Ecto.Repo.t(),
+          operation_fun :: (Operation.t() -> any()),
+          keyword()
+        ) ::
+          {:ok, txid()} | {:error, any()}
+  def transaction(%__MODULE__{} = writer, changes, repo, operation_fun, opts \\ [])
+      when is_function(operation_fun, 1) and is_atom(repo) do
+    case parse_transaction(writer, changes) do
+      {:ok, %Transaction{} = txn} ->
+        repo.transaction(
+          fn ->
+            Enum.each(txn.operations, operation_fun)
+            txid!(repo)
+          end,
+          opts
+        )
+
+      {:error, reason} ->
+        raise Error, message: reason
+    end
+  end
+
+  @doc """
+  Extract the transaction id from changes or from a `Ecto.Repo` within a
+  transaction.
 
   This allows you to use a standard `c:Ecto.Repo.transaction/2` call to apply
   mutations defined using `apply/2` and extract the transaction id afterwards.
@@ -1544,20 +1643,45 @@ defmodule Phoenix.Sync.Writer do
         |> MyApp.Repo.transaction()
 
       {:ok, txid} = Phoenix.Sync.Writer.txid(changes)
+
+  It also allows you to get a transaction id from any active transaction:
+
+      MyApp.Repo.transaction(fn ->
+        {:ok, txid} = #{inspect(__MODULE__)}.txid(MyApp.Repo)
+      end)
+
+  Attempting to run `txid/1` on a repo outside a transaction will return an
+  error.
   """
   @spec txid(Ecto.Multi.changes()) :: {:ok, txid()} | :error
   def txid(%{@txid_name => txid} = _changes), do: {:ok, txid}
-  def txid(_), do: :error
+  def txid(changes) when is_map(changes), do: :error
+
+  def txid(repo) when is_atom(repo) do
+    if repo.in_transaction?() do
+      with {:ok, %{rows: [[txid]]}} = repo.query(@txid_query) do
+        {:ok, txid}
+      end
+    else
+      {:error, %Error{message: "not in a transaction"}}
+    end
+  end
 
   @doc """
-  Returns the transaction id from a `Ecto.Multi.changes()` result or raises if
-  not found.
+  Returns the a transaction id or raises on an error.
 
   See `txid/1`.
   """
   @spec txid!(Ecto.Multi.changes()) :: txid()
   def txid!(%{@txid_name => txid} = _changes), do: txid
-  def txid!(_), do: raise(ArgumentError, message: "No txid in change data")
+  def txid!(%{}), do: raise(ArgumentError, message: "No txid in change data")
+
+  def txid!(repo) when is_atom(repo) do
+    case txid(repo) do
+      {:ok, txid} -> txid
+      {:error, reason} -> raise reason
+    end
+  end
 
   @doc """
   Return a unique operation name for use in `pre_apply` or `post_apply` callbacks.
