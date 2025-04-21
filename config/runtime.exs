@@ -5,11 +5,9 @@ if config_env() == :test do
   default_database_url = "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
   database_url = System.get_env("DATABASE_URL", default_database_url)
 
-  connection_opts = Electric.Config.parse_postgresql_uri!(database_url)
-
   config :electric,
     start_in_library_mode: true,
-    connection_opts: Electric.Utils.obfuscate_password(connection_opts),
+    connection_opts: Electric.Config.parse_postgresql_uri!(database_url),
     # enable the http api so that the client tests against a real endpoint can
     # run against our embedded electric instance.
     # enable_http_api: true,
