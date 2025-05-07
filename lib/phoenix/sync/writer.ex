@@ -30,7 +30,7 @@ defmodule Phoenix.Sync.Writer do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Phoenix.Sync.Writer.new(format: Format.TanstackOptimistic)
+            Phoenix.Sync.Writer.new()
             |> Phoenix.Sync.Writer.allow(
               Projects.Project,
               check: reject_invalid_params/2,
@@ -44,7 +44,7 @@ defmodule Phoenix.Sync.Writer do
               # validate: Projects.Issue.changeset/2
               # etc.
             )
-            |> Phoenix.Sync.Writer.apply(transaction, Repo)
+            |> Phoenix.Sync.Writer.apply(transaction, Repo, format: Format.TanstackOptimistic)
 
           render(conn, :mutations, txid: txid)
         end
@@ -74,7 +74,7 @@ defmodule Phoenix.Sync.Writer do
 
   ## Transactions
 
-  The `{:ok, txid, changes}` return value from `Phoenix.Sync.Writer.apply/3`
+  The `{:ok, txid, changes}` return value from `Phoenix.Sync.Writer.apply/4`
   allows the Postgres transaction ID to be returned to the client in the response data.
 
   This allows clients to monitor the read-path sync stream and match on the
@@ -86,7 +86,7 @@ defmodule Phoenix.Sync.Writer do
 
   `#{inspect(__MODULE__)}` uses `Ecto.Multi`'s transaction update mechanism
   under the hood, which means that either all the operations in a client
-  transaction are accepted or none are. See `apply/2` for how you can hook
+  transaction are accepted or none are. See `to_multi/1` for how you can hook
   into the `Ecto.Multi` after applying your change data.
 
   > #### Compatibility {: .info}
@@ -113,7 +113,9 @@ defmodule Phoenix.Sync.Writer do
 
     Integration:
 
-        #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.ingest(mutation_data, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        |> #{inspect(__MODULE__)}.transaction(Repo)
 
   ## Usage
 
@@ -146,12 +148,12 @@ defmodule Phoenix.Sync.Writer do
   use these callback functions to express your app's authorization and validation
   requirements.
 
-  Calling `new/1` creates an empty writer configuration with the given mutation
+  Calling `new/0` creates an empty writer configuration with the given mutation
   parser. But this alone does not permit any mutations. In order to allow writes
   from clients you must call `allow/3` with a schema module and some callback functions.
 
-      # create an empty writer configuration which accepts writes in the given format
-      writer = #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+      # create an empty writer configuration
+      writer = #{inspect(__MODULE__)}.new()
 
       # allow writes to the `Todos.Todo` table
       # using `Todos.check_mutation/1` to validate mutation data before
@@ -361,13 +363,13 @@ defmodule Phoenix.Sync.Writer do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Writer.new(format: Writer.Format.TanstackOptimistic)
+            Writer.new()
             |> Writer.allow(
               Todos.Todo,
               check: &validate_mutation(&1, user_id),
               load: &fetch_for_user(&1, user_id),
             )
-            |> Writer.apply(transaction, Repo)
+            |> Writer.apply(transaction, Repo, format: Writer.Format.TanstackOptimistic)
 
           render(conn, :mutations, txid: txid)
         end
@@ -399,13 +401,13 @@ defmodule Phoenix.Sync.Writer do
   delete). See `allow/3` for more information on the configuration options
   for each table.
 
-  The result of `apply/2` is an `Ecto.Multi` instance so you can also just
+  The result of `to_multi/1` or `to_multi/3` is an `Ecto.Multi` instance so you can also just
   append operations using the normal `Ecto.Multi` functions:
 
       {:ok, txid, _changes} =
-        Writer.new(parser: &my_transaction_parser/1)
+        Writer.new()
         |> Writer.allow(Todo, ...)
-        |> Writer.apply(transaction)
+        |> Writer.to_multi(transaction, parser: &my_transaction_parser/1)
         |> Ecto.Multi.insert(:my_action, %Event{})
         |> Writer.transaction(Repo)
   """
@@ -513,29 +515,30 @@ defmodule Phoenix.Sync.Writer do
     type_doc: "`t:operation_opts/0`"
   ]
 
-  @writer_schema NimbleOptions.new!(
-                   format: [
-                     type: :atom,
-                     doc: """
-                     A module implementing the `#{inspect(__MODULE__.Format)}`
-                     behaviour or a function that takes mutation data from the client and
-                     returns a [`%Transaction{}`](`#{inspect(__MODULE__.Transaction)}`) struct.
+  @parse_schema_options [
+    format: [
+      type: :atom,
+      doc: """
+      A module implementing the `#{inspect(__MODULE__.Format)}`
+      behaviour.
 
-                     See `#{inspect(__MODULE__.Format)}`.
-                     """,
-                     type_spec: quote(do: Format.t()),
-                     type_doc: "[`Format.t()`](`t:#{inspect(Format)}.t/0`)"
-                   ],
-                   parser: [
-                     type: {:or, [{:fun, 1}, :mfa]},
-                     doc: """
-                     A function that parses some input data and returns a
-                     [`%Transaction{}`](`#{inspect(__MODULE__.Transaction)}`) struct or an error.
-                     See `c:#{inspect(__MODULE__.Format)}.parse_transaction/1`.
-                     """,
-                     type_spec: quote(do: Format.parser_fun())
-                   ]
-                 )
+      See `#{inspect(__MODULE__.Format)}`.
+      """,
+      type_spec: quote(do: Format.t()),
+      type_doc: "[`Format.t()`](`t:#{inspect(Format)}.t/0`)"
+    ],
+    parser: [
+      type: {:or, [{:fun, 1}, :mfa]},
+      doc: """
+      A function that parses some input data and returns a
+      [`%Transaction{}`](`#{inspect(__MODULE__.Transaction)}`) struct or an error.
+      See `c:#{inspect(__MODULE__.Format)}.parse_transaction/1`.
+      """,
+      type_doc: "`#{inspect(Format)}.parser_fun() | mfa()`",
+      type_spec: quote(do: Format.parser_fun())
+    ]
+  ]
+  @parse_schema NimbleOptions.new!(@parse_schema_options)
 
   @allow_schema NimbleOptions.new!(
                   table: [
@@ -768,69 +771,43 @@ defmodule Phoenix.Sync.Writer do
                     """)
                 )
 
-  defstruct format: nil, parser: nil, mappings: %{}
+  defstruct ingest: [], mappings: %{}
 
-  @type writer_opts() :: [unquote(NimbleOptions.option_typespec(@writer_schema))]
   @type allow_opts() :: [unquote(NimbleOptions.option_typespec(@allow_schema))]
+  @type parse_opts() :: [unquote(NimbleOptions.option_typespec(@parse_schema))]
   @type schema_config() :: %{required(atom()) => term()}
+  @type ingest_change() :: {Format.t(), Format.parser_fun(), Format.transaction_data()}
+  @type repo_transaction_opts() :: keyword()
+  @type transact_opts() :: [parse_opts() | repo_transaction_opts()]
 
   @type t() :: %__MODULE__{
-          format: module() | nil,
-          parser: Format.parser_fun(),
+          ingest: [ingest_change()],
           mappings: %{(binary() | [binary(), ...]) => schema_config()}
         }
 
   @doc """
-  Create a new empty writer with the given global options.
-
-  Supported options:
-
-  #{NimbleOptions.docs(@writer_schema)}
-
-  You can either pass a `parser` function or a `format`.
+  Create a new empty writer.
 
   Empty writers will reject writes to any tables. You should configure writes
   to the permitted tables by calling `allow/3`.
   """
-  def new(opts \\ [])
-
-  @spec new(writer_opts()) :: t()
-  def new(opts) when is_list(opts) do
-    config = NimbleOptions.validate!(opts, @writer_schema)
-
-    format = Keyword.get(config, :format)
-
-    parser_func =
-      Keyword.get(config, :parser) || format_parser(format) ||
-        raise ArgumentError, message: "Missing `:format` or `:parser` configuration"
-
-    %__MODULE__{format: format, parser: parser_func}
-  end
-
-  defp format_parser(nil), do: nil
-
-  defp format_parser(format) when is_atom(format) do
-    if Code.ensure_loaded?(format) && function_exported?(format, :parse_transaction, 1) do
-      Function.capture(format, :parse_transaction, 1)
-    else
-      raise ArgumentError,
-        message:
-          "#{inspect(format)} does not implement the #{inspect(__MODULE__.Format)} behaviour"
-    end
+  @spec new() :: t()
+  def new do
+    %__MODULE__{}
   end
 
   @doc """
   Allow writes to the given `Ecto.Schema`.
 
   Only tables specified in calls to `allow/3` will be accepted by later calls
-  to `apply/2`. Any changes to tables not explicitly defined by `allow/3` calls
+  to `transaction/3`. Any changes to tables not explicitly defined by `allow/3` calls
   will be rejected and cause the entire transaction to be rejected.
 
   ## Examples
 
       # allow writes to the Todo table using
       # `MyApp.Todos.Todo.check_mutation/1` to validate operations
-      Phoenix.Sync.Writer.new(format: MyApp.OperationFormat)
+      Phoenix.Sync.Writer.new()
       |> Phoenix.Sync.Writer.allow(
         MyApp.Todos.Todo,
         check: &MyApp.Todos.check_mutation/1
@@ -838,7 +815,7 @@ defmodule Phoenix.Sync.Writer do
 
       # A more complex configuration adding an `post_apply` callback to inserts
       # and using a custom query to load the original database value.
-      Phoenix.Sync.Writer.new(format: MyApp.OperationFormat)
+      Phoenix.Sync.Writer.new()
       |> Phoenix.Sync.Writer.allow(
         MyApp.Todos..Todo,
         load: &MyApp.Todos.get_for_mutation/1,
@@ -856,7 +833,7 @@ defmodule Phoenix.Sync.Writer do
   @spec allow(t(), module(), allow_opts()) :: t()
   def allow(writer, schema, opts \\ [])
 
-  def allow(%__MODULE__{} = write, schema, opts) when is_atom(schema) do
+  def allow(%__MODULE__{} = writer, schema, opts) when is_atom(schema) do
     {schema, table, pks} = validate_schema!(schema)
 
     config = NimbleOptions.validate!(opts, @allow_schema)
@@ -884,7 +861,7 @@ defmodule Phoenix.Sync.Writer do
         )
       end)
 
-    Map.update!(write, :mappings, &Map.put(&1, key, table_config))
+    Map.update!(writer, :mappings, &Map.put(&1, key, table_config))
   end
 
   defp validate_schema!(module) do
@@ -1009,23 +986,60 @@ defmodule Phoenix.Sync.Writer do
   end
 
   @doc """
-  Apply and write changes to the given repo in a single call.
+  Add the given changes to the operations that will be applied within a `transaction/3`.
 
-      writer
-      |> #{inspect(__MODULE__)}.apply(changes, Repo)
+  Examples:
+
+      {:ok, txid} =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.ingest(changes, format: MyApp.MutationFormat)
+        |> #{inspect(__MODULE__)}.ingest(other_changes, parser: &MyApp.MutationFormat.parse_other/1)
+        |> #{inspect(__MODULE__)}.ingest(more_changes, parser: {MyApp.MutationFormat, :parse_more, []})
+        |> #{inspect(__MODULE__)}.transaction(MyApp.Repo)
+
+  Supported options:
+
+  #{NimbleOptions.docs(@parse_schema)}
+  """
+  @spec ingest(t(), Format.transaction_data(), parse_opts()) :: t()
+  def ingest(writer, changes, opts) do
+    case validate_ingest_opts(opts) do
+      {:ok, format, parser_fun} ->
+        %{writer | ingest: [{format, parser_fun, changes} | writer.ingest]}
+
+      {:error, message} ->
+        raise Error, message: message
+    end
+  end
+
+  @doc """
+  Ingest and write changes to the given repo in a single call.
+
+      #{inspect(__MODULE__)}.new()
+      |> #{inspect(__MODULE__)}.apply(changes, Repo, parser: &MyFormat.parse/1)
 
   is equivalent to:
 
-      writer
-      |> #{inspect(__MODULE__)}.apply(changes)
+      #{inspect(__MODULE__)}.new()
+      |> #{inspect(__MODULE__)}.ingest(changes, parser: &MyFormat.parse/1)
       |> #{inspect(__MODULE__)}.transaction(Repo)
   """
-  @spec apply(t(), Format.transaction_data(), Ecto.Repo.t()) ::
+  @spec apply(t(), Format.transaction_data(), Ecto.Repo.t(), transact_opts()) ::
           {:ok, txid(), Ecto.Multi.changes()} | Ecto.Multi.failure()
-  def apply(%__MODULE__{} = write, changes, repo) when is_atom(repo) and is_list(changes) do
-    write
-    |> apply(changes)
-    |> transaction(repo)
+  def apply(%__MODULE__{} = writer, changes, repo, opts)
+      when is_atom(repo) and is_list(changes) do
+    {writer_opts, txn_opts} = split_writer_txn_opts(opts)
+
+    writer
+    |> ingest(changes, writer_opts)
+    |> transaction(repo, txn_opts)
+  end
+
+  @writer_option_keys Keyword.keys(@parse_schema_options)
+
+  defp split_writer_txn_opts(opts) do
+    Keyword.split(opts, @writer_option_keys)
   end
 
   @doc """
@@ -1035,10 +1049,11 @@ defmodule Phoenix.Sync.Writer do
   Example:
 
       %Ecto.Multi{} = multi =
-        #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        #{inspect(__MODULE__)}.new()
         |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, check: &my_check_function/1)
         |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, check: &my_check_function/1)
-        |> #{inspect(__MODULE__)}.apply(changes)
+        |> #{inspect(__MODULE__)}.ingest(changes, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        |> #{inspect(__MODULE__)}.to_multi()
 
   If you want to add extra operations to the mutation transaction, beyond those
   applied by any `pre_apply` or `post_apply` callbacks in your mutation config then use
@@ -1047,15 +1062,15 @@ defmodule Phoenix.Sync.Writer do
   Use `transaction/3` to apply the changes to the database and return the
   transaction id.
 
-  `apply/2` builds an `Ecto.Multi` struct containing the operations required to
+  `to_multi/1` builds an `Ecto.Multi` struct containing the operations required to
   write the mutation operations to the database.
 
-   The order of operation is:
+  The order of operation is:
 
   ### 1. Parse
 
   The transaction data is parsed, using either the `format` or the `parser` function
-  supplied in `new/1`.
+  supplied in `ingest/3`.
 
   ### 2. Check
 
@@ -1107,8 +1122,8 @@ defmodule Phoenix.Sync.Writer do
   Any error in any of these stages will abort the entire transaction and leave
   your database untouched.
   """
-  @spec apply(t(), Format.transaction_data()) :: Ecto.Multi.t()
-  def apply(%__MODULE__{} = writer, changes) do
+  @spec to_multi(t()) :: Ecto.Multi.t()
+  def to_multi(%__MODULE__{} = writer) do
     # Want to return a multi here but have that multi fail without contacting
     # the db if any of the check calls fail.
     #
@@ -1116,20 +1131,42 @@ defmodule Phoenix.Sync.Writer do
     # operations before doing anything. So i can just add an error to a blank
     # multi and return that and the transaction step will fail before touching
     # the repo.
-    with {:ok, %Transaction{} = txn} <- parse_check(writer, changes) do
-      txn.operations
-      |> Enum.reduce(
-        start_multi(txn),
-        &apply_change(&2, &1, writer)
-      )
-    else
-      {step, {:error, error}} ->
-        Ecto.Multi.error(Ecto.Multi.new(), step, error)
-    end
+    writer.ingest
+    |> Enum.reverse()
+    |> Enum.reduce_while(start_multi(), fn {_format, parser_fun, changes}, multi ->
+      with {:ok, %Transaction{} = txn} <- parse_check(writer, parser_fun, changes) do
+        {:cont, Enum.reduce(txn.operations, multi, &append_multi(&2, &1, writer))}
+      else
+        {step, {:error, error}} ->
+          {:halt, Ecto.Multi.error(Ecto.Multi.new(), step, error)}
+      end
+    end)
   end
 
-  defp parse_check(%__MODULE__{} = writer, changes) do
-    with {:parse, {:ok, %Transaction{} = txn}} <- {:parse, parse_transaction(writer, changes)},
+  @doc """
+  Ingest changes and map them into an `Ecto.Multi` instance ready to apply
+  using `transaction/3` or `c:Ecto.Repo.transaction/2`
+
+  This is a wrapper around `ingest/3` and `to_multi/1`.
+
+  Example:
+
+      %Ecto.Multi{} = multi =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, check: &my_check_function/1)
+        |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, check: &my_check_function/1)
+        |> #{inspect(__MODULE__)}.to_multi(changes, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+
+  """
+  @spec to_multi(t(), Format.transaction_data(), parse_opts()) :: Ecto.Multi.t()
+  def to_multi(%__MODULE__{} = writer, changes, opts) do
+    writer
+    |> ingest(changes, opts)
+    |> to_multi()
+  end
+
+  defp parse_check(writer, parser_fun, changes) do
+    with {:parse, {:ok, %Transaction{} = txn}} <- {:parse, parser_fun.(changes)},
          {:check, :ok} <- {:check, check_transaction(writer, txn)} do
       {:ok, txn}
     end
@@ -1141,7 +1178,7 @@ defmodule Phoenix.Sync.Writer do
 
   This can be used to handle mutation operations explicitly:
 
-      {:ok, txn} = #{inspect(__MODULE__)}.parse_transaction(writer, my_json_tx_data)
+      {:ok, txn} = #{inspect(__MODULE__)}.parse_transaction(my_json_tx_data, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
 
       {:ok, txid} =
         Repo.transaction(fn ->
@@ -1153,15 +1190,54 @@ defmodule Phoenix.Sync.Writer do
           #{inspect(__MODULE__)}.txid!(Repo)
         end)
   """
-  @spec parse_transaction(t(), Format.transaction_data()) ::
+  @spec parse_transaction(Format.transaction_data(), parse_opts()) ::
           {:ok, Transaction.t()} | {:error, term()}
-  def parse_transaction(%__MODULE__{} = writer, changes) do
-    case writer.parser do
-      fun when is_function(fun, 1) ->
-        fun.(changes)
+  def parse_transaction(changes, opts) do
+    with {:ok, opts} <- NimbleOptions.validate(opts, @parse_schema),
+         {:ok, _format, parser_fun} <- validate_ingest_opts(opts) do
+      parser_fun.(changes)
+    end
+  end
 
-      {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
-        Kernel.apply(m, f, [changes | a])
+  defp validate_ingest_opts(opts) do
+    with {:ok, config} <- NimbleOptions.validate(opts, @parse_schema),
+         format = Keyword.get(config, :format),
+         parser = Keyword.get(config, :parser),
+         {:ok, parser_func} <- parser_fun(format, parser) do
+      {:ok, format, parser_func}
+    end
+  end
+
+  defp parser_fun(format, parser) do
+    case format_parser(format) do
+      parser when is_function(parser, 1) ->
+        {:ok, parser}
+
+      nil ->
+        case parser do
+          nil ->
+            {:error, "no valid format or parser"}
+
+          parser when is_function(parser, 1) ->
+            {:ok, parser}
+
+          {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
+            {:ok, fn changes -> Kernel.apply(m, f, [changes | a]) end}
+        end
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp format_parser(nil), do: nil
+
+  defp format_parser(format) when is_atom(format) do
+    if Code.ensure_loaded?(format) && function_exported?(format, :parse_transaction, 1) do
+      Function.capture(format, :parse_transaction, 1)
+    else
+      {:error,
+       "#{inspect(format)} does not implement the #{inspect(__MODULE__.Format)} behaviour"}
     end
   end
 
@@ -1192,23 +1268,19 @@ defmodule Phoenix.Sync.Writer do
     end)
   end
 
-  @txn_name {:__phoenix_sync__, :txn}
   @txid_name {:__phoenix_sync__, :txid}
   @txid_query "SELECT txid_current() as txid"
 
-  defp start_multi(txn) do
+  defp start_multi do
     Ecto.Multi.new()
     |> txid_step()
-    |> Ecto.Multi.put(@txn_name, txn)
   end
 
   defp txid_step(multi \\ Ecto.Multi.new()) do
     Ecto.Multi.run(multi, @txid_name, fn repo, _ ->
       case repo.__adapter__() do
         Ecto.Adapters.Postgres ->
-          with {:ok, %{rows: [[txid]]}} <- repo.query(@txid_query) do
-            {:ok, txid}
-          end
+          txid(repo)
 
         adapter ->
           Logger.warning("Unsupported adapter #{adapter}. txid will be nil")
@@ -1223,7 +1295,7 @@ defmodule Phoenix.Sync.Writer do
     |> Enum.any?(fn {name, _} -> name == @txid_name end)
   end
 
-  defp apply_change(multi, %Operation{} = op, %__MODULE__{} = writer) do
+  defp append_multi(multi, %Operation{} = op, %__MODULE__{} = writer) do
     with {:ok, actions} <- mutation_actions(op, writer),
          {:ok, action} <- Map.fetch(actions, op.operation) do
       ctx = %Context{
@@ -1488,10 +1560,13 @@ defmodule Phoenix.Sync.Writer do
   docs](https://hexdocs.pm/ecto/Ecto.Repo.html#c:transaction/2-use-with-ecto-multi)
   for the result if any of your mutations returns an error.
 
-        Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+        Phoenix.Sync.Writer.new()
         |> Phoenix.Sync.Writer.allow(MyApp.Todos.Todo)
         |> Phoenix.Sync.Writer.allow(MyApp.Options.Option)
-        |> Phoenix.Sync.Writer.apply(changes)
+        |> Phoenix.Sync.Writer.ingest(
+          changes,
+          format: Phoenix.Sync.Writer.Format.TanstackOptimistic
+        )
         |> Phoenix.Sync.Writer.transaction(MyApp.Repo)
         |> case do
           {:ok, txid, _changes} ->
@@ -1516,9 +1591,19 @@ defmodule Phoenix.Sync.Writer do
           Repo.insert!(changeset)
         end, Repo)
   """
-  @spec transaction(Ecto.Multi.t(), Ecto.Repo.t(), keyword()) ::
+  @spec transaction(t() | Ecto.Multi.t(), Ecto.Repo.t(), keyword()) ::
           {:ok, txid(), Ecto.Multi.changes()} | Ecto.Multi.failure()
-  def transaction(multi, repo, opts \\ [])
+  def transaction(writer_or_multi, repo, opts \\ [])
+
+  def transaction(%__MODULE__{ingest: []}, _repo, _opts) do
+    {:error, "no changes ingested"}
+  end
+
+  def transaction(%__MODULE__{} = writer, repo, opts) do
+    writer
+    |> to_multi()
+    |> transaction(repo, opts)
+  end
 
   def transaction(%Ecto.Multi{} = multi, repo, opts) when is_atom(repo) do
     wrapped_multi =
@@ -1534,59 +1619,45 @@ defmodule Phoenix.Sync.Writer do
     end
   end
 
-  def transaction(fun, repo, opts) when is_function(fun) and is_atom(repo) do
-    with {:ok, {txid, result}} <-
-           repo.transaction(
-             fn ->
-               %{rows: [[txid]]} = repo.query!(@txid_query)
-
-               result =
-                 case fun do
-                   fun0 when is_function(fun0, 0) -> fun.()
-                   fun1 when is_function(fun1, 1) -> fun1.(repo)
-                 end
-
-               {txid, result}
-             end,
-             opts
-           ) do
-      {:ok, txid, result}
-    end
-  end
-
   @doc """
-  Apply operations from a mutation transaction directly via a transaction.
+  Apply operations from a mutation directly via a transaction.
 
   `operation_fun` is a 1-arity function that receives each of the
   `%#{inspect(__MODULE__.Operation)}{}` structs within the mutation data and
-  should apply them appropriately.
+  should apply them appropriately. It should return `:ok` or `{:ok, result}` if
+  successful or `{:error, reason}` if the operation is invalid or failed to
+  apply. If any operation returns `{:error, _}` or raises then the entire
+  transaction is aborted.
 
-  The `operation_fun` callback is done within a `c:Ecto.Repo.transaction/2` so
-  any exceptions will cause the entire transaction to be aborted.
-
-  This function will also raise if the transaction data fails to parse.
+  This function will return `{:error, reason}` if the transaction data fails to parse.
 
       {:ok, txid} =
-        #{inspect(__MODULE__)}.new(format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
-        |> #{inspect(__MODULE__)}.transaction(
+        #{inspect(__MODULE__)}.transact(
           my_encoded_txn,
           MyApp.Repo,
           fn
             %{operation: :insert, relation: [_, "todos"], change: change} ->
-              # insert a Todo
+              MyApp.Repo.insert(...)
             %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
-              # update a Todo
+              MyApp.Repo.update(Ecto.Changeset.cast(...))
             %{operation: :delete, relation: [_, "todos"], data: data} ->
-              # delete a Todo
-          end
+              # we don't allow deletes...
+              {:error, "invalid delete"}
+          end,
+          format: #{inspect(__MODULE__.Format.TanstackOptimistic)},
+          timeout: 60_000
         )
 
-  The `opts` are passed onto the `c:Ecto.Repo.transaction/2` call.
+  Any of the `opts` not used by this module are passed onto the
+  `c:Ecto.Repo.transaction/2` call.
 
   This is equivalent to the below:
 
       {:ok, txn} =
-        #{inspect(__MODULE__.Format.TanstackOptimistic)}.parse_transaction(my_encoded_txn)
+        #{inspect(__MODULE__)}.parse_transaction(
+          my_encoded_txn,
+          format: #{inspect(__MODULE__.Format.TanstackOptimistic)}
+        )
 
       {:ok, txid} =
         MyApp.Repo.transaction(fn ->
@@ -1596,33 +1667,51 @@ defmodule Phoenix.Sync.Writer do
             %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
               # update a Todo
             %{operation: :delete, relation: [_, "todos"], data: data} ->
-              # delete a Todo
+              # we don't allow deletes...
+              raise "invalid delete"
           end)
           #{inspect(__MODULE__)}.txid!(MyApp.Repo)
-        end)
+        end, timeout: 60_000)
   """
-  @spec transaction(
-          t(),
+  @spec transact(
           Format.transaction_data(),
           Ecto.Repo.t(),
-          operation_fun :: (Operation.t() -> any()),
-          keyword()
-        ) ::
-          {:ok, txid()} | {:error, any()}
-  def transaction(%__MODULE__{} = writer, changes, repo, operation_fun, opts \\ [])
+          operation_fun :: (Operation.t() -> :ok | {:ok, any()} | {:error, any()}),
+          transact_opts()
+        ) :: {:ok, txid()} | {:error, any()}
+  def transact(changes, repo, operation_fun, opts)
       when is_function(operation_fun, 1) and is_atom(repo) do
-    case parse_transaction(writer, changes) do
-      {:ok, %Transaction{} = txn} ->
-        repo.transaction(
-          fn ->
-            Enum.each(txn.operations, operation_fun)
-            txid!(repo)
-          end,
-          opts
-        )
+    {parse_opts, txn_opts} = split_writer_txn_opts(opts)
 
-      {:error, reason} ->
-        raise Error, message: reason
+    with {:ok, %Transaction{} = txn} <- parse_transaction(changes, parse_opts) do
+      repo.transaction(
+        fn ->
+          Enum.reduce_while(txn.operations, :ok, fn op, :ok ->
+            case operation_fun.(op) do
+              {:ok, _result} ->
+                {:cont, :ok}
+
+              :ok ->
+                {:cont, :ok}
+
+              {:error, _reason} = error ->
+                {:halt, error}
+
+              other ->
+                raise ArgumentError,
+                      "expected to return :ok, {:ok, _} or {:error, _}, got: #{inspect(other)}"
+            end
+          end)
+          |> case do
+            {:error, reason} ->
+              repo.rollback(reason)
+
+            :ok ->
+              txid!(repo)
+          end
+        end,
+        txn_opts
+      )
     end
   end
 
@@ -1636,10 +1725,10 @@ defmodule Phoenix.Sync.Writer do
   Example
 
       {:ok, changes} =
-        Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+        Phoenix.Sync.Writer.new()
         |> Phoenix.Sync.Writer.allow(MyApp.Todos.Todo)
         |> Phoenix.Sync.Writer.allow(MyApp.Options.Option)
-        |> Phoenix.Sync.Writer.apply(changes)
+        |> Phoenix.Sync.Writer.to_multi(changes, format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
         |> MyApp.Repo.transaction()
 
       {:ok, txid} = Phoenix.Sync.Writer.txid(changes)
@@ -1712,15 +1801,6 @@ defmodule Phoenix.Sync.Writer do
   def operation_name(%Context{} = ctx, label) do
     {operation_name(ctx), label}
   end
-
-  # @doc """
-  # ## TODO
-  # """
-  # @spec fetch_or_load(context(), map()) :: {:ok, Ecto.Schema.t()} | {:error, term()}
-  # def fetch_or_load(%Context{} = ctx, _attrs) do
-  #   dbg(ctx)
-  #   :error
-  # end
 
   defp load_key(ctx, pk) do
     opkey(schema: ctx.schema, operation: ctx.operation.operation, index: ctx.index, pk: pk)

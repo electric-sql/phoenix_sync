@@ -76,15 +76,12 @@ defmodule Phoenix.Sync.Writer.Format do
         end
       end
 
-  Then when creating our writer we pass in our protocol module as the `format`:
-
-      writer = Phoenix.Sync.Writer.new(format: MyApp.Protocol)
-
-  Then we can just pass our serialized protobuf message straight to the
-  `Phoenix.Sync.Writer.apply/3` function:
+  We use our protocol module as the `format` when we `apply/4` our transaction
+  data and we can just pass our serialized protobuf message as the mutation data:
 
       {:ok, txid, _changes} =
-        Phoenix.Sync.Writer.apply(writer, protobuf_data, MyApp.Repo)
+        Phoenix.Sync.Writer.new()
+        |> Phoenix.Sync.Writer.apply(protobuf_data, MyApp.Repo, format: MyApp.Protocol)
   """
   alias Phoenix.Sync.Writer.Transaction
 
