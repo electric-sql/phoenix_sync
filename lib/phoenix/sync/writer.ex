@@ -51,10 +51,10 @@ defmodule Phoenix.Sync.Writer do
       end
 
   The controller constructs a `#{inspect(__MODULE__)}` instance and pipes it
-  through a series of [`Writer.allow/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Writer.html#allow/3)
-  calls, registering functions against `Ecto.Schema`s (in this case `Projects.Project`
-  and `Projects.Issue`) to validate and authorize each of these mutation operations
-  before applying them as a single transaction.
+  through a series of `Writer.allow/3` calls, registering functions against
+  `Ecto.Schema`s (in this case `Projects.Project` and `Projects.Issue`) to
+  validate and authorize each of these mutation operations before applying
+  them as a single transaction.
 
   Local client writes are sent to the server as a list of mutations — a series
   of `INSERT`, `UPDATE` and `DELETE` operations and their associated data —
