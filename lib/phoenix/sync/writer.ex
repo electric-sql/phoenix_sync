@@ -433,6 +433,8 @@ defmodule Phoenix.Sync.Writer do
   end
 
   defmodule Error do
+    @moduledoc false
+
     defexception [:message, :operation]
 
     @impl true

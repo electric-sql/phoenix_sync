@@ -1,4 +1,16 @@
 defmodule Phoenix.Sync.Client do
+  @moduledoc """
+  Low level Elixir client. Converts an `Ecto.Query` into an Elixir `Stream`:
+
+  ```elixir
+  stream = Phoenix.Sync.Client.stream(Todos.Todo)
+
+  stream =
+    Ecto.Query.from(t in Todos.Todo, where: t.completed == false)
+    |> Phoenix.Sync.Client.stream()
+  ```
+  """
+
   alias Phoenix.Sync.PredefinedShape
 
   @doc """

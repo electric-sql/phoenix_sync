@@ -1,4 +1,15 @@
 defmodule Phoenix.Sync.Writer.Transaction do
+  @moduledoc """
+  Represents a transaction containing a list of `Phoenix.Sync.Writer.Operation`s
+  that should be applied atomically.
+
+  ```elixir
+  {:ok, operations} <- Transaction.parse_operations(operations, &parse_operation/1)
+
+  %Transaction{} = Transaction.new(operations)
+  ```
+  """
+
   defstruct txid: nil, operations: []
 
   alias Phoenix.Sync.Writer.Operation

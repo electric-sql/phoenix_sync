@@ -1,4 +1,10 @@
 defmodule Phoenix.Sync do
+  @moduledoc """
+  Real-time sync for Postgres-backed Phoenix applications.
+
+  See the [docs](../../README.md) for more information.
+  """
+
   alias Electric.Client.ShapeDefinition
 
   @shape_keys [:namespace, :where, :columns]
