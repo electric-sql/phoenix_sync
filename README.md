@@ -174,7 +174,7 @@ defmodule MutationController do
     user_id = conn.assigns.user_id
 
     {:ok, txid, _changes} =
-      Phoenix.Sync.Writer.new(format: Format.TanstackOptimistic)
+      Phoenix.Sync.Writer.new()
       |> Phoenix.Sync.Writer.allow(
         Projects.Project,
         check: reject_invalid_params/2,
@@ -184,11 +184,10 @@ defmodule MutationController do
       |> Phoenix.Sync.Writer.allow(
         Projects.Issue,
         # Use the sensible defaults:
-        # load: Ecto.Repo.get_by(Projects.Issue, id: ^issue_id)
         # validate: Projects.Issue.changeset/2
         # etc.
       )
-      |> Phoenix.Sync.Writer.apply(transaction, Repo)
+      |> Phoenix.Sync.Writer.apply(transaction, Repo, format: Format.TanstackOptimistic)
 
     render(conn, :mutations, txid: txid)
   end

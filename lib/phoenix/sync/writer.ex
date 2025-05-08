@@ -4,9 +4,9 @@ defmodule Phoenix.Sync.Writer do
   Phoenix- or Plug-based apps.
 
   Imagine you're building an application on sync. You've used the
-  [read-path sync utilities](https://hexdocs.pm/phoenix_sync/readme.md#read-path-sync)
-  to sync data into the front-end. If the client then changes the data locally, these
-  writes can be batched up and sent back to the server.
+  [read-path sync utilities](../../../README.md#read-path-sync) to sync data into the
+  front-end. If the client then changes the data locally, these writes can be batched
+  up and sent back to the server.
 
   `#{inspect(__MODULE__)}` provides a principled way of ingesting these local writes
   and applying them to Postgres. In a way that works-with and re-uses your existing
@@ -16,6 +16,126 @@ defmodule Phoenix.Sync.Writer do
   This allows you to build instant, offline-capable applications that work with
   [local optimistic state](https://electric-sql.com/docs/guides/writes).
 
+  ## Usage levels ([low](#module-low-level-usage-diy), [mid](#module-mid-level-usage), [high](#module-high-level-usage))
+
+  You don't need to use `#{inspect(__MODULE__)}` to ingest write operations using Phoenix.
+  Phoenix already ships with primitives like `Ecto.Multi` and `c:Ecto.Repo.transaction/2`.
+  However, `#{inspect(__MODULE__)}` provides:
+
+  - a number of convienience functions that simplify ingesting mutation operations
+  - a high-level pipeline that dries up a lot of common boilerplate and allows you to re-use
+    your existing `Plug` and `Ecto.Changeset` logic
+
+  ### Low-level usage (DIY)
+
+  If you're comfortable parsing, validating and persisting changes yourself then the
+  simplest way to use `#{inspect(__MODULE__)}` is to use `txid!/1` within
+  `c:Ecto.Repo.transaction/2`:
+
+      {:ok, txid} =
+        MyApp.Repo.transaction(fn ->
+          # ... save your changes to the database ...
+
+          # Return the transaction id.
+          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
+        end)
+
+  This returns the database transaction ID that the changes were applied within. This allows
+  you to return it to the client, which can then monitor the read-path sync stream to detect
+  when the transaction syncs through. At which point the client can discard its local
+  optimistic state.
+
+  A convienient way of doing this is to parse the request data into a list of
+  `#{inspect(__MODULE__)}.Operation`s using a `#{inspect(__MODULE__)}.Format`.
+  You can then apply the changes yourself by matching on the operation data:
+
+      {:ok, %Transaction{operations: operations}} =
+        #{inspect(__MODULE__)}.parse_transaction(
+          my_encoded_txn,
+          format: #{inspect(__MODULE__.Format.TanstackOptimistic)}
+        )
+
+      {:ok, txid} =
+        MyApp.Repo.transaction(fn ->
+          Enum.each(txn.operations, fn
+            %{operation: :insert, relation: [_, "todos"], change: change} ->
+              # insert a Todo
+            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
+              # update a Todo
+            %{operation: :delete, relation: [_, "todos"], data: data} ->
+              # for example, if you don't want to allow deletes...
+              raise "invalid delete"
+          end)
+
+          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
+        end, timeout: 60_000)
+
+  ### Mid-level usage
+
+  The pattern above is wrapped-up into the more convienient `transact/4` function.
+  This abstracts the parsing and txid details whilst still allowing you to handle
+  and apply mutation operations yourself:
+
+      {:ok, txid} =
+        #{inspect(__MODULE__)}.transact(
+          my_encoded_txn,
+          MyApp.Repo,
+          fn
+            %{operation: :insert, relation: [_, "todos"], change: change} ->
+              MyApp.Repo.insert(...)
+            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
+              MyApp.Repo.update(Ecto.Changeset.cast(...))
+            %{operation: :delete, relation: [_, "todos"], data: data} ->
+              # we don't allow deletes...
+              {:error, "invalid delete"}
+          end,
+          format: #{inspect(__MODULE__.Format.TanstackOptimistic)},
+          timeout: 60_000
+        )
+
+  However, with larger applications, this flexibility can become tiresome as you end up
+  repeating boilerplate and defining your own pipeline to authorize, validate and apply
+  changes with the right error handling and return values.
+
+  ### High-level usage
+
+  To avoid this, `#{inspect(__MODULE__)}` provides a higer level pipeline that dries up
+  the boilerplate, whilst still allowing flexibility and extensibility. You create an
+  ingest pipeline by instantiating a `#{inspect(__MODULE__)}` instance and piping into
+  `allow/3` and `apply/4` calls:
+
+      {:ok, txid, _changes} =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.allow(MyApp.OtherSchema)
+        |> #{inspect(__MODULE__)}.apply(transaction, Repo, format: MyApp.MutationFormat)
+
+  Or, instead of `apply/4` you can use seperate calls to `ingest/3` and then `transaction/2`.
+  This allows you to ingest multiple formats, for example:
+
+      {:ok, txid} =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.ingest(changes, format: MyApp.MutationFormat)
+        |> #{inspect(__MODULE__)}.ingest(other_changes, parser: &MyApp.MutationFormat.parse_other/1)
+        |> #{inspect(__MODULE__)}.ingest(more_changes, parser: {MyApp.MutationFormat, :parse_more, []})
+        |> #{inspect(__MODULE__)}.transaction(MyApp.Repo)
+
+  And at any point you can drop down / eject out to the underlying `Ecto.Multi` using
+  `to_multi/1` or `to_multi/3`:
+
+      multi =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.to_multi(changes, format: MyApp.MutationFormat)
+
+      # ... do anything you like with the multi ...
+
+      {:ok, changes} = Repo.transaction(multi)
+      {:ok, txid} = #{inspect(__MODULE__)}.txid(changes)
+
+  ## Controller example
+
   For example, take a project management app that's using
   [@TanStack/optimistic](https://github.com/TanStack/optimistic) to batch up local
   optimistic writes and POST them to the `Phoenix.Controller` below:
@@ -23,42 +143,49 @@ defmodule Phoenix.Sync.Writer do
       defmodule MutationController do
         use Phoenix.Controller, formats: [:json]
 
-        alias Phoenix.Sync.Writer
-        alias Phoenix.Sync.Writer.Format
+        alias #{inspect(__MODULE__)}
+        alias #{inspect(__MODULE__)}.Format
 
         def mutate(conn, %{"transaction" => transaction} = _params) do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            Phoenix.Sync.Writer.new()
-            |> Phoenix.Sync.Writer.allow(
+            #{inspect(__MODULE__)}.new()
+            |> #{inspect(__MODULE__)}.allow(
               Projects.Project,
               check: reject_invalid_params/2,
               load: &Projects.load_for_user(&1, user_id),
               validate: &Projects.Project.changeset/2
             )
-            |> Phoenix.Sync.Writer.allow(
+            |> #{inspect(__MODULE__)}.allow(
               Projects.Issue,
               # Use the sensible defaults:
-              # load: Ecto.Repo.get_by(Projects.Issue, id: ^issue_id)
               # validate: Projects.Issue.changeset/2
               # etc.
             )
-            |> Phoenix.Sync.Writer.apply(transaction, Repo, format: Format.TanstackOptimistic)
+            |> #{inspect(__MODULE__)}.apply(
+              transaction,
+              Repo,
+              format: Format.TanstackOptimistic
+            )
 
           render(conn, :mutations, txid: txid)
         end
       end
 
-  The controller constructs a `#{inspect(__MODULE__)}` instance and pipes it
-  through a series of `Writer.allow/3` calls, registering functions against
+  The controller constructs a `#{inspect(__MODULE__)}` instance and pipes
+  it through a series of `allow/3` calls, registering functions against
   `Ecto.Schema`s (in this case `Projects.Project` and `Projects.Issue`) to
   validate and authorize each of these mutation operations before applying
   them as a single transaction.
 
-  Local client writes are sent to the server as a list of mutations — a series
-  of `INSERT`, `UPDATE` and `DELETE` operations and their associated data —
-  with a single transaction represented by a single list of mutations.
+  This controller can become a single, unified entry point for ingesting writes
+  into your application. You can extend the pipeline with `allow/3` calls for
+  every schema that you'd like to be able to ingest changes to.
+
+  The [`check`, `load`, `validate`, etc. callbacks](#callbacks) to the allow
+  function are designed to allow you to re-use your authorization and validation
+  logic from your existing `Plug` middleware and `Ecto.Changeset` functions.
 
   > #### Warning {: .warning}
   >
@@ -74,8 +201,8 @@ defmodule Phoenix.Sync.Writer do
 
   ## Transactions
 
-  The `{:ok, txid, changes}` return value from `Phoenix.Sync.Writer.apply/4`
-  allows the Postgres transaction ID to be returned to the client in the response data.
+  The `txid` in the return value from `apply/4` and `txid/1` / `txid!/1` allows the
+  Postgres transaction ID to be returned to the client in the response data.
 
   This allows clients to monitor the read-path sync stream and match on the
   arrival of the same transaction id. When the client receives this transaction id
@@ -128,25 +255,25 @@ defmodule Phoenix.Sync.Writer do
   This dual verification -- of data and permissions -- is performed by a pipeline
   of application-defined callbacks for every model that you allow writes to:
 
-  - [`check`](#module-check-function) - a function that performs a "pre-flight"
+  - [`check`](#module-check) - a function that performs a "pre-flight"
     sanity check of the user-provided data in the mutation; this should just
     validate the data and not usually hit the database; checks are performed on
     all operations in a transaction before proceeding to the next steps in the
     pipeline; this allows for fast rejection of invalid data before performing
     more expensive operations
-  - [`load`](#module-load-function) - a function that takes the original data
+  - [`load`](#module-load) - a function that takes the original data
     and returns the existing model from the database, if it exists, for an update
     or delete operation
-  - [`validate`](#module-validate-function) - create and validate an `Ecto.Changeset`
+  - [`validate`](#module-validate) - create and validate an `Ecto.Changeset`
     from the source data and mutation changes; this is intended to be compatible with
     using existing schema changeset functions; note that, as per any changeset function,
     the validate function can perform both authorization and validation
-  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply-callbacks) - add
+  - [`pre_apply` and `post_apply`](#module-pre_apply-and-post_apply) - add
     arbitrary `Ecto.Multi` operations to the transaction based on the current operation
 
-  See `apply/2` for how the transaction is processed internally and how best to
-  use these callback functions to express your app's authorization and validation
-  requirements.
+  See `apply/4` and the [Callbacks](#module-callbacks) for how the transaction is
+  processed internally and how best to use these callback functions to express your
+  app's authorization and validation requirements.
 
   Calling `new/0` creates an empty writer configuration with the given mutation
   parser. But this alone does not permit any mutations. In order to allow writes
@@ -279,17 +406,17 @@ defmodule Phoenix.Sync.Writer do
   within the callback that returns an "invalid" operation will abort the entire
   transaction.
 
-      def pre_or_post_apply(%Ecto.Multi{} = multi, %Ecto.Changeset{} = change, %Phoenix.Sync.Writer.Context{} = context) do
+      def pre_or_post_apply(%Ecto.Multi{} = multi, %Ecto.Changeset{} = change, %#{inspect(__MODULE__)}.Context{} = context) do
         multi
         # add some side-effects
-        # |> Ecto.Multi.run(Phoenix.Sync.Writer.operation_name(context, :image), fn _changes ->
+        # |> Ecto.Multi.run(#{inspect(__MODULE__)}.operation_name(context, :image), fn _changes ->
         #   with :ok <- File.write(image.name, image.contents) do
         #    {:ok, nil}
         #   end
         # end)
         #
         # validate the current transaction and abort using an {:error, value} tuple
-        # |> Ecto.Multi.run(Phoenix.Sync.Writer.operation_name(context, :my_validation), fn _changes ->
+        # |> Ecto.Multi.run(#{inspect(__MODULE__)}.operation_name(context, :my_validation), fn _changes ->
         #   {:error, "reject entire transaction"}
         # end)
       end
@@ -345,7 +472,7 @@ defmodule Phoenix.Sync.Writer do
       defmodule MyController do
         use Phoenix.Controller, formats: [:html, :json]
 
-        alias Phoenix.Sync.Writer
+        alias #{inspect(__MODULE__)}
 
         # The standard HTTP PUT update handler
         def update(conn, %{"todo" => todo_params}) do
@@ -718,7 +845,7 @@ defmodule Phoenix.Sync.Writer do
                     operation name based on the `context`.
 
                         def pre_apply(multi, changeset, context) do
-                          name = Phoenix.Sync.Writer.operation_name(context, :event_insert)
+                          name = #{inspect(__MODULE__)}.operation_name(context, :event_insert)
                           Ecto.Multi.insert(multi, name, %Event{todo_id: id})
                         end
 
@@ -809,16 +936,16 @@ defmodule Phoenix.Sync.Writer do
 
       # allow writes to the Todo table using
       # `MyApp.Todos.Todo.check_mutation/1` to validate operations
-      Phoenix.Sync.Writer.new()
-      |> Phoenix.Sync.Writer.allow(
+      #{inspect(__MODULE__)}.new()
+      |> #{inspect(__MODULE__)}.allow(
         MyApp.Todos.Todo,
         check: &MyApp.Todos.check_mutation/1
       )
 
       # A more complex configuration adding an `post_apply` callback to inserts
       # and using a custom query to load the original database value.
-      Phoenix.Sync.Writer.new()
-      |> Phoenix.Sync.Writer.allow(
+      #{inspect(__MODULE__)}.new()
+      |> #{inspect(__MODULE__)}.allow(
         MyApp.Todos..Todo,
         load: &MyApp.Todos.get_for_mutation/1,
         check: &MyApp.Todos.check_mutation/1,
@@ -1147,7 +1274,7 @@ defmodule Phoenix.Sync.Writer do
 
   @doc """
   Ingest changes and map them into an `Ecto.Multi` instance ready to apply
-  using `transaction/3` or `c:Ecto.Repo.transaction/2`
+  using `#{inspect(__MODULE__)}.transaction/3` or `c:Ecto.Repo.transaction/2`.
 
   This is a wrapper around `ingest/3` and `to_multi/1`.
 
@@ -1558,38 +1685,37 @@ defmodule Phoenix.Sync.Writer do
   Runs the mutation inside a transaction.
 
   Since the mutation operation is expressed as an `Ecto.Multi` operation, see
-  the [`Ecto.Repo`
-  docs](https://hexdocs.pm/ecto/Ecto.Repo.html#c:transaction/2-use-with-ecto-multi)
+  the [`Ecto.Repo` docs](https://hexdocs.pm/ecto/Ecto.Repo.html#c:transaction/2-use-with-ecto-multi)
   for the result if any of your mutations returns an error.
 
-        Phoenix.Sync.Writer.new()
-        |> Phoenix.Sync.Writer.allow(MyApp.Todos.Todo)
-        |> Phoenix.Sync.Writer.allow(MyApp.Options.Option)
-        |> Phoenix.Sync.Writer.ingest(
-          changes,
-          format: Phoenix.Sync.Writer.Format.TanstackOptimistic
-        )
-        |> Phoenix.Sync.Writer.transaction(MyApp.Repo)
-        |> case do
-          {:ok, txid, _changes} ->
-            # return the txid to the client
-            Plug.Conn.send_resp(conn, 200, Jason.encode!(%{txid: txid}))
-          {:error, _failed_operation, failed_value, _changes_so_far} ->
-            # extract the error message from the changeset returned as `failed_value`
-            error =
-              Ecto.Changeset.traverse_errors(failed_value, fn {msg, opts} ->
-                Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-                  opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-                end)
+      #{inspect(__MODULE__)}.new()
+      |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo)
+      |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option)
+      |> #{inspect(__MODULE__)}.ingest(
+        changes,
+        format: #{inspect(__MODULE__)}.Format.TanstackOptimistic
+      )
+      |> #{inspect(__MODULE__)}.transaction(MyApp.Repo)
+      |> case do
+        {:ok, txid, _changes} ->
+          # return the txid to the client
+          Plug.Conn.send_resp(conn, 200, Jason.encode!(%{txid: txid}))
+        {:error, _failed_operation, failed_value, _changes_so_far} ->
+          # extract the error message from the changeset returned as `failed_value`
+          error =
+            Ecto.Changeset.traverse_errors(failed_value, fn {msg, opts} ->
+              Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+                opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
               end)
-            Plug.Conn.send_resp(conn, 400, Jason.encode!(error))
-          end
+            end)
+          Plug.Conn.send_resp(conn, 400, Jason.encode!(error))
+        end
 
   Also supports normal fun/0 or fun/1 style transactions much like
   `c:Ecto.Repo.transaction/2`, returning the txid of the operation:
 
       {:ok, txid, todo} =
-        Phoenix.Sync.Writer.transaction(fn ->
+        #{inspect(__MODULE__)}.transaction(fn ->
           Repo.insert!(changeset)
         end, Repo)
   """
@@ -1727,13 +1853,13 @@ defmodule Phoenix.Sync.Writer do
   Example
 
       {:ok, changes} =
-        Phoenix.Sync.Writer.new()
-        |> Phoenix.Sync.Writer.allow(MyApp.Todos.Todo)
-        |> Phoenix.Sync.Writer.allow(MyApp.Options.Option)
-        |> Phoenix.Sync.Writer.to_multi(changes, format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo)
+        |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option)
+        |> #{inspect(__MODULE__)}.to_multi(changes, format: #{inspect(__MODULE__)}.Format.TanstackOptimistic)
         |> MyApp.Repo.transaction()
 
-      {:ok, txid} = Phoenix.Sync.Writer.txid(changes)
+      {:ok, txid} = #{inspect(__MODULE__)}.txid(changes)
 
   It also allows you to get a transaction id from any active transaction:
 
@@ -1783,11 +1909,11 @@ defmodule Phoenix.Sync.Writer do
 
   Example:
 
-      Phoenix.Sync.Writer.new(format: Phoenix.Sync.Writer.Format.TanstackOptimistic)
-      |> Phoenix.Sync.Writer.allow(
+      #{inspect(__MODULE__)}.new()
+      |> #{inspect(__MODULE__)}.allow(
         MyModel,
         pre_apply: fn multi, changeset, context ->
-          name = Phoenix.Sync.Writer.operation_name(context)
+          name = #{inspect(__MODULE__)}.operation_name(context)
           Ecto.Multi.insert(multi, name, AuditEvent.for_changeset(changeset))
         end
       )

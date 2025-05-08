@@ -83,9 +83,7 @@ defmodule Phoenix.Sync.LiveView do
         {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
       end
 
-  See the docs for
-  [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4)
-  for details on using LiveView streams.
+  See the docs for `Phoenix.LiveView.stream/4` for details on using LiveView streams.
 
   ## Lifecycle Events
 
