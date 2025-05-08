@@ -1786,7 +1786,7 @@ defmodule Phoenix.Sync.Writer do
         MyModel,
         pre_apply: fn multi, changeset, context ->
           name = Phoenix.Sync.Writer.operation_name(context)
-          Ecto.Multi.insert(multi name, AuditEvent.for_changeset(changeset))
+          Ecto.Multi.insert(multi, name, AuditEvent.for_changeset(changeset))
         end
       )
   """
