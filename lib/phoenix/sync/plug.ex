@@ -42,10 +42,8 @@ defmodule Phoenix.Sync.Plug do
   ```
 
   You can add additional authentication/authorization for shapes using
-  [Phoenix's
-  pipelines](https://hexdocs.pm/phoenix/Phoenix.Router.html#pipeline/2) or
-  other [`plug`
-  calls](https://hexdocs.pm/phoenix/Phoenix.Router.html#plug/2).
+  [Phoenix's pipelines](https://hexdocs.pm/phoenix/Phoenix.Router.html#pipeline/2)
+  or other [`plug` calls](https://hexdocs.pm/phoenix/Phoenix.Router.html#plug/2).
 
   ## Plug.Router
 

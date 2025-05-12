@@ -1,4 +1,24 @@
 defmodule Phoenix.Sync.LiveView do
+  @moduledoc """
+  Swap out `Phoenix.LiveView.stream/3` for `Phoenix.Sync.LiveView.sync_stream/4` to
+  automatically keep a LiveView up-to-date with the state of your Postgres database:
+
+  ```elixir
+  defmodule MyWeb.MyLive do
+    use Phoenix.LiveView
+    import Phoenix.Sync.LiveView
+
+    def mount(_params, _session, socket) do
+      {:ok, sync_stream(socket, :todos, Todos.Todo)}
+    end
+
+    def handle_info({:sync, event}, socket) do
+      {:noreply, sync_stream_update(socket, event)}
+    end
+  end
+  ```
+  """
+
   use Phoenix.Component
 
   alias Electric.Client.Message
@@ -63,9 +83,7 @@ defmodule Phoenix.Sync.LiveView do
         {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
       end
 
-  See the docs for
-  [`Phoenix.LiveView.stream/4`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream/4)
-  for details on using LiveView streams.
+  See the docs for `Phoenix.LiveView.stream/4` for details on using LiveView streams.
 
   ## Lifecycle Events
 
