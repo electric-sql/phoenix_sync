@@ -181,9 +181,7 @@ defmodule Phoenix.Sync.Router do
         [table: table]
 
       :error ->
-        raise ArgumentError,
-          message:
-            "No valid table specified. The path #{inspect(path)} is not a valid table name and no `:table` option passed."
+        raise ArgumentError, message: "Cannot build shape: no :table specified."
     end
     |> add_namespace(opts)
   end
