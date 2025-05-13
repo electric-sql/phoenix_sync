@@ -175,5 +175,15 @@ defmodule Phoenix.Sync.ControllerTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
              ] = Jason.decode!(resp.resp_body)
     end
+
+    test "includes content-type header", ctx do
+      conn = conn(:get, "/shape/todos", %{"offset" => "-1"})
+
+      resp = PlugRouter.call(conn, PlugRouter.init(ctx.plug_opts))
+
+      assert Plug.Conn.get_resp_header(resp, "content-type") == [
+               "application/json; charset=utf-8"
+             ]
+    end
   end
 end
