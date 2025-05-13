@@ -215,8 +215,8 @@ Example config:
 # mix.exs
 defp deps do
   [
-    {:electric, ">= 1.0.0-beta.20"},
-    {:phoenix_sync, "~> 0.3"}
+    {:electric, "~> 1.0"},
+    {:phoenix_sync, "~> 0.4"}
   ]
 end
 
@@ -242,7 +242,7 @@ In `:http` mode, Electric does not need to be included as an application depende
 # mix.exs
 defp deps do
   [
-    {:phoenix_sync, "~> 0.3"}
+    {:phoenix_sync, "~> 0.4"}
   ]
 end
 
@@ -272,8 +272,8 @@ It is also possible to include Electric as an application dependency and configu
 # mix.exs
 defp deps do
   [
-    {:electric, ">= 1.0.0-beta.20"},
-    {:phoenix_sync, "~> 0.3"}
+    {:electric, "~> 1.0"},
+    {:phoenix_sync, "~> 0.4"}
   ]
 end
 
@@ -311,8 +311,8 @@ With Electric only included and compiled as a dependency in `:dev` and `:test`.
 # mix.exs
 defp deps do
   [
-    {:electric, "~> 1.0.0-beta.20", only: [:dev, :test]},
-    {:phoenix_sync, "~> 0.3"}
+    {:electric, "~> 1.0", only: [:dev, :test]},
+    {:phoenix_sync, "~> 0.4"}
   ]
 end
 
