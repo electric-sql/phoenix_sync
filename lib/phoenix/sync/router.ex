@@ -94,7 +94,7 @@ defmodule Phoenix.Sync.Router do
   more details on keyword-based shapes.
   """
   defmacro sync(path, opts) when is_list(opts) do
-    route(env!(__CALLER__), path, build_definition(path, __CALLER__, opts))
+    route(env!(__CALLER__), path, build_definition(__CALLER__, opts))
   end
 
   # e.g. shape "/path", Ecto.Query.from(t in MyTable)
@@ -140,13 +140,13 @@ defmodule Phoenix.Sync.Router do
     end
   end
 
-  defp build_definition(path, caller, opts) when is_list(opts) do
+  defp build_definition(caller, opts) when is_list(opts) do
     case Keyword.fetch(opts, :query) do
       {:ok, queryable} ->
         build_shape_from_query(queryable, caller, opts)
 
       :error ->
-        define_shape(path, caller, opts)
+        define_shape(caller, opts)
     end
   end
 
@@ -167,23 +167,21 @@ defmodule Phoenix.Sync.Router do
     end
   end
 
-  defp define_shape(path, caller, opts) do
-    relation = build_relation(path, opts)
+  defp define_shape(caller, opts) do
+    relation = build_relation(opts)
 
     {storage, _binding} = Code.eval_quoted(opts[:storage], [], caller)
 
     Phoenix.Sync.PredefinedShape.new!(Keyword.merge(opts, relation), storage: storage)
   end
 
-  defp build_relation(path, opts) do
+  defp build_relation(opts) do
     case Keyword.fetch(opts, :table) do
       {:ok, table} ->
         [table: table]
 
       :error ->
-        raise ArgumentError,
-          message:
-            "No valid table specified. The path #{inspect(path)} is not a valid table name and no `:table` option passed."
+        raise ArgumentError, message: "Cannot build shape: no :table specified."
     end
     |> add_namespace(opts)
   end
