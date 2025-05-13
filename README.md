@@ -157,7 +157,7 @@ See the Electric [demos](https://electric-sql.com/demos) and [documentation](htt
 
 The `Phoenix.Sync.Writer` module allows you to ingest batches of writes from the client.
 
-The idea is that the front-end can batch up [local optimistic writes](https://electric-sql.com/docs/guides/writes). For example using a library like [@TanStack/optimistic](https://github.com/TanStack/optimistic) or by [monitoring changes to a local embedded database](https://electric-sql.com/docs/guides/writes#through-the-db).
+The idea is that the front-end can batch up [local optimistic writes](https://electric-sql.com/docs/guides/writes). For example using a library like [@TanStack/db](https://github.com/TanStack/db) or by [monitoring changes to a local embedded database](https://electric-sql.com/docs/guides/writes#through-the-db).
 
 These changes can be POSTed to a `Phoenix.Controller`, which then constructs a `Phoenix.Sync.Writer` instance. The writer instance authorizes and validates the writes before applying them to the database. Under the hood this uses `Ecto.Multi`, to ensure that transactions (batches of writes) are applied atomically.
 
@@ -187,7 +187,7 @@ defmodule MutationController do
         # validate: Projects.Issue.changeset/2
         # etc.
       )
-      |> Phoenix.Sync.Writer.apply(transaction, Repo, format: Format.TanstackOptimistic)
+      |> Phoenix.Sync.Writer.apply(transaction, Repo, format: Format.TanstackDB)
 
     render(conn, :mutations, txid: txid)
   end

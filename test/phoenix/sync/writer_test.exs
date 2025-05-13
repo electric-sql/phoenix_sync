@@ -111,7 +111,7 @@ defmodule Phoenix.Sync.WriterTest do
     Writer.new()
   end
 
-  def ingest(writer, changes, opts \\ [format: Writer.Format.TanstackOptimistic]) do
+  def ingest(writer, changes, opts \\ [format: Writer.Format.TanstackDB]) do
     Writer.ingest(writer, changes, opts)
   end
 
@@ -860,7 +860,7 @@ defmodule Phoenix.Sync.WriterTest do
                    Ecto.Multi.put(multi, :before_all_todo, ref)
                  end
                )
-               |> Writer.apply(changes, Repo, format: Writer.Format.TanstackOptimistic)
+               |> Writer.apply(changes, Repo, format: Writer.Format.TanstackDB)
 
       assert 1 == :atomics.get(counter, 1)
     end
@@ -959,7 +959,7 @@ defmodule Phoenix.Sync.WriterTest do
                      send(parent, {op, relation, data, changes})
                      :ok
                  end,
-                 format: Writer.Format.TanstackOptimistic
+                 format: Writer.Format.TanstackDB
                )
 
       assert is_integer(txid)
