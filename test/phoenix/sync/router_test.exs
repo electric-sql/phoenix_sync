@@ -138,6 +138,29 @@ defmodule Phoenix.Sync.RouterTest do
     end
 
     @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {"todos", ["title"], [["one"], ["two"], ["three"]]}
+
+    test "returns a correct content-type header", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/things-to-do", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert Plug.Conn.get_resp_header(resp, "content-type") == [
+               "application/json; charset=utf-8"
+             ]
+    end
+
+    @tag table: {
            "ideas",
            [
              "id int8 not null primary key generated always as identity",
