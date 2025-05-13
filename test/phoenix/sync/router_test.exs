@@ -6,12 +6,14 @@ defmodule Phoenix.Sync.RouterTest do
     parameterize: [
       %{
         sync_config: [
+          env: :test,
           mode: :embedded,
           pool_opts: @pool_opts
         ]
       },
       %{
         sync_config: [
+          env: :test,
           mode: :http,
           url: "http://localhost:3000",
           pool_opts: @pool_opts
@@ -133,6 +135,29 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
              ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {"todos", ["title"], [["one"], ["two"], ["three"]]}
+
+    test "returns a correct content-type header", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/things-to-do", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert Plug.Conn.get_resp_header(resp, "content-type") == [
+               "application/json; charset=utf-8"
+             ]
     end
 
     @tag table: {
@@ -362,9 +387,7 @@ defmodule Phoenix.Sync.RouterTest do
     end
 
     setup(ctx) do
-      opts = Phoenix.Sync.plug_opts(electric_opts(ctx))
-
-      [plug_opts: [phoenix_sync: opts]]
+      [plug_opts: [phoenix_sync: Phoenix.Sync.plug_opts(ctx.electric_opts)]]
     end
 
     test "raises compile-time error if Plug.Router is not configured to copy_opts_to_assign" do

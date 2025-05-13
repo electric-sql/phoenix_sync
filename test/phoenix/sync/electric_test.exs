@@ -4,12 +4,14 @@ defmodule Phoenix.Sync.ElectricTest do
     parameterize: [
       %{
         sync_config: [
+          env: :test,
           mode: :embedded,
           pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       },
       %{
         sync_config: [
+          env: :test,
           mode: :http,
           url: "http://localhost:3000",
           pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]

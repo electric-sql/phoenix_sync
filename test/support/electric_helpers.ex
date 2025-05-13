@@ -133,7 +133,7 @@ defmodule Support.ElectricHelpers do
   end
 
   def start_embedded(%{stack_config: stack_config, sync_config: sync_config} = ctx) do
-    config = Keyword.merge(sync_config, Enum.to_list(stack_config))
+    config = Keyword.merge(Enum.to_list(stack_config), sync_config)
 
     {:ok, children} = Phoenix.Sync.Application.children(config)
 
@@ -152,7 +152,11 @@ defmodule Support.ElectricHelpers do
     if endpoint == @endpoint && ctx.async,
       do: raise(RuntimeError, message: "do not use configure_endpoint in async tests")
 
-    Phoenix.Config.put(endpoint, :phoenix_sync, Phoenix.Sync.Application.plug_opts(electric_opts))
+    Phoenix.Config.put(
+      endpoint,
+      :phoenix_sync,
+      Phoenix.Sync.Application.plug_opts(electric_opts)
+    )
 
     [endpoint: endpoint]
   end

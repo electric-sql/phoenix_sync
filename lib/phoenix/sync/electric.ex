@@ -568,11 +568,13 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       case Shapes.Api.validate(api, params) do
         {:ok, request} ->
           conn
+          |> content_type()
           |> Plug.Conn.assign(:request, request)
           |> Shapes.Api.serve_shape_log(request)
 
         {:error, response} ->
           conn
+          |> content_type()
           |> Shapes.Api.Response.send(response)
           |> Plug.Conn.halt()
       end
@@ -582,11 +584,13 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       case Shapes.Api.validate_for_delete(api, params) do
         {:ok, request} ->
           conn
+          |> content_type()
           |> Plug.Conn.assign(:request, request)
           |> Shapes.Api.delete_shape(request)
 
         {:error, response} ->
           conn
+          |> content_type()
           |> Shapes.Api.Response.send(response)
           |> Plug.Conn.halt()
       end
@@ -594,6 +598,10 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
 
     def call(_api, %{method: "OPTIONS"} = conn, _params) do
       Shapes.Api.options(conn)
+    end
+
+    defp content_type(conn) do
+      Plug.Conn.put_resp_content_type(conn, "application/json")
     end
   end
 end
