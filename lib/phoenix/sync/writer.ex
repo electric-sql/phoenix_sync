@@ -52,7 +52,7 @@ defmodule Phoenix.Sync.Writer do
       {:ok, %Transaction{operations: operations}} =
         #{inspect(__MODULE__)}.parse_transaction(
           my_encoded_txn,
-          format: #{inspect(__MODULE__.Format.TanstackOptimistic)}
+          format: #{inspect(__MODULE__.Format.TanstackDB)}
         )
 
       {:ok, txid} =
@@ -89,7 +89,7 @@ defmodule Phoenix.Sync.Writer do
               # we don't allow deletes...
               {:error, "invalid delete"}
           end,
-          format: #{inspect(__MODULE__.Format.TanstackOptimistic)},
+          format: #{inspect(__MODULE__.Format.TanstackDB)},
           timeout: 60_000
         )
 
@@ -137,7 +137,7 @@ defmodule Phoenix.Sync.Writer do
   ## Controller example
 
   For example, take a project management app that's using
-  [@TanStack/optimistic](https://github.com/TanStack/optimistic) to batch up local
+  [@TanStack/db](https://github.com/TanStack/db) to batch up local
   optimistic writes and POST them to the `Phoenix.Controller` below:
 
       defmodule MutationController do
@@ -166,7 +166,7 @@ defmodule Phoenix.Sync.Writer do
             |> #{inspect(__MODULE__)}.apply(
               transaction,
               Repo,
-              format: Format.TanstackOptimistic
+              format: Format.TanstackDB
             )
 
           render(conn, :mutations, txid: txid)
@@ -234,14 +234,13 @@ defmodule Phoenix.Sync.Writer do
 
   The currently supported format adapters are:
 
-  - [TanStack/optimistic](https://github.com/TanStack/optimistic) "A library
-    for creating fast optimistic updates with flexible backend support that pairs
-    seamlessly with sync engines"
+  - [TanStack/db](https://github.com/TanStack/db) "A reactive client store for
+    building super fast apps on sync"
 
     Integration:
 
         #{inspect(__MODULE__)}.new()
-        |> #{inspect(__MODULE__)}.ingest(mutation_data, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        |> #{inspect(__MODULE__)}.ingest(mutation_data, format: #{inspect(__MODULE__.Format.TanstackDB)})
         |> #{inspect(__MODULE__)}.transaction(Repo)
 
   ## Usage
@@ -496,7 +495,7 @@ defmodule Phoenix.Sync.Writer do
               check: &validate_mutation(&1, user_id),
               load: &fetch_for_user(&1, user_id),
             )
-            |> Writer.apply(transaction, Repo, format: Writer.Format.TanstackOptimistic)
+            |> Writer.apply(transaction, Repo, format: Writer.Format.TanstackDB)
 
           render(conn, :mutations, txid: txid)
         end
@@ -1181,7 +1180,7 @@ defmodule Phoenix.Sync.Writer do
         #{inspect(__MODULE__)}.new()
         |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, check: &my_check_function/1)
         |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, check: &my_check_function/1)
-        |> #{inspect(__MODULE__)}.ingest(changes, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        |> #{inspect(__MODULE__)}.ingest(changes, format: #{inspect(__MODULE__.Format.TanstackDB)})
         |> #{inspect(__MODULE__)}.to_multi()
 
   If you want to add extra operations to the mutation transaction, beyond those
@@ -1284,7 +1283,7 @@ defmodule Phoenix.Sync.Writer do
         #{inspect(__MODULE__)}.new()
         |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo, check: &my_check_function/1)
         |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option, check: &my_check_function/1)
-        |> #{inspect(__MODULE__)}.to_multi(changes, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+        |> #{inspect(__MODULE__)}.to_multi(changes, format: #{inspect(__MODULE__.Format.TanstackDB)})
 
   """
   @spec to_multi(t(), Format.transaction_data(), parse_opts()) :: Ecto.Multi.t()
@@ -1307,7 +1306,7 @@ defmodule Phoenix.Sync.Writer do
 
   This can be used to handle mutation operations explicitly:
 
-      {:ok, txn} = #{inspect(__MODULE__)}.parse_transaction(my_json_tx_data, format: #{inspect(__MODULE__.Format.TanstackOptimistic)})
+      {:ok, txn} = #{inspect(__MODULE__)}.parse_transaction(my_json_tx_data, format: #{inspect(__MODULE__.Format.TanstackDB)})
 
       {:ok, txid} =
         Repo.transaction(fn ->
@@ -1693,7 +1692,7 @@ defmodule Phoenix.Sync.Writer do
       |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option)
       |> #{inspect(__MODULE__)}.ingest(
         changes,
-        format: #{inspect(__MODULE__)}.Format.TanstackOptimistic
+        format: #{inspect(__MODULE__)}.Format.TanstackDB
       )
       |> #{inspect(__MODULE__)}.transaction(MyApp.Repo)
       |> case do
@@ -1772,7 +1771,7 @@ defmodule Phoenix.Sync.Writer do
               # we don't allow deletes...
               {:error, "invalid delete"}
           end,
-          format: #{inspect(__MODULE__.Format.TanstackOptimistic)},
+          format: #{inspect(__MODULE__.Format.TanstackDB)},
           timeout: 60_000
         )
 
@@ -1784,7 +1783,7 @@ defmodule Phoenix.Sync.Writer do
       {:ok, txn} =
         #{inspect(__MODULE__)}.parse_transaction(
           my_encoded_txn,
-          format: #{inspect(__MODULE__.Format.TanstackOptimistic)}
+          format: #{inspect(__MODULE__.Format.TanstackDB)}
         )
 
       {:ok, txid} =
@@ -1856,7 +1855,7 @@ defmodule Phoenix.Sync.Writer do
         #{inspect(__MODULE__)}.new()
         |> #{inspect(__MODULE__)}.allow(MyApp.Todos.Todo)
         |> #{inspect(__MODULE__)}.allow(MyApp.Options.Option)
-        |> #{inspect(__MODULE__)}.to_multi(changes, format: #{inspect(__MODULE__)}.Format.TanstackOptimistic)
+        |> #{inspect(__MODULE__)}.to_multi(changes, format: #{inspect(__MODULE__)}.Format.TanstackDB)
         |> MyApp.Repo.transaction()
 
       {:ok, txid} = #{inspect(__MODULE__)}.txid(changes)

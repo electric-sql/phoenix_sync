@@ -1,7 +1,7 @@
-defmodule Phoenix.Sync.Writer.Format.TanstackOptimistic do
+defmodule Phoenix.Sync.Writer.Format.TanstackDB do
   @moduledoc """
   Implements the `Phoenix.Sync.Writer.Format` behaviour for the data format used by
-  [TanStack/optimistic](https://github.com/TanStack/optimistic).
+  [TanStack/db](https://github.com/TanStack/db).
   """
 
   alias Phoenix.Sync.Writer.Transaction
