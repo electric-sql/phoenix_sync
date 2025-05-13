@@ -6,12 +6,14 @@ defmodule Phoenix.Sync.RouterTest do
     parameterize: [
       %{
         sync_config: [
+          env: :test,
           mode: :embedded,
           pool_opts: @pool_opts
         ]
       },
       %{
         sync_config: [
+          env: :test,
           mode: :http,
           url: "http://localhost:3000",
           pool_opts: @pool_opts
@@ -362,9 +364,7 @@ defmodule Phoenix.Sync.RouterTest do
     end
 
     setup(ctx) do
-      opts = Phoenix.Sync.plug_opts(electric_opts(ctx))
-
-      [plug_opts: [phoenix_sync: opts]]
+      [plug_opts: [phoenix_sync: Phoenix.Sync.plug_opts(ctx.electric_opts)]]
     end
 
     test "raises compile-time error if Plug.Router is not configured to copy_opts_to_assign" do
