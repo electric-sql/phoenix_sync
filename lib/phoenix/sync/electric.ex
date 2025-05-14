@@ -519,16 +519,9 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp http_mode_plug_opts(electric_config) do
-    with {:ok, url} <- fetch_with_error(electric_config, :url),
-         credential_params = electric_config |> Keyword.get(:credentials, []) |> Map.new(),
-         extra_params = electric_config |> Keyword.get(:params, []) |> Map.new(),
-         params = Map.merge(extra_params, credential_params),
-         {:ok, client} <-
-           Electric.Client.new(
-             base_url: url,
-             params: params,
-             fetch: {Electric.Client.Fetch.HTTP, [request: [raw: true]]}
-           ) do
+    with {:ok, client} <- configure_client(electric_config, :http) do
+      # don't decode the body - just pass it directly
+      client = %{client | fetch: {Electric.Client.Fetch.HTTP, [request: [raw: true]]}}
       {:ok, %Phoenix.Sync.Electric.ClientAdapter{client: client}}
     end
   end
@@ -543,13 +536,15 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
-  defp configure_client(opts, :http) do
-    case Keyword.fetch(opts, :url) do
-      {:ok, url} ->
-        Electric.Client.new(base_url: url)
-
-      :error ->
-        {:error, "`phoenix_sync[:electric][:url]` not set for phoenix_sync in HTTP mode"}
+  defp configure_client(electric_config, :http) do
+    with {:ok, url} <- fetch_with_error(electric_config, :url),
+         credential_params = electric_config |> Keyword.get(:credentials, []) |> Map.new(),
+         extra_params = electric_config |> Keyword.get(:params, []) |> Map.new(),
+         params = Map.merge(extra_params, credential_params) do
+      Electric.Client.new(
+        base_url: url,
+        params: params
+      )
     end
   end
 end

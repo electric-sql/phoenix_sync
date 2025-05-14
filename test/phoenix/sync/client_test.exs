@@ -83,6 +83,24 @@ defmodule Phoenix.Sync.ClientTest do
 
       assert_http_client(client, "http://api.electric-sql.cloud/v1/shape")
     end
+
+    test "passes credentials into client" do
+      config = [
+        mode: :http,
+        url: "http://api.electric-sql.cloud",
+        credentials: [
+          secret: "my-secret",
+          source_id: "my-source-id"
+        ],
+        params: %{
+          something: "here"
+        }
+      ]
+
+      assert {:ok, client} = Client.new(config)
+
+      assert client.params == %{secret: "my-secret", source_id: "my-source-id", something: "here"}
+    end
   end
 
   describe "stream" do
