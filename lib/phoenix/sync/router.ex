@@ -135,7 +135,7 @@ defmodule Phoenix.Sync.Router do
         unquote(path),
         Phoenix.Sync.Router.Shape,
         %{shape: unquote(Macro.escape(definition))},
-        []
+        alias: false
       )
     end
   end

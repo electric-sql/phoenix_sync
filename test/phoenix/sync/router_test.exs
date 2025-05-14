@@ -64,6 +64,10 @@ defmodule Phoenix.Sync.RouterTest do
       sync "/query-config", Support.Todo, replica: :full
       sync "/query-config2", Support.Todo, replica: :full, storage: %{compaction: :disabled}
     end
+
+    scope "/namespaced-sync", WebNamespace do
+      sync "/todos", Support.Todo
+    end
   end
 
   defmodule Endpoint do
@@ -101,6 +105,30 @@ defmodule Phoenix.Sync.RouterTest do
       resp =
         Phoenix.ConnTest.build_conn()
         |> Phoenix.ConnTest.get("/sync/todos", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {"todos", ["title"], [["one"], ["two"], ["three"]]}
+    test "supports schema modules within aliased scope", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/namespaced-sync/todos", %{offset: "-1"})
 
       assert resp.status == 200
       assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]

@@ -139,7 +139,7 @@ shape.subscribe((data) => console.log(data));
 
 Or binding a shape to a component using the [React bindings](https://electric-sql.com/docs/integrations/react):
 
-```tsx
+```typescript
 import { useShape } from "@electric-sql/react";
 
 const MyComponent = () => {
