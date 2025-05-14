@@ -272,57 +272,44 @@ if Code.ensure_loaded?(Phoenix.Component) do
       pid = self()
 
       client
-      |> Electric.Client.stream(query, live: false, replica: :full)
+      |> Electric.Client.stream(query, live: false, replica: :full, errors: :stream)
       |> Stream.transform(
         fn -> {[], nil} end,
-        &live_stream_message(&1, &2, client, name, query, pid, component),
-        &update_mode(&1, client, name, query, pid, component)
+        &live_stream_message/2,
+        &update_mode(&1, {client, name, query, pid, component})
       )
     end
 
     defp live_stream_message(
            %Message.ChangeMessage{headers: %{operation: :insert}, value: value},
-           acc,
-           _client,
-           _name,
-           _query,
-           _pid,
-           _component
+           acc
          ) do
       {[value], acc}
     end
 
-    defp live_stream_message(
-           %Message.ChangeMessage{headers: %{operation: operation}} = msg,
-           {updates, resume},
-           _client,
-           _name,
-           _query,
-           _pid,
-           _component
-         )
-         when operation in [:update, :delete] do
+    defp live_stream_message(%Message.ChangeMessage{} = msg, {updates, resume}) do
       {[], {[msg | updates], resume}}
     end
 
-    defp live_stream_message(
-           %Message.ResumeMessage{} = resume,
-           {updates, nil},
-           _client,
-           _name,
-           _query,
-           _pid,
-           _component
-         ) do
-      {[], {updates, resume}}
-    end
-
-    defp live_stream_message(_message, acc, _client, _name, _query, _pid, _component) do
+    defp live_stream_message(%Message.ControlMessage{}, acc) do
       {[], acc}
     end
 
-    defp update_mode({updates, resume}, client, name, query, pid, component) do
+    defp live_stream_message(%Message.ResumeMessage{} = resume, {updates, nil}) do
+      {[], {updates, resume}}
+    end
+
+    defp live_stream_message(%Electric.Client.Error{} = error, _acc) do
+      {[], {error, nil}}
+    end
+
+    defp update_mode({%Electric.Client.Error{} = error, _resume}, _state) do
+      raise error
+    end
+
+    defp update_mode({updates, resume}, {client, name, query, pid, component}) do
       # need to send every update as a separate message.
+
       for event <- updates |> Enum.reverse() |> Enum.map(&wrap_msg(&1, name, component)),
           do: send(pid, {:sync, event})
 
