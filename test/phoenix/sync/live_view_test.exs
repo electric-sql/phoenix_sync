@@ -200,6 +200,28 @@ defmodule Phoenix.Sync.LiveViewTest do
         assert html =~ name
       end
     end
+
+    test "errors from the client are returned", %{conn: conn} do
+      {:ok, client} = Client.Mock.new()
+
+      Client.Mock.async_response(client,
+        status: 400,
+        body: [%{"message" => "this is wrong"}]
+      )
+
+      conn =
+        conn
+        |> put_private(:electric_client, client)
+        |> put_private(:test_pid, self())
+
+      try do
+        live(conn, "/stream")
+        flunk("the stream should have aborted")
+      catch
+        :exit, {{error, _stacktrace}, _} ->
+          assert %Electric.Client.Error{message: %{"message" => "this is wrong"}} = error
+      end
+    end
   end
 
   describe "electric_client_configuration/1" do

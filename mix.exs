@@ -39,7 +39,7 @@ defmodule Phoenix.Sync.MixProject do
       # require an exact version because electric moves very quickly atm
       # and a more generous specification would inevitably break.
       {:electric, "== 1.0.1", optional: true},
-      {:electric_client, "== 0.3.0"}
+      {:electric_client, ">= 0.5.0-beta-1"}
     ] ++ deps_for_env(Mix.env())
   end
 
