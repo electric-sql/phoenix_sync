@@ -16,124 +16,6 @@ defmodule Phoenix.Sync.Writer do
   This allows you to build instant, offline-capable applications that work with
   [local optimistic state](https://electric-sql.com/docs/guides/writes).
 
-  ## Usage levels ([low](#module-low-level-usage-diy), [mid](#module-mid-level-usage), [high](#module-high-level-usage))
-
-  You don't need to use `#{inspect(__MODULE__)}` to ingest write operations using Phoenix.
-  Phoenix already ships with primitives like `Ecto.Multi` and `c:Ecto.Repo.transaction/2`.
-  However, `#{inspect(__MODULE__)}` provides:
-
-  - a number of convienience functions that simplify ingesting mutation operations
-  - a high-level pipeline that dries up a lot of common boilerplate and allows you to re-use
-    your existing `Plug` and `Ecto.Changeset` logic
-
-  ### Low-level usage (DIY)
-
-  If you're comfortable parsing, validating and persisting changes yourself then the
-  simplest way to use `#{inspect(__MODULE__)}` is to use `txid!/1` within
-  `c:Ecto.Repo.transaction/2`:
-
-      {:ok, txid} =
-        MyApp.Repo.transaction(fn ->
-          # ... save your changes to the database ...
-
-          # Return the transaction id.
-          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
-        end)
-
-  This returns the database transaction ID that the changes were applied within. This allows
-  you to return it to the client, which can then monitor the read-path sync stream to detect
-  when the transaction syncs through. At which point the client can discard its local
-  optimistic state.
-
-  A convienient way of doing this is to parse the request data into a list of
-  `#{inspect(__MODULE__)}.Operation`s using a `#{inspect(__MODULE__)}.Format`.
-  You can then apply the changes yourself by matching on the operation data:
-
-      {:ok, %Transaction{operations: operations}} =
-        #{inspect(__MODULE__)}.parse_transaction(
-          my_encoded_txn,
-          format: #{inspect(__MODULE__.Format.TanstackDB)}
-        )
-
-      {:ok, txid} =
-        MyApp.Repo.transaction(fn ->
-          Enum.each(txn.operations, fn
-            %{operation: :insert, relation: [_, "todos"], change: change} ->
-              # insert a Todo
-            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
-              # update a Todo
-            %{operation: :delete, relation: [_, "todos"], data: data} ->
-              # for example, if you don't want to allow deletes...
-              raise "invalid delete"
-          end)
-
-          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
-        end, timeout: 60_000)
-
-  ### Mid-level usage
-
-  The pattern above is wrapped-up into the more convienient `transact/4` function.
-  This abstracts the parsing and txid details whilst still allowing you to handle
-  and apply mutation operations yourself:
-
-      {:ok, txid} =
-        #{inspect(__MODULE__)}.transact(
-          my_encoded_txn,
-          MyApp.Repo,
-          fn
-            %{operation: :insert, relation: [_, "todos"], change: change} ->
-              MyApp.Repo.insert(...)
-            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
-              MyApp.Repo.update(Ecto.Changeset.cast(...))
-            %{operation: :delete, relation: [_, "todos"], data: data} ->
-              # we don't allow deletes...
-              {:error, "invalid delete"}
-          end,
-          format: #{inspect(__MODULE__.Format.TanstackDB)},
-          timeout: 60_000
-        )
-
-  However, with larger applications, this flexibility can become tiresome as you end up
-  repeating boilerplate and defining your own pipeline to authorize, validate and apply
-  changes with the right error handling and return values.
-
-  ### High-level usage
-
-  To avoid this, `#{inspect(__MODULE__)}` provides a higer level pipeline that dries up
-  the boilerplate, whilst still allowing flexibility and extensibility. You create an
-  ingest pipeline by instantiating a `#{inspect(__MODULE__)}` instance and piping into
-  `allow/3` and `apply/4` calls:
-
-      {:ok, txid, _changes} =
-        #{inspect(__MODULE__)}.new()
-        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
-        |> #{inspect(__MODULE__)}.allow(MyApp.OtherSchema)
-        |> #{inspect(__MODULE__)}.apply(transaction, Repo, format: MyApp.MutationFormat)
-
-  Or, instead of `apply/4` you can use seperate calls to `ingest/3` and then `transaction/2`.
-  This allows you to ingest multiple formats, for example:
-
-      {:ok, txid} =
-        #{inspect(__MODULE__)}.new()
-        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
-        |> #{inspect(__MODULE__)}.ingest(changes, format: MyApp.MutationFormat)
-        |> #{inspect(__MODULE__)}.ingest(other_changes, parser: &MyApp.MutationFormat.parse_other/1)
-        |> #{inspect(__MODULE__)}.ingest(more_changes, parser: {MyApp.MutationFormat, :parse_more, []})
-        |> #{inspect(__MODULE__)}.transaction(MyApp.Repo)
-
-  And at any point you can drop down / eject out to the underlying `Ecto.Multi` using
-  `to_multi/1` or `to_multi/3`:
-
-      multi =
-        #{inspect(__MODULE__)}.new()
-        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
-        |> #{inspect(__MODULE__)}.to_multi(changes, format: MyApp.MutationFormat)
-
-      # ... do anything you like with the multi ...
-
-      {:ok, changes} = Repo.transaction(multi)
-      {:ok, txid} = #{inspect(__MODULE__)}.txid(changes)
-
   ## Controller example
 
   For example, take a project management app that's using
@@ -198,6 +80,124 @@ defmodule Phoenix.Sync.Writer do
   >
   > That's what `#{inspect(__MODULE__)}` is for: specifying which resources can be
   > updated and registering functions to authorize and validate the mutation payload.
+
+  ## Usage levels ([high](#module-high-level-usage), [mid](#module-mid-level-usage), [low](#module-low-level-usage-diy))
+
+  You don't need to use `#{inspect(__MODULE__)}` to ingest write operations using Phoenix.
+  Phoenix already ships with primitives like `Ecto.Multi` and `c:Ecto.Repo.transaction/2`.
+  However, `#{inspect(__MODULE__)}` provides:
+
+  - a number of convienience functions that simplify ingesting mutation operations
+  - a high-level pipeline that dries up a lot of common boilerplate and allows you to re-use
+    your existing `Plug` and `Ecto.Changeset` logic
+
+  ### High-level usage
+
+  The controller example above uses a higher level pipeline that dries up common
+  boilerplate, whilst still allowing flexibility and extensibility. You create an
+  ingest pipeline by instantiating a `#{inspect(__MODULE__)}` instance and piping into
+  `allow/3` and `apply/4` calls:
+
+      {:ok, txid, _changes} =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.allow(MyApp.OtherSchema)
+        |> #{inspect(__MODULE__)}.apply(transaction, Repo, format: MyApp.MutationFormat)
+
+  Or, instead of `apply/4` you can use seperate calls to `ingest/3` and then `transaction/2`.
+  This allows you to ingest multiple formats, for example:
+
+      {:ok, txid} =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.ingest(changes, format: MyApp.MutationFormat)
+        |> #{inspect(__MODULE__)}.ingest(other_changes, parser: &MyApp.MutationFormat.parse_other/1)
+        |> #{inspect(__MODULE__)}.ingest(more_changes, parser: {MyApp.MutationFormat, :parse_more, []})
+        |> #{inspect(__MODULE__)}.transaction(MyApp.Repo)
+
+  And at any point you can drop down / eject out to the underlying `Ecto.Multi` using
+  `to_multi/1` or `to_multi/3`:
+
+      multi =
+        #{inspect(__MODULE__)}.new()
+        |> #{inspect(__MODULE__)}.allow(MyApp.Todo)
+        |> #{inspect(__MODULE__)}.to_multi(changes, format: MyApp.MutationFormat)
+
+      # ... do anything you like with the multi ...
+
+      {:ok, changes} = Repo.transaction(multi)
+      {:ok, txid} = #{inspect(__MODULE__)}.txid(changes)
+
+  ### Mid-level usage
+
+  The pattern above uses a lower-level `transact/4` function.
+  This abstracts the mechanical details of transaction management whilst
+  still allowing you to handle and apply mutation operations yourself:
+
+      {:ok, txid} =
+        #{inspect(__MODULE__)}.transact(
+          my_encoded_txn,
+          MyApp.Repo,
+          fn
+            %{operation: :insert, relation: [_, "todos"], change: change} ->
+              MyApp.Repo.insert(...)
+            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
+              MyApp.Repo.update(Ecto.Changeset.cast(...))
+            %{operation: :delete, relation: [_, "todos"], data: data} ->
+              # we don't allow deletes...
+              {:error, "invalid delete"}
+          end,
+          format: #{inspect(__MODULE__.Format.TanstackDB)},
+          timeout: 60_000
+        )
+
+  However, with larger applications, this flexibility can become tiresome as you end up
+  repeating boilerplate and defining your own pipeline to authorize, validate and apply
+  changes with the right error handling and return values.
+
+  ### Low-level usage (DIY)
+
+  For the more advanced cases, if you're comfortable parsing, validating and persisting
+  changes yourself then the simplest way to use `#{inspect(__MODULE__)}` is to use `txid!/1`
+  within `c:Ecto.Repo.transaction/2`:
+
+      {:ok, txid} =
+        MyApp.Repo.transaction(fn ->
+          # ... save your changes to the database ...
+
+          # Return the transaction id.
+          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
+        end)
+
+  This returns the database transaction ID that the changes were applied within. This allows
+  you to return it to the client, which can then monitor the read-path sync stream to detect
+  when the transaction syncs through. At which point the client can discard its local
+  optimistic state.
+
+  A convinient way of doing this is to parse the request data into a list of
+  `#{inspect(__MODULE__)}.Operation`s using a `#{inspect(__MODULE__)}.Format`.
+  You can then apply the changes yourself by matching on the operation data:
+
+      {:ok, %Transaction{operations: operations}} =
+        #{inspect(__MODULE__)}.parse_transaction(
+          my_encoded_txn,
+          format: #{inspect(__MODULE__.Format.TanstackDB)}
+        )
+
+      {:ok, txid} =
+        MyApp.Repo.transaction(fn ->
+          Enum.each(txn.operations, fn
+            %{operation: :insert, relation: [_, "todos"], change: change} ->
+              # insert a Todo
+            %{operation: :update, relation: [_, "todos"], data: data, change: change} ->
+              # update a Todo
+            %{operation: :delete, relation: [_, "todos"], data: data} ->
+              # for example, if you don't want to allow deletes...
+              raise "invalid delete"
+          end)
+
+          #{inspect(__MODULE__)}.txid!(MyApp.Repo)
+        end, timeout: 60_000)
 
   ## Transactions
 
