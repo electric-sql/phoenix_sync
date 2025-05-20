@@ -18,7 +18,12 @@ defmodule Phoenix.Sync.MixProject do
       package: package(),
       description: description(),
       source_url: "https://github.com/electric-sql/phoenix_sync",
-      homepage_url: "https://hexdocs.pm/phoenix_sync"
+      homepage_url: "https://hexdocs.pm/phoenix_sync",
+      aliases: [
+        "test.all": ["test", "test.as_a_dep"],
+        "test.as_a_dep": &test_as_a_dep/1
+      ],
+      preferred_cli_env: ["test.all": :test]
     ]
   end
 
@@ -101,4 +106,36 @@ defmodule Phoenix.Sync.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp test_as_a_dep(args) do
+    IO.puts("==> Compiling ecto_sql from a dependency")
+    File.rm_rf!("tmp/as_a_dep")
+    File.mkdir_p!("tmp/as_a_dep")
+
+    File.cd!("tmp/as_a_dep", fn ->
+      File.write!("mix.exs", """
+      defmodule DepsOnPhoenixSync.MixProject do
+        use Mix.Project
+
+        def project do
+          [
+            app: :deps_on_ecto_sql,
+            version: "0.0.1",
+            deps: [{:phoenix_sync, path: "../.."}, {:electric, "~> 1.0"}]
+          ]
+        end
+      end
+      """)
+
+      mix_cmd_with_status_check(["do", "deps.get,", "compile", "--force" | args])
+    end)
+  end
+
+  defp mix_cmd_with_status_check(args, opts \\ []) do
+    {_, res} = System.cmd("mix", args, [into: IO.binstream(:stdio, :line)] ++ opts)
+
+    if res > 0 do
+      System.at_exit(fn _ -> exit({:shutdown, 1}) end)
+    end
+  end
 end
