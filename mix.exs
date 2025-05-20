@@ -41,9 +41,7 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      # require an exact version because electric moves very quickly atm
-      # and a more generous specification would inevitably break.
-      {:electric, "== 1.0.1", optional: true},
+      {:electric, "~> 1.0.6", optional: true},
       {:electric_client, ">= 0.5.0-beta-1"}
     ] ++ deps_for_env(Mix.env())
   end
