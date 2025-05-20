@@ -318,9 +318,7 @@ defmodule Phoenix.Sync.Electric do
 
   if @electric_available? do
     defp start_embedded(env, mode, db_config_fun, message) do
-      db_config =
-        db_config_fun.()
-        |> obfuscate_credentials()
+      db_config = db_config_fun.()
 
       electric_config = core_configuration(env, db_config)
 
@@ -366,24 +364,6 @@ defmodule Phoenix.Sync.Electric do
         :error ->
           opts
       end
-    end
-
-    defp obfuscate_credentials(opts) do
-      opts
-      |> Keyword.update!(:replication_connection_opts, &Electric.Utils.obfuscate_password/1)
-      |> then(fn opts ->
-        case Keyword.fetch(opts, :query_connection_opts) do
-          :error ->
-            opts
-
-          {:ok, query_connection_opts} ->
-            Keyword.put(
-              opts,
-              :query_connection_opts,
-              Electric.Utils.obfuscate_password(query_connection_opts)
-            )
-        end
-      end)
     end
   else
     defp start_embedded(_env, _mode, _db_config_fun, _message) do

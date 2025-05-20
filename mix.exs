@@ -42,10 +42,10 @@ defmodule Phoenix.Sync.MixProject do
       {:jason, "~> 1.0"},
       # {:ecto_sql, "~> 3.10", optional: true},
       {:ecto_sql, path: "../ecto_sql", override: true},
-      # require an exact version because electric moves very quickly atm
-      # and a more generous specification would inevitably break.
-      {:electric, "== 1.0.1", optional: true},
-      {:electric_client, ">= 0.5.0-beta-1"}
+      # {:electric, "~> 1.0.6", optional: true},
+      {:electric, path: "../electric/packages/sync-service", optional: true, override: true},
+      # {:electric_client, ">= 0.5.0-beta-1"}
+      {:electric_client, path: "../electric/packages/elixir-client"}
     ] ++ deps_for_env(Mix.env())
   end
 
