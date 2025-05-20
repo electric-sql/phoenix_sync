@@ -10,10 +10,8 @@ defmodule Phoenix.Sync.ApplicationTest do
           get_in(opts, [:replication_opts, :connection_opts]) || [],
           opts[:connection_opts]
         ] do
-      assert {pass_fun, connection_opts} =
+      assert {"password", connection_opts} =
                Keyword.pop!(connection_opts, :password)
-
-      assert pass_fun.() == "password"
 
       base_opts = [
         username: "postgres",
@@ -213,10 +211,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
 
-      assert {pass_fun, connection_opts} =
+      assert {"password", connection_opts} =
                Keyword.pop!(opts[:replication_opts][:connection_opts], :password)
-
-      assert pass_fun.() == "password"
 
       assert connection_opts == [
                username: "postgres",
@@ -224,10 +220,8 @@ defmodule Phoenix.Sync.ApplicationTest do
                database: "electric"
              ]
 
-      assert {pass_fun, connection_opts} =
+      assert {"password", connection_opts} =
                Keyword.pop!(opts[:connection_opts], :password)
-
-      assert pass_fun.() == "password"
 
       assert connection_opts == [
                username: "postgres",
@@ -258,8 +252,7 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
 
-      assert {pass_fun, connection_opts} = Keyword.pop!(opts[:connection_opts], :password)
-      assert pass_fun.() == "password"
+      assert {"password", connection_opts} = Keyword.pop!(opts[:connection_opts], :password)
 
       assert connection_opts == [
                username: "postgres",
