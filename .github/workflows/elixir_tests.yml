@@ -77,6 +77,28 @@ jobs:
       - name: Run tests
         run: mix test --trace
 
+      - name: Test installation as a dependency
+        run: mix test.as_a_dep
+
+  test-as-dep:
+    name: Test installation as a dependency
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+
+      - name: Test installation as a dependency
+        run: mix test.as_a_dep
+
   formatting:
     name: mix format --check-formatted
     runs-on: ubuntu-latest
