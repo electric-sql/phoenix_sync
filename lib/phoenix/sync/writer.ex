@@ -51,7 +51,7 @@ defmodule Phoenix.Sync.Writer do
               format: Format.TanstackDB
             )
 
-          render(conn, :mutations, txid: txid)
+          json(conn, txid: txid)
         end
       end
 
