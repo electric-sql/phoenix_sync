@@ -189,7 +189,7 @@ defmodule MutationController do
       )
       |> Writer.apply(transaction, Repo, format: Format.TanstackDB)
 
-    json(conn, txid: txid)
+    json(conn, %{txid: txid})
   end
 end
 ```

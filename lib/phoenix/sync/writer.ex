@@ -51,7 +51,7 @@ defmodule Phoenix.Sync.Writer do
               format: Format.TanstackDB
             )
 
-          json(conn, txid: txid)
+          json(conn, %{txid: txid})
         end
       end
 
@@ -497,7 +497,7 @@ defmodule Phoenix.Sync.Writer do
             )
             |> Writer.apply(transaction, Repo, format: Writer.Format.TanstackDB)
 
-          render(conn, :mutations, txid: txid)
+          json(conn, %{txid: txid})
         end
 
         # Included here for completeness but in a real app would be a
