@@ -528,6 +528,7 @@ defmodule Phoenix.Sync.Electric do
 
   if @electric_available? do
     defp configure_client(opts, :embedded) do
+      dbg(client: {:embedded, opts})
       Electric.Client.embedded(opts)
     end
   else
@@ -537,6 +538,8 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp configure_client(electric_config, :http) do
+    dbg(client: {:http, electric_config})
+
     with {:ok, url} <- fetch_with_error(electric_config, :url),
          credential_params = electric_config |> Keyword.get(:credentials, []) |> Map.new(),
          extra_params = electric_config |> Keyword.get(:params, []) |> Map.new(),

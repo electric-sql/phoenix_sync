@@ -35,7 +35,8 @@ defmodule Phoenix.Sync.MixProject do
       {:phoenix_live_view, "~> 1.0", optional: true},
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
-      {:ecto_sql, "~> 3.10", optional: true},
+      # {:ecto_sql, "~> 3.10", optional: true},
+      {:ecto_sql, path: "../ecto_sql", override: true},
       # require an exact version because electric moves very quickly atm
       # and a more generous specification would inevitably break.
       {:electric, "== 1.0.1", optional: true},
