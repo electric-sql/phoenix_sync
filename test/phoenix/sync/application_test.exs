@@ -70,7 +70,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       validate_repo_connection_opts!(opts)
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
                persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
@@ -96,6 +96,15 @@ defmodule Phoenix.Sync.ApplicationTest do
              end) =~ ~r/No `env` specified for :phoenix_sync: defaulting to `:prod`/
     end
 
+    test "sandbox mode" do
+      config = [
+        mode: :sandbox,
+        repo: Support.ConfigTestRepo
+      ]
+
+      assert {:ok, [Phoenix.Sync.Sandbox]} = App.children(config)
+    end
+
     test "embedded mode dev env" do
       tmp_dir = System.tmp_dir!()
 
@@ -111,7 +120,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       assert %{
                storage:
-                 {Electric.ShapeCache.FileStorage, [storage_dir: ^tmp_dir <> "/" <> storage_dir]},
+                 {Electric.ShapeCache.PureFileStorage,
+                  [storage_dir: ^tmp_dir <> "/" <> storage_dir]},
                persistent_kv: %Electric.PersistentKV.Filesystem{
                  root: ^tmp_dir <> "/" <> storage_dir
                }
@@ -180,7 +190,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       validate_repo_connection_opts!(opts)
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
                persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
@@ -245,7 +255,7 @@ defmodule Phoenix.Sync.ApplicationTest do
              ]
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
                persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
@@ -276,7 +286,7 @@ defmodule Phoenix.Sync.ApplicationTest do
              ]
 
       assert %{
-               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^storage_dir]},
+               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
                persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = Map.new(opts)
     end
@@ -331,7 +341,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       api = App.plug_opts(config)
 
       assert %Electric.Shapes.Api{
-               storage: {Electric.ShapeCache.FileStorage, %{base_path: ^storage_dir <> _}},
+               storage: {Electric.ShapeCache.PureFileStorage, %{base_path: ^storage_dir <> _}},
                persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = api
     end
@@ -387,6 +397,17 @@ defmodule Phoenix.Sync.ApplicationTest do
                  endpoint: ^endpoint
                }
              } = api
+    end
+
+    test "sandbox mode" do
+      config = [
+        mode: :sandbox,
+        repo: Support.ConfigTestRepo
+      ]
+
+      api = App.plug_opts(config)
+
+      assert %Phoenix.Sync.Sandbox.APIAdapter{} = api
     end
   end
 end

@@ -349,6 +349,10 @@ children = [
 ]
 ```
 
+## Testing
+
+See `Phoenix.Sync.Sandbox` for details on how to test sync endpoints (liveview, controllers and routers) in your Phoenix/Ecto application.
+
 ## Notes
 
 ### ElectricSQL

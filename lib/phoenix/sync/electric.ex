@@ -91,7 +91,7 @@ defmodule Phoenix.Sync.Electric do
   @behaviour Phoenix.Sync.Adapter
   @behaviour Plug
 
-  @valid_modes [:http, :embedded, :disabled]
+  @valid_modes [:http, :embedded, :sandbox, :disabled]
   @client_valid_modes @valid_modes -- [:disabled]
   @electric_available? Code.ensure_loaded?(Electric.Application)
 
@@ -149,6 +149,9 @@ defmodule Phoenix.Sync.Electric do
       :disabled ->
         {:ok, []}
 
+      :sandbox ->
+        {:ok, [Phoenix.Sync.Sandbox]}
+
       mode when mode in @valid_modes ->
         embedded_children(env, mode, electric_opts)
 
@@ -187,9 +190,7 @@ defmodule Phoenix.Sync.Electric do
   @impl Phoenix.Sync.Adapter
   def client(env, opts) do
     {mode, electric_opts} =
-      opts
-      |> set_environment_defaults(env)
-      |> electric_opts(env)
+      opts |> set_environment_defaults(env) |> electric_opts(env)
 
     case mode do
       mode when mode in @client_valid_modes ->
@@ -287,11 +288,21 @@ defmodule Phoenix.Sync.Electric do
       |> Electric.Application.api_plug_opts()
       |> Keyword.fetch!(:api)
     end
+
+    defp plug_opts(_env, :sandbox, _electric_opts) do
+      %Phoenix.Sync.Sandbox.APIAdapter{}
+    end
   else
     defp plug_opts(_env, :embedded, _electric_opts) do
       raise ArgumentError,
         message:
           "phoenix_sync configured in `mode: :embedded` but electric not installed. Please add `:electric` to your dependencies or use `:http` mode."
+    end
+
+    defp plug_opts(_env, :sandbox, _electric_opts) do
+      raise ArgumentError,
+        message:
+          "phoenix_sync configured in `mode: :sandbox` but electric not installed. Please add `:electric` to your dependencies or use `:http` mode."
     end
   end
 
@@ -327,7 +338,7 @@ defmodule Phoenix.Sync.Electric do
       http_server =
         case mode do
           :http -> electric_api_server(electric_config)
-          :embedded -> []
+          _ -> []
         end
 
       {:ok,
@@ -513,9 +524,21 @@ defmodule Phoenix.Sync.Electric do
     defp configure_client(opts, :embedded) do
       Electric.Client.embedded(opts)
     end
+
+    # with a sandbox config, we're basically abandoning the idea of connecting
+    # to a real instance -- I think that's reasonable. The overhead of a real
+    # electric consuming a real replication stream is way too high for a simple
+    # consumer of streams
+    defp configure_client(_opts, :sandbox) do
+      Phoenix.Sync.Sandbox.client()
+    end
   else
     defp configure_client(_opts, :embedded) do
       {:error, "electric not installed, unable to created embedded client"}
+    end
+
+    defp configure_client(_opts, :sandbox) do
+      {:error, "electric not installed, unable to created sandbox client"}
     end
   end
 
