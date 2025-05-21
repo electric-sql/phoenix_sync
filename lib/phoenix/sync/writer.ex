@@ -32,20 +32,20 @@ defmodule Phoenix.Sync.Writer do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            #{inspect(__MODULE__)}.new()
-            |> #{inspect(__MODULE__)}.allow(
+            Writer.new()
+            |> Writer.allow(
               Projects.Project,
               check: reject_invalid_params/2,
               load: &Projects.load_for_user(&1, user_id),
               validate: &Projects.Project.changeset/2
             )
-            |> #{inspect(__MODULE__)}.allow(
+            |> Writer.allow(
               Projects.Issue,
               # Use the sensible defaults:
               # validate: Projects.Issue.changeset/2
               # etc.
             )
-            |> #{inspect(__MODULE__)}.apply(
+            |> Writer.apply(
               transaction,
               Repo,
               format: Format.TanstackDB
