@@ -65,7 +65,7 @@ defmodule Phoenix.Sync.Writer do
   into your application. You can extend the pipeline with `allow/3` calls for
   every schema that you'd like to be able to ingest changes to.
 
-  The [`check`, `load`, `validate`, etc. callbacks](#callbacks) to the allow
+  The [`check`, `load`, `validate`, etc. callbacks](#module-callbacks) to the allow
   function are designed to allow you to re-use your authorization and validation
   logic from your existing `Plug` middleware and `Ecto.Changeset` functions.
 
