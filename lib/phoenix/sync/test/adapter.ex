@@ -8,6 +8,8 @@ defmodule Phoenix.Sync.Test.Adapter do
   @adapter Ecto.Adapters.Postgres
   @driver :postgrex
 
+  require DBConnection.Holder
+
   @impl true
   defmacro __before_compile__(env) do
     Ecto.Adapters.SQL.__before_compile__(@driver, env)
@@ -20,15 +22,13 @@ defmodule Phoenix.Sync.Test.Adapter do
 
   @impl true
   def init(config) do
-    with {:ok, spec, meta} <- @adapter.init(config) |> dbg do
-      # {:ok, spec, Map.merge(meta, %{sync: self(), sql: __MODULE__.Connection})}
+    with {:ok, spec, meta} <- @adapter.init(config) do
       {:ok, spec, Map.merge(meta, %{sync: self()})}
     end
   end
 
   @impl true
   def checkout(meta, opts, fun) do
-    dbg(meta)
     @adapter.checkout(meta, opts, fun)
   end
 
@@ -91,34 +91,178 @@ defmodule Phoenix.Sync.Test.Adapter do
 
   @impl true
   def insert(adapter_meta, schema_meta, params, on_conflict, returning, opts) do
-    # dbg(adapter_insert: {adapter_meta, schema_meta, params, returning})
     pks = schema_meta.schema.__schema__(:primary_key)
     all_columns = schema_meta.schema.__schema__(:fields)
 
     {:ok, inserted} =
       @adapter.insert(adapter_meta, schema_meta, params, on_conflict, all_columns, opts)
 
-    dbg(inserted)
+    dbg(conn: conn(adapter_meta), insert: inserted)
 
     {:ok, Keyword.take(inserted, returning)}
   end
 
+  defp quote_names(names) do
+    Enum.map_intersperse(names, ?,, &quote_name/1)
+  end
+
+  defp quote_name(nil, name), do: quote_name(name)
+
+  defp quote_name(prefix, name), do: [quote_name(prefix), ?., quote_name(name)]
+
+  defp quote_name({prefix, name}) do
+    quote_name(prefix, name)
+  end
+
+  defp quote_name(name) when is_atom(name) do
+    quote_name(Atom.to_string(name))
+  end
+
+  defp quote_name(name) when is_binary(name) do
+    if String.contains?(name, "\"") do
+      raise ArgumentError,
+            "bad literal/field/index/table name #{inspect(name)} (\" is not permitted)"
+    end
+
+    [?", name, ?"]
+  end
+
+  defp intersperse_reduce(list, separator, user_acc, reducer, acc \\ [])
+
+  defp intersperse_reduce([], _separator, user_acc, _reducer, acc),
+    do: {acc, user_acc}
+
+  defp intersperse_reduce([elem], _separator, user_acc, reducer, acc) do
+    {elem, user_acc} = reducer.(elem, user_acc)
+    {[acc | elem], user_acc}
+  end
+
+  defp intersperse_reduce([elem | rest], separator, user_acc, reducer, acc) do
+    {elem, user_acc} = reducer.(elem, user_acc)
+    intersperse_reduce(rest, separator, user_acc, reducer, [acc, elem, separator])
+  end
+
+  defp returning([]),
+    do: []
+
+  defp returning(returning),
+    do: [" RETURNING " | quote_names(returning)]
+
+  defp conn(%{pid: pool} = adapter_meta) do
+    case Process.get({Ecto.Adapters.SQL, pool}) do
+      %DBConnection{} = conn ->
+        conn
+
+      nil ->
+        # {:already, :owned}
+        # DBConnection.Ownership.ownership_checkout(pool, [])
+
+        DBConnection.run(pool, fn conn ->
+          conn
+        end)
+    end
+    |> case do
+      %DBConnection{pool_ref: pool_ref} ->
+        DBConnection.Holder.pool_ref(pool: conn) = pool_ref
+        conn
+    end
+  end
+
   @impl true
   def update(adapter_meta, schema_meta, fields, params, returning, opts) do
-    # dbg(adapter_update: {adapter_meta, schema_meta, fields, params})
+    %{source: source, prefix: prefix} = schema_meta
+
+    # This is adapted from this function:
+    # sql = Ecto.Adapters.Postgres.Connection.update(prefix, source, fields, params, [])
+
+    {fields, field_values} = :lists.unzip(fields)
+    filter_values = Keyword.values(params)
+
+    {fields, count} =
+      intersperse_reduce(fields, ", ", 1, fn field, acc ->
+        {[quote_name(field), " = $" | Integer.to_string(acc)], acc + 1}
+      end)
+
+    {filters_new, _count} = update_filters(params, count, &quote_name("new", &1))
+    {filters_old, _count} = update_filters(params, count, &quote_name/1)
+
     all_columns = schema_meta.schema.__schema__(:fields)
-    _previous = adapter_meta.repo.get_by(schema_meta.schema, params) |> dbg
-    {:ok, updated} = @adapter.update(adapter_meta, schema_meta, fields, params, all_columns, opts)
-    dbg(updated)
-    {:ok, Keyword.take(updated, returning)}
+    cols = Enum.map_intersperse(all_columns, ?,, &quote_name/1)
+    return_all = Enum.map(all_columns, &{:old, &1}) ++ Enum.map(all_columns, &{:new, &1})
+
+    # https://stackoverflow.com/a/7927957
+    # return the old and new values from an update by aquiring an exclusive lock
+    # on the row and using a sub-query.
+    # UPDATE table new
+    #     SET value = $1
+    #     FROM (select id, value FROM table WHERE id = $2 FOR UPDATE) old
+    #     WHERE new.id = $2
+    #     RETURNING old.id, old.value, new.id, new.value;
+    #
+    # TODO: should be re-written as which prevents problems when updating the pk
+    # UPDATE table new
+    #     SET value = $1
+    #     FROM (select id, value FROM table WHERE id = $2 FOR UPDATE) old
+    #     -- HERE
+    #     WHERE new.id = old.id
+    #     RETURNING old.id, old.value, new.id, new.value;
+
+    sql = [
+      "UPDATE ",
+      quote_name(prefix, source),
+      " new SET ",
+      fields,
+      " FROM (SELECT ",
+      cols,
+      " FROM ",
+      quote_name(prefix, source),
+      " WHERE ",
+      filters_old,
+      " FOR UPDATE) old",
+      " WHERE ",
+      filters_new | returning(return_all)
+    ]
+
+    with {:ok, updated} <-
+           Ecto.Adapters.SQL.struct(
+             adapter_meta,
+             Ecto.Adapters.Postgres.Connection,
+             sql,
+             :update,
+             source,
+             params,
+             field_values ++ filter_values,
+             :raise,
+             return_all,
+             opts
+           ) do
+      {new, old} =
+        Enum.reduce(updated, {[], []}, fn
+          {{:new, k}, v}, {new, old} -> {[{k, v} | new], old}
+          {{:old, k}, v}, {new, old} -> {new, [{k, v} | old]}
+        end)
+
+      dbg(conn: conn(adapter_meta), new: new, old: old)
+
+      {:ok, Keyword.take(new, returning)}
+    end
+  end
+
+  defp update_filters(params, count, quote_fun) do
+    intersperse_reduce(params, " AND ", count, fn
+      {field, nil}, acc ->
+        {[quote_fun.(field), " IS NULL"], acc}
+
+      {field, _value}, acc ->
+        {[quote_fun.(field), " = $" | Integer.to_string(acc)], acc + 1}
+    end)
   end
 
   @impl true
   def delete(adapter_meta, schema_meta, params, returning, opts) do
-    dbg(adapter_delete: {adapter_meta, schema_meta, params})
     all_columns = schema_meta.schema.__schema__(:fields)
     {:ok, deleted} = @adapter.delete(adapter_meta, schema_meta, params, all_columns, opts)
-    dbg(deleted)
+    dbg(conn: conn(adapter_meta), delete: deleted)
     {:ok, Keyword.take(deleted, returning)}
   end
 
@@ -126,8 +270,7 @@ defmodule Phoenix.Sync.Test.Adapter do
 
   @impl true
   def transaction(meta, opts, fun) do
-    dbg(transaction: meta)
-    @adapter.transaction(meta, opts, fun) |> dbg
+    @adapter.transaction(meta, opts, fun)
   end
 
   @impl true
@@ -214,19 +357,19 @@ defmodule Phoenix.Sync.Test.Adapter do
 
     @impl true
     def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
-      dbg(conn_insert: {prefix, table, header, rows, on_conflict, returning, placeholders})
+      # dbg(conn_insert: {prefix, table, header, rows, on_conflict, returning, placeholders})
       @connection.insert(prefix, table, header, rows, on_conflict, returning, placeholders)
     end
 
     @impl true
     def update(prefix, table, fields, filters, returning) do
-      dbg(conn_update: {prefix, table, fields, filters})
+      # dbg(conn_update: {prefix, table, fields, filters})
       @connection.update(prefix, table, fields, filters, returning)
     end
 
     @impl true
     def delete(prefix, table, filters, returning) do
-      dbg(conn_delete: {prefix, table, filters, returning})
+      # dbg(conn_delete: {prefix, table, filters, returning})
       @connection.delete(prefix, table, filters, returning)
     end
 

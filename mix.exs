@@ -45,7 +45,8 @@ defmodule Phoenix.Sync.MixProject do
       # {:electric, "~> 1.0.6", optional: true},
       {:electric, path: "../electric/packages/sync-service", optional: true, override: true},
       # {:electric_client, ">= 0.5.0-beta-1"}
-      {:electric_client, path: "../electric/packages/elixir-client"}
+      {:electric_client, path: "../electric/packages/elixir-client"},
+      {:db_connection, path: "../db_connection", override: true}
     ] ++ deps_for_env(Mix.env())
   end
 
