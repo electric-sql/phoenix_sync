@@ -177,7 +177,7 @@ defmodule MutationController do
       Writer.new()
       |> Writer.allow(
         Projects.Project,
-        check: reject_invalid_params/2,
+        check: reject_invalid_params/1,
         load: &Projects.load_for_user(&1, user_id),
         validate: &Projects.Project.changeset/2
       )

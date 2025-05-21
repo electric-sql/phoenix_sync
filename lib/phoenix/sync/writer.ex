@@ -35,7 +35,7 @@ defmodule Phoenix.Sync.Writer do
             Writer.new()
             |> Writer.allow(
               Projects.Project,
-              check: reject_invalid_params/2,
+              check: reject_invalid_params/1,
               load: &Projects.load_for_user(&1, user_id),
               validate: &Projects.Project.changeset/2
             )
@@ -433,7 +433,7 @@ defmodule Phoenix.Sync.Writer do
       #{inspect(__MODULE__)}.allow(
         Todos.Todo,
         load: &Todos.fetch_for_user(&1, user_id),
-        check: &Todos.check_mutation(&1, &2, user_id),
+        check: &Todos.check_mutation(&1, user_id),
         validate: &Todos.Todo.changeset/2,
         update: [
           # for inserts and deletes, use &Todos.Todo.changeset/2 but for updates
