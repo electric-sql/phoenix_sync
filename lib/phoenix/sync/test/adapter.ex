@@ -17,6 +17,7 @@ defmodule Phoenix.Sync.Test.Adapter do
 
   @impl true
   def ensure_all_started(config, type) do
+    dbg(ensure_all_started: config)
     @adapter.ensure_all_started(config, type)
   end
 
@@ -97,7 +98,13 @@ defmodule Phoenix.Sync.Test.Adapter do
     {:ok, inserted} =
       @adapter.insert(adapter_meta, schema_meta, params, on_conflict, all_columns, opts)
 
-    dbg(conn: conn(adapter_meta), insert: inserted)
+    # dbg(conn: conn!(adapter_meta), insert: inserted)
+
+    %{source: source, prefix: prefix} = schema_meta
+
+    Phoenix.Sync.Test.Sandbox.Producer.emit_changes(conn!(adapter_meta), [
+      {:insert, {prefix, source}, inserted}
+    ])
 
     {:ok, Keyword.take(inserted, returning)}
   end
@@ -148,24 +155,34 @@ defmodule Phoenix.Sync.Test.Adapter do
   defp returning(returning),
     do: [" RETURNING " | quote_names(returning)]
 
-  defp conn(%{pid: pool} = adapter_meta) do
+  def conn(%{pid: pool} = _adapter_meta) do
+    conn(pool)
+  end
+
+  def conn(pool) do
     case Process.get({Ecto.Adapters.SQL, pool}) do
       %DBConnection{} = conn ->
         conn
 
       nil ->
-        # {:already, :owned}
-        # DBConnection.Ownership.ownership_checkout(pool, [])
-
-        DBConnection.run(pool, fn conn ->
-          conn
-        end)
+        case DBConnection.Ownership.ownership_checkout(pool, []) |> dbg do
+          {:already, state} when state in [:allowed, :owner] ->
+            DBConnection.run(pool, fn conn -> conn end)
+        end
     end
     |> case do
       %DBConnection{pool_ref: pool_ref} ->
         DBConnection.Holder.pool_ref(pool: conn) = pool_ref
-        conn
+        {:ok, conn}
+
+      invalid ->
+        {:error, {:noconnection, invalid}}
     end
+  end
+
+  def conn!(pool) do
+    {:ok, conn} = conn(pool)
+    conn
   end
 
   @impl true
@@ -242,7 +259,9 @@ defmodule Phoenix.Sync.Test.Adapter do
           {{:old, k}, v}, {new, old} -> {new, [{k, v} | old]}
         end)
 
-      dbg(conn: conn(adapter_meta), new: new, old: old)
+      Phoenix.Sync.Test.Sandbox.Producer.emit_changes(conn!(adapter_meta), [
+        {:update, {prefix, source}, old, new}
+      ])
 
       {:ok, Keyword.take(new, returning)}
     end
@@ -260,9 +279,15 @@ defmodule Phoenix.Sync.Test.Adapter do
 
   @impl true
   def delete(adapter_meta, schema_meta, params, returning, opts) do
+    %{source: source, prefix: prefix} = schema_meta
     all_columns = schema_meta.schema.__schema__(:fields)
     {:ok, deleted} = @adapter.delete(adapter_meta, schema_meta, params, all_columns, opts)
-    dbg(conn: conn(adapter_meta), delete: deleted)
+    dbg(conn: conn!(adapter_meta), delete: deleted)
+
+    Phoenix.Sync.Test.Sandbox.Producer.emit_changes(conn!(adapter_meta), [
+      {:delete, {prefix, source}, deleted}
+    ])
+
     {:ok, Keyword.take(deleted, returning)}
   end
 
