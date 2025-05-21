@@ -32,26 +32,26 @@ defmodule Phoenix.Sync.Writer do
           user_id = conn.assigns.user_id
 
           {:ok, txid, _changes} =
-            #{inspect(__MODULE__)}.new()
-            |> #{inspect(__MODULE__)}.allow(
+            Writer.new()
+            |> Writer.allow(
               Projects.Project,
-              check: reject_invalid_params/2,
+              check: reject_invalid_params/1,
               load: &Projects.load_for_user(&1, user_id),
               validate: &Projects.Project.changeset/2
             )
-            |> #{inspect(__MODULE__)}.allow(
+            |> Writer.allow(
               Projects.Issue,
               # Use the sensible defaults:
               # validate: Projects.Issue.changeset/2
               # etc.
             )
-            |> #{inspect(__MODULE__)}.apply(
+            |> Writer.apply(
               transaction,
               Repo,
               format: Format.TanstackDB
             )
 
-          render(conn, :mutations, txid: txid)
+          json(conn, %{txid: txid})
         end
       end
 
@@ -65,7 +65,7 @@ defmodule Phoenix.Sync.Writer do
   into your application. You can extend the pipeline with `allow/3` calls for
   every schema that you'd like to be able to ingest changes to.
 
-  The [`check`, `load`, `validate`, etc. callbacks](#callbacks) to the allow
+  The [`check`, `load`, `validate`, etc. callbacks](#module-callbacks) to the allow
   function are designed to allow you to re-use your authorization and validation
   logic from your existing `Plug` middleware and `Ecto.Changeset` functions.
 
@@ -433,7 +433,7 @@ defmodule Phoenix.Sync.Writer do
       #{inspect(__MODULE__)}.allow(
         Todos.Todo,
         load: &Todos.fetch_for_user(&1, user_id),
-        check: &Todos.check_mutation(&1, &2, user_id),
+        check: &Todos.check_mutation(&1, user_id),
         validate: &Todos.Todo.changeset/2,
         update: [
           # for inserts and deletes, use &Todos.Todo.changeset/2 but for updates
@@ -497,7 +497,7 @@ defmodule Phoenix.Sync.Writer do
             )
             |> Writer.apply(transaction, Repo, format: Writer.Format.TanstackDB)
 
-          render(conn, :mutations, txid: txid)
+          json(conn, %{txid: txid})
         end
 
         # Included here for completeness but in a real app would be a
