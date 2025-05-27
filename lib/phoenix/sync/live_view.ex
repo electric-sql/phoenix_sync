@@ -199,6 +199,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           ) :: Phoenix.LiveView.Socket.t()
     def sync_stream(socket, name, query, opts \\ []) do
       {electric_opts, stream_opts} = Keyword.split(opts, [:client])
+      dbg(opts)
 
       component =
         case socket.assigns do
@@ -207,7 +208,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       if Phoenix.LiveView.connected?(socket) do
-        client = Keyword.get_lazy(electric_opts, :client, &Phoenix.Sync.client!/0)
+        client =
+          Keyword.get_lazy(electric_opts, :client, fn ->
+            get_in(socket.private[:connect_info].private[:electric_client]) ||
+              Phoenix.Sync.client!()
+          end)
+
+        dbg(client)
 
         Phoenix.LiveView.stream(
           socket,
@@ -304,7 +311,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp update_mode({%Electric.Client.Error{} = error, _resume}, _state) do
-      raise error
+      # raise error
+      {[], {[], nil}}
     end
 
     defp update_mode({updates, resume}, {client, name, query, pid, component}) do

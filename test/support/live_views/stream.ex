@@ -210,3 +210,82 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLiveComponent do
      |> Phoenix.Sync.LiveView.sync_stream(:users, Support.User, client: assigns.client)}
   end
 end
+
+defmodule Phoenix.Sync.LiveViewTest.StreamSandbox do
+  use Phoenix.LiveView
+
+  def run(lv, func) do
+    GenServer.call(lv.pid, {:run, func})
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div id="users" phx-update="stream">
+      <div :for={{id, user} <- @streams.users} id={id} data-count={@count}>
+        <%= user.name %>
+        <button phx-click="delete" phx-value-id={id}>delete</button>
+        <button phx-click="update" phx-value-id={id}>update</button>
+        <button phx-click="move-to-first" phx-value-id={id}>make first</button>
+        <button phx-click="move-to-last" phx-value-id={id}>make last</button>
+        <button phx-click="move" phx-value-id={id} phx-value-name="moved" phx-value-at="1">
+          move
+        </button>
+        <button phx-click={Phoenix.LiveView.JS.hide(to: "##{id}")}>JS Hide</button>
+      </div>
+    </div>
+
+    <button phx-click="reset-users">Reset users</button>
+    """
+  end
+
+  def mount(params, _session, socket) do
+    # client =
+    #   get_in(socket.private.connect_info.private, [:electric_client]) ||
+    #     raise "missing client configuration"
+    dbg({self(), Phoenix.LiveView.connected?(socket)})
+
+    Support.SandboxRepo.all(Support.User) |> dbg
+
+    Phoenix.Sync.Test.Sandbox.sandbox_conn(Support.SandboxRepo)
+    |> dbg
+
+    parent =
+      get_in(socket.private.connect_info.private, [:test_pid]) ||
+        raise "missing parent pid configuration"
+
+    {:ok,
+     socket
+     |> assign(:count, 0)
+     |> assign(:test_pid, parent)
+     |> Phoenix.Sync.LiveView.sync_stream(:users, Support.User)}
+  end
+
+  def handle_info({:sync, event}, socket) do
+    # send messsage to test pid, just for sync
+    send(socket.assigns.test_pid, {:sync, event})
+    {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
+  end
+
+  def handle_info(:ping, socket) do
+    {:noreply, update(socket, :count, &(&1 + 1))}
+  end
+
+  def handle_event("admin-move-to-last", %{"id" => "admins-" <> id = dom_id}, socket) do
+    user = user(id, "updated")
+
+    {:noreply,
+     socket
+     |> stream_delete_by_dom_id(:admins, dom_id)
+     |> stream_insert(:admins, user, at: -1)}
+  end
+
+  def handle_event("consume-stream-invalid", _, socket) do
+    {:noreply, assign(socket, :invalid_consume, true)}
+  end
+
+  def handle_call({:run, func}, _, socket), do: func.(socket)
+
+  defp user(id, name) do
+    %{id: id, name: name}
+  end
+end

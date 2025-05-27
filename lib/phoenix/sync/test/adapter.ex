@@ -24,6 +24,7 @@ defmodule Phoenix.Sync.Test.Adapter do
   @impl true
   def init(config) do
     with {:ok, spec, meta} <- @adapter.init(config) do
+      dbg(meta)
       {:ok, spec, Map.merge(meta, %{sync: self()})}
     end
   end
@@ -98,12 +99,8 @@ defmodule Phoenix.Sync.Test.Adapter do
     {:ok, inserted} =
       @adapter.insert(adapter_meta, schema_meta, params, on_conflict, all_columns, opts)
 
-    # dbg(conn: conn!(adapter_meta), insert: inserted)
-
-    %{source: source, prefix: prefix} = schema_meta
-
     Phoenix.Sync.Test.Sandbox.Producer.emit_changes(conn!(adapter_meta), [
-      {:insert, {prefix, source}, inserted}
+      {:insert, schema_meta, inserted}
     ])
 
     {:ok, Keyword.take(inserted, returning)}
@@ -160,13 +157,19 @@ defmodule Phoenix.Sync.Test.Adapter do
   end
 
   def conn(pool) do
+    # inner_pool = GenServer.call(pool, :conn) |> dbg
+    # dbg(inner_pool)
+
     case Process.get({Ecto.Adapters.SQL, pool}) do
       %DBConnection{} = conn ->
         conn
 
       nil ->
-        case DBConnection.Ownership.ownership_checkout(pool, []) |> dbg do
+        case DBConnection.Ownership.ownership_checkout(pool, []) do
           {:already, state} when state in [:allowed, :owner] ->
+            DBConnection.run(pool, fn conn -> conn end)
+
+          :ok ->
             DBConnection.run(pool, fn conn -> conn end)
         end
     end
@@ -260,7 +263,7 @@ defmodule Phoenix.Sync.Test.Adapter do
         end)
 
       Phoenix.Sync.Test.Sandbox.Producer.emit_changes(conn!(adapter_meta), [
-        {:update, {prefix, source}, old, new}
+        {:update, schema_meta, old, new}
       ])
 
       {:ok, Keyword.take(new, returning)}
@@ -282,10 +285,9 @@ defmodule Phoenix.Sync.Test.Adapter do
     %{source: source, prefix: prefix} = schema_meta
     all_columns = schema_meta.schema.__schema__(:fields)
     {:ok, deleted} = @adapter.delete(adapter_meta, schema_meta, params, all_columns, opts)
-    dbg(conn: conn!(adapter_meta), delete: deleted)
 
     Phoenix.Sync.Test.Sandbox.Producer.emit_changes(conn!(adapter_meta), [
-      {:delete, {prefix, source}, deleted}
+      {:delete, schema_meta, deleted}
     ])
 
     {:ok, Keyword.take(deleted, returning)}

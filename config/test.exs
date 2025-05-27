@@ -1,8 +1,6 @@
 import Config
 
-config :logger, level: :critical
-
-config :phoenix_sync, mode: :disabled
+# config :logger, level: :info
 
 config :phoenix_sync, Phoenix.Sync.LiveViewTest.Endpoint, []
 
@@ -39,4 +37,12 @@ config :phoenix_sync, Support.SandboxRepo,
   port: 54321,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
-  pool: Ecto.Adapters.SQL.Sandbox
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 10,
+  ownership_log: :warning
+
+config :phoenix_sync,
+  mode: :sandbox,
+  repo: Support.SandboxRepo
+
+# pool: Phoenix.Sync.Test.Sandbox.ClientAdapter

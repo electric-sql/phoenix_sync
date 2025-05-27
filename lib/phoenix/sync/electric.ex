@@ -91,7 +91,7 @@ defmodule Phoenix.Sync.Electric do
   @behaviour Phoenix.Sync.Adapter
   @behaviour Plug
 
-  @valid_modes [:http, :embedded, :disabled]
+  @valid_modes [:http, :embedded, :sandbox, :disabled]
   @client_valid_modes @valid_modes -- [:disabled]
   @electric_available? Code.ensure_loaded?(Electric.Application)
 
@@ -187,9 +187,7 @@ defmodule Phoenix.Sync.Electric do
   @impl Phoenix.Sync.Adapter
   def client(env, opts) do
     {mode, electric_opts} =
-      opts
-      |> set_environment_defaults(env)
-      |> electric_opts(env)
+      opts |> set_environment_defaults(env) |> electric_opts(env)
 
     case mode do
       mode when mode in @client_valid_modes ->
@@ -327,7 +325,7 @@ defmodule Phoenix.Sync.Electric do
       http_server =
         case mode do
           :http -> electric_api_server(electric_config)
-          :embedded -> []
+          _ -> []
         end
 
       {:ok,
@@ -508,7 +506,14 @@ defmodule Phoenix.Sync.Electric do
 
   if @electric_available? do
     defp configure_client(opts, :embedded) do
-      dbg(client: {:embedded, opts})
+      Electric.Client.embedded(opts)
+    end
+
+    defp configure_client(opts, :sandbox) do
+      dbg(client: :sandbox)
+
+      Phoenix.Sync.Test.Sandbox.sandbox_conn(Support.SandboxRepo) |> dbg
+
       Electric.Client.embedded(opts)
     end
   else
@@ -518,8 +523,6 @@ defmodule Phoenix.Sync.Electric do
   end
 
   defp configure_client(electric_config, :http) do
-    dbg(client: {:http, electric_config})
-
     with {:ok, url} <- fetch_with_error(electric_config, :url),
          credential_params = electric_config |> Keyword.get(:credentials, []) |> Map.new(),
          extra_params = electric_config |> Keyword.get(:params, []) |> Map.new(),
