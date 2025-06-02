@@ -174,22 +174,22 @@ defmodule MutationController do
     user_id = conn.assigns.user_id
 
     {:ok, txid, _changes} =
-      Phoenix.Sync.Writer.new()
-      |> Phoenix.Sync.Writer.allow(
+      Writer.new()
+      |> Writer.allow(
         Projects.Project,
-        check: reject_invalid_params/2,
+        check: reject_invalid_params/1,
         load: &Projects.load_for_user(&1, user_id),
         validate: &Projects.Project.changeset/2
       )
-      |> Phoenix.Sync.Writer.allow(
+      |> Writer.allow(
         Projects.Issue,
         # Use the sensible defaults:
         # validate: Projects.Issue.changeset/2
         # etc.
       )
-      |> Phoenix.Sync.Writer.apply(transaction, Repo, format: Format.TanstackDB)
+      |> Writer.apply(transaction, Repo, format: Format.TanstackDB)
 
-    render(conn, :mutations, txid: txid)
+    json(conn, %{txid: txid})
   end
 end
 ```
