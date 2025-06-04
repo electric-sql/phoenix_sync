@@ -8,7 +8,7 @@ defmodule Support.Todo do
     field :completed, :boolean
   end
 
-  def changeset(todo, data) do
+  def changeset(todo \\ %__MODULE__{}, data) do
     todo
     |> cast(data, [:id, :title, :completed])
     |> validate_required([:id, :title])
