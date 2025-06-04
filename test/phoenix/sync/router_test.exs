@@ -54,8 +54,10 @@ defmodule Phoenix.Sync.RouterTest do
         storage: %{compaction: :disabled}
 
       # support shapes from a query, passed as the 2nd arg
-      # #sdf
       sync "/query-where", Support.Todo, where: "completed = false"
+
+      sync "/shape-parameters", table: "todos", where: "completed = $1", params: ["false"]
+      sync "/query-parameters", Support.Todo, where: "completed = $1", params: ["false"]
 
       # or as query: ...
       sync "/query-bare", Support.Todo
@@ -328,6 +330,45 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {
+           "todos",
+           ["title", "completed"],
+           [["one", false], ["two", false], ["three", true]]
+         }
+    test "accepts parameterized where clauses", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/shape-parameters", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+             ] = Jason.decode!(resp.resp_body)
+
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/query-parameters", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
