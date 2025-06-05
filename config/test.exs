@@ -1,6 +1,6 @@
 import Config
 
-config :logger, level: :critical
+config :logger, level: :warning
 
 config :phoenix_sync, mode: :disabled
 
