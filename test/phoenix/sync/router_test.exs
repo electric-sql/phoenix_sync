@@ -189,6 +189,25 @@ defmodule Phoenix.Sync.RouterTest do
     end
 
     @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {"todos", ["title"], [["one"], ["two"], ["three"]]}
+    test "returns CORS headers", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/things-to-do", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert [expose] = Plug.Conn.get_resp_header(resp, "access-control-expose-headers")
+      assert String.contains?(expose, "electric-offset")
+    end
+
+    @tag table: {
            "ideas",
            [
              "id int8 not null primary key generated always as identity",
@@ -464,6 +483,16 @@ defmodule Phoenix.Sync.RouterTest do
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
                ] = Jason.decode!(resp.resp_body)
       end
+    end
+
+    test "returns CORS headers", ctx do
+      resp =
+        conn(:get, "/shapes/todos", %{"offset" => "-1"})
+        |> MyRouter.call(ctx.plug_opts)
+
+      assert resp.status == 200
+      assert [expose] = Plug.Conn.get_resp_header(resp, "access-control-expose-headers")
+      assert String.contains?(expose, "electric-offset")
     end
   end
 end

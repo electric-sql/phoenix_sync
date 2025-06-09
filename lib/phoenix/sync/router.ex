@@ -216,7 +216,11 @@ defmodule Phoenix.Sync.Router do
     defp serve_shape(conn, api, shape) do
       {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, shape)
 
-      conn = Plug.Conn.fetch_query_params(conn)
+      conn =
+        conn
+        |> Plug.Conn.fetch_query_params()
+        |> Phoenix.Sync.Plug.CORS.call()
+
       Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, conn.params)
     end
   end
