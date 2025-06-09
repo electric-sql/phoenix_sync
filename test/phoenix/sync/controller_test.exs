@@ -90,6 +90,16 @@ defmodule Phoenix.Sync.ControllerTest do
              ] = Jason.decode!(resp.resp_body)
     end
 
+    test "includes CORS headers", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/all", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert [expose] = Plug.Conn.get_resp_header(resp, "access-control-expose-headers")
+      assert String.contains?(expose, "electric-offset")
+    end
+
     test "supports where clauses", _ctx do
       resp =
         Phoenix.ConnTest.build_conn()
@@ -184,6 +194,15 @@ defmodule Phoenix.Sync.ControllerTest do
       assert Plug.Conn.get_resp_header(resp, "content-type") == [
                "application/json; charset=utf-8"
              ]
+    end
+
+    test "includes CORS headers", ctx do
+      conn = conn(:get, "/shape/todos", %{"offset" => "-1"})
+
+      resp = PlugRouter.call(conn, PlugRouter.init(ctx.plug_opts))
+
+      assert [expose] = Plug.Conn.get_resp_header(resp, "access-control-expose-headers")
+      assert String.contains?(expose, "electric-offset")
     end
   end
 end
