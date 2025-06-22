@@ -100,4 +100,36 @@ defmodule Phoenix.SyncTest do
                )
     end
   end
+
+  describe "interrupt/[1|2]" do
+    alias Phoenix.Sync.PredefinedShape
+    alias Phoenix.Sync.ShapeRequestRegistry
+
+    test "interrupts matching tablename" do
+      test_pid = self()
+
+      # Spawn a separate process to simulate HTTP request process
+      request_process = spawn_link(fn ->
+        # Register shape from this process (simulates HTTP request)
+        shape = %PredefinedShape{relation: {"public", "threads"}}
+        ShapeRequestRegistry.register_shape("key", shape)
+
+        # Wait for interruption signal
+        receive do
+          {:interrupt_shape, "key", :server_interrupt} ->
+            send(test_pid, {:got_interrupt, self()})
+        end
+      end)
+
+      # Give process time to register
+      Process.sleep(10)
+
+      # Interrupt shapes (should target the spawned process)
+      {:ok, count} = Phoenix.Sync.interrupt("threads")
+      assert count == 1
+
+      # Verify the spawned process got the interruption
+      assert_receive {:got_interrupt, ^request_process}
+    end
+  end
 end

@@ -1,6 +1,11 @@
-defmodule Phoenix.Sync.ShapeRegistry do
+defmodule Phoenix.Sync.ShapeRequestRegistry do
   @moduledoc """
-  Track active shape subscriptions. This allows them to be interrupted.
+  Track active shape subscriptions so they can be interrupted.
+
+  Note that the implementation of register and unregister depend on the call
+  coming from the same process that's requesting the shape. We then register
+  the pid along with the shape definition and then when interrupting, we
+  brutally kill that pid if the shape definition matches.
   """
   use GenServer
 
@@ -46,10 +51,14 @@ defmodule Phoenix.Sync.ShapeRegistry do
     end
   end
 
-  def interrupt_matching(table, nil) when is_binary(table) do
+  def interrupt_matching(table) when is_binary(table) do
     interrupt_matching(fn %PredefinedShape{relation: {_, shape_table}} ->
       shape_table == table
     end)
+  end
+
+  def interrupt_matching(table, nil) when is_binary(table) do
+    interrupt_matching(table)
   end
 
   def interrupt_matching(table, namespace) when is_binary(table) and is_binary(namespace) do
@@ -64,11 +73,12 @@ defmodule Phoenix.Sync.ShapeRegistry do
     {:ok, %{subscriptions: %{}, monitors: %{}}}
   end
 
-  def handle_call(
-        {:register, key, shape},
-        {request_pid, _ref},
-        %{monitors: monitors, subscriptions: subscriptions} = state
-      ) do
+  def handle_call({:register, key, shape}, {request_pid, _ref}, state) do
+    %{
+      monitors: monitors,
+      subscriptions: subscriptions
+    } = state
+
     monitor_ref = Process.monitor(request_pid)
     monitors = Map.put(monitors, monitor_ref, key)
 

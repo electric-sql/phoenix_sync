@@ -7,7 +7,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     alias Electric.Client
 
     alias Phoenix.Sync.PredefinedShape
-    alias Phoenix.Sync.ShapeRegistry
+    alias Phoenix.Sync.ShapeRequestRegistry
 
     def predefined_shape(sync_client, %PredefinedShape{} = predefined_shape) do
       shape_client = PredefinedShape.client(sync_client.client, predefined_shape)
@@ -48,7 +48,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     defp live?(live), do: live == "true"
 
     # Skip interruptibility for initial requests.
-    defp fetch_upstream(%{client: client, shape_definition: nil}, conn, request) do
+    defp fetch_upstream(%{shape_definition: nil, client: client}, conn, request) do
       response =
         case Client.Fetch.request(client, request) do
           %Client.Fetch.Response{} = response ->
@@ -66,7 +66,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     defp fetch_upstream(%{shape_definition: shape} = sync_client, conn, request) do
       key = Base.encode64(:crypto.strong_rand_bytes(18))
 
-      ShapeRegistry.register_shape(key, shape)
+      ShapeRequestRegistry.register_shape(key, shape)
 
       response =
         try do
@@ -78,7 +78,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
               response
           end
         after
-          ShapeRegistry.unregister_shape(key)
+          ShapeRequestRegistry.unregister_shape(key)
         end
 
       conn
@@ -109,7 +109,6 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         {:interrupt_shape, ^key, :server_interrupt} ->
           Task.shutdown(task, :brutal_kill)
           Process.demonitor(ref, [:flush])
-
           interruption_response(request)
 
         {:DOWN, ^ref, :process, _pid, :normal} ->
@@ -127,6 +126,12 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     # We want this to cause the client to reconnect to the same URL.
     # Ideally we want to avoid putting 500s in the console logs.
     defp interruption_response(%Client.Fetch.Request{params: params}) do
+      cursor =
+        case Map.get(params, "cursor", nil) do
+          nil -> nil
+          val -> String.to_integer(val)
+        end
+
       %Client.Fetch.Response{
         status: 200,
         headers: %{
@@ -135,7 +140,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           # response will replace the response in the shared and browser cache.
           "cache-control" => "no-cache, no-store, must-revalidate, max-age=0",
           "content-type" => "application/json",
-          "electric-cursor" => Map.get(params, "cursor", nil),
+          "electric-cursor" => cursor,
           "electric-handle" => Map.fetch!(params, "handle"),
           "electric-offset" => Map.fetch!(params, "offset"),
           "expires" => "0",

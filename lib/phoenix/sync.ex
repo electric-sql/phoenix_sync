@@ -6,6 +6,7 @@ defmodule Phoenix.Sync do
   """
 
   alias Electric.Client.ShapeDefinition
+  alias Phoenix.Sync.ShapeRequestRegistry
 
   @shape_keys [:namespace, :where, :columns]
   @shape_params @shape_keys |> Enum.map(&to_string/1)
@@ -164,5 +165,35 @@ defmodule Phoenix.Sync do
     else
       {:error, "Missing `table` parameter"}
     end
+  end
+
+  @doc """
+  Interrupt active shape requests.
+
+  ## Examples
+
+      # Interrupt shape requests matching a schema or table.
+      Phoenix.Sync.interrupt(MyApp.SomeSchema)
+      Phoenix.Sync.interrupt("table")
+
+      # Interrupt shapes with a custom match function.
+      Phoenix.Sync.interrupt(fn %PredefinedShape{} = shape ->
+        shape.table == "table" and
+        shape_info.where =~ "user_id = 'user_123'"
+      end)
+  """
+  def interrupt(matcher) when is_atom(matcher) or is_binary(matcher) or is_function(matcher, 1) do
+    ShapeRequestRegistry.interrupt_matching(matcher)
+  end
+
+  @doc """
+  Interrupt active shape requests by table and namespace.
+
+  ## Examples
+
+      Phoenix.Sync.interrupt("table", "namespace")
+  """
+  def interrupt(table_name, namespace) when is_binary(table_name) and is_binary(namespace) do
+    ShapeRequestRegistry.interrupt_matching(table_name, namespace)
   end
 end
