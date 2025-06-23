@@ -536,6 +536,4 @@ defmodule Phoenix.Sync.RouterTest do
       assert String.contains?(expose, "electric-offset")
     end
   end
-
-
 end

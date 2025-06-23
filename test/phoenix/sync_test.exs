@@ -109,17 +109,18 @@ defmodule Phoenix.SyncTest do
       test_pid = self()
 
       # Spawn a separate process to simulate HTTP request process
-      request_process = spawn_link(fn ->
-        # Register shape from this process (simulates HTTP request)
-        shape = %PredefinedShape{relation: {"public", "threads"}}
-        ShapeRequestRegistry.register_shape("key", shape)
+      request_process =
+        spawn_link(fn ->
+          # Register shape from this process (simulates HTTP request)
+          shape = %PredefinedShape{relation: {"public", "threads"}}
+          ShapeRequestRegistry.register_shape("key", shape)
 
-        # Wait for interruption signal
-        receive do
-          {:interrupt_shape, "key", :server_interrupt} ->
-            send(test_pid, {:got_interrupt, self()})
-        end
-      end)
+          # Wait for interruption signal
+          receive do
+            {:interrupt_shape, "key", :server_interrupt} ->
+              send(test_pid, {:got_interrupt, self()})
+          end
+        end)
 
       # Give process time to register
       Process.sleep(10)
