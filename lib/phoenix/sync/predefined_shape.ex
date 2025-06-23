@@ -135,6 +135,12 @@ defmodule Phoenix.Sync.PredefinedShape do
     |> Keyword.merge(predefined_shape.api_config)
   end
 
+  def to_shape_params(%__MODULE__{} = predefined_shape) do
+    predefined_shape
+    |> to_shape_definition()
+    |> ShapeDefinition.params(format: :keyword)
+  end
+
   def to_stream_params(%__MODULE__{} = predefined_shape) do
     {to_shape_definition(predefined_shape), predefined_shape.stream_config}
   end

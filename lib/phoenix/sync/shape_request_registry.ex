@@ -9,75 +9,76 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
   """
   use GenServer
 
-  alias Electric.Client.ShapeDefinition
   alias Phoenix.Sync.PredefinedShape
 
   # Client API
 
+  @doc false
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  def register_shape(key, %ShapeDefinition{} = shape_definition) when is_binary(key) do
-    register_shape(key, PredefinedShape.from_shape_definition(shape_definition))
+  def register_shape(%PredefinedShape{} = shape) do
+    GenServer.call(__MODULE__, {:register_shape, shape})
   end
 
-  def register_shape(key, %PredefinedShape{query: _querable, relation: nil} = shape)
-      when is_binary(key) do
-    register_shape(key, PredefinedShape.from_queryable!(shape))
+  def unregister_shape(key) do
+    GenServer.call(__MODULE__, {:unregister_shape, key})
   end
 
-  def register_shape(key, %PredefinedShape{relation: {_namespace, _table}} = shape)
-      when is_binary(key) do
-    GenServer.call(__MODULE__, {:register, key, shape})
+  def interrupt_matching(shape, shape_opts \\ [])
+
+  def interrupt_matching(config, _opts) when is_list(config) do
+    do_interrupt_matching(fn %PredefinedShape{} = shape ->
+      params = PredefinedShape.to_shape_params(shape)
+
+      Enum.all?(config, fn {k, v} -> Keyword.get(params, k) == v end)
+    end)
   end
 
-  def unregister_shape(key) when is_binary(key) do
-    GenServer.call(__MODULE__, {:unregister, key})
-  end
-
-  def interrupt_matching(matcher) when is_function(matcher, 1) do
+  def interrupt_matching(matcher, _opts) when is_function(matcher, 1) do
     GenServer.call(__MODULE__, {:interrupt_matching, matcher})
   end
 
-  def interrupt_matching(module) when is_atom(module) do
-    if function_exported?(module, :__schema__, 1) do
-      table = module.__schema__(:source)
-      namespace = module.__schema__(:prefix)
+  def interrupt_matching(queryable, shape_opts)
+      when is_atom(queryable) or is_struct(queryable, Ecto.Query) do
+    match_params =
+      queryable |> PredefinedShape.new!(shape_opts) |> PredefinedShape.to_shape_params()
 
-      interrupt_matching(table, namespace)
-    else
-      {:error, {:not_an_ecto_schema, module}}
-    end
-  end
-
-  def interrupt_matching(table) when is_binary(table) do
-    interrupt_matching(fn %PredefinedShape{relation: {_, shape_table}} ->
-      shape_table == table
+    do_interrupt_matching(fn %PredefinedShape{} = shape ->
+      match_params == PredefinedShape.to_shape_params(shape)
     end)
+  rescue
+    e -> {:error, e}
   end
 
-  def interrupt_matching(table, nil) when is_binary(table) do
-    interrupt_matching(table)
+  def interrupt_matching(table, opts) when is_binary(table) do
+    interrupt_matching(Keyword.put(opts, :table, table))
   end
 
-  def interrupt_matching(table, namespace) when is_binary(table) and is_binary(namespace) do
-    interrupt_matching(fn %PredefinedShape{relation: relation} ->
-      relation == {namespace, table}
-    end)
+  defp do_interrupt_matching(fun) do
+    GenServer.call(__MODULE__, {:interrupt_matching, fun})
+  end
+
+  def registered_requests do
+    GenServer.call(__MODULE__, :registered_requests)
   end
 
   # Server implementation
 
+  @impl GenServer
   def init(_opts) do
     {:ok, %{subscriptions: %{}, monitors: %{}}}
   end
 
-  def handle_call({:register, key, shape}, {request_pid, _ref}, state) do
+  @impl GenServer
+  def handle_call({:register_shape, shape}, {request_pid, _ref}, state) do
     %{
       monitors: monitors,
       subscriptions: subscriptions
     } = state
+
+    key = make_ref()
 
     monitor_ref = Process.monitor(request_pid)
     monitors = Map.put(monitors, monitor_ref, key)
@@ -85,10 +86,10 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
     shape_info = {shape, request_pid}
     subscriptions = Map.put(subscriptions, key, shape_info)
 
-    {:reply, :ok, %{state | monitors: monitors, subscriptions: subscriptions}}
+    {:reply, {:ok, key}, %{state | monitors: monitors, subscriptions: subscriptions}}
   end
 
-  def handle_call({:unregister, key}, _from, %{subscriptions: subscriptions} = state) do
+  def handle_call({:unregister_shape, key}, _from, %{subscriptions: subscriptions} = state) do
     {:reply, :ok, %{state | subscriptions: Map.delete(subscriptions, key)}}
   end
 
@@ -105,15 +106,20 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
     {:reply, {:ok, interrupted_count}, state}
   end
 
+  def handle_call(:registered_requests, _from, %{subscriptions: subscriptions} = state) do
+    {:reply, Map.to_list(subscriptions), state}
+  end
+
+  @impl GenServer
   def handle_info({:DOWN, monitor_ref, :process, _pid, _reason}, state) do
     case Map.pop(state.monitors, monitor_ref) do
-      {key, monitors} when is_binary(key) ->
+      {nil, monitors} ->
+        {:noreply, %{state | monitors: monitors}}
+
+      {key, monitors} ->
         subscriptions = Map.delete(state.subscriptions, key)
 
         {:noreply, %{state | subscriptions: subscriptions, monitors: monitors}}
-
-      {nil, monitors} ->
-        {:noreply, %{state | monitors: monitors}}
     end
   end
 end

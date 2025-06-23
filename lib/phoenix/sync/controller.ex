@@ -134,6 +134,71 @@ defmodule Phoenix.Sync.Controller do
 
     {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, predefined_shape)
 
-    Phoenix.Sync.Adapter.PlugApi.call(shape_api, CORS.call(conn), params)
+    live? = params["live"] == "true"
+
+    if live? do
+      interruptible_call(shape_api, predefined_shape, conn, params)
+    else
+      Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, params)
+    end
+    |> CORS.call()
+  end
+
+  defp interruptible_call(shape_api, predefined_shape, conn, params) do
+    alias Phoenix.Sync.ShapeRequestRegistry
+    {:ok, key} = ShapeRequestRegistry.register_shape(predefined_shape)
+
+    try do
+      parent = self()
+
+      {:ok, pid} =
+        Task.start_link(fn ->
+          send(
+            parent,
+            {:response, self(), Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, params)}
+          )
+        end)
+
+      ref = Process.monitor(pid)
+
+      receive do
+        {:interrupt_shape, ^key, :server_interrupt} ->
+          Process.demonitor(ref, [:flush])
+          Process.unlink(pid)
+          Process.exit(pid, :kill)
+          interruption_response(conn, params)
+
+        {:response, ^pid, conn} ->
+          Process.demonitor(ref, [:flush])
+          conn
+
+        {:DOWN, ^ref, :process, _pid, reason} ->
+          Plug.Conn.send_resp(conn, 500, inspect(reason))
+      end
+    after
+      ShapeRequestRegistry.unregister_shape(key)
+    end
+  end
+
+  @map_params %{
+    "handle" => "electric-handle",
+    "offset" => "electric-offset",
+    "cursor" => "electric-cursor"
+  }
+
+  defp interruption_response(conn, params) do
+    headers =
+      for {key, value} <- params, header = Map.get(@map_params, key), !is_nil(header), into: [] do
+        {header, value}
+      end
+
+    headers
+    |> Enum.reduce(conn, &Plug.Conn.put_resp_header(&2, elem(&1, 0), elem(&1, 1)))
+    |> Plug.Conn.put_resp_header("content-type", "application/json; charset=utf-8")
+    |> Plug.Conn.put_resp_header(
+      "cache-control",
+      "no-cache, no-store, must-revalidate, max-age=0"
+    )
+    |> Plug.Conn.send_resp(200, "[]")
   end
 end
