@@ -29,4 +29,12 @@ defmodule Phoenix.Sync.LiveViewTest.TodoController do
   def complex(conn, params) do
     sync_render(conn, params, &Support.Todo.changeset/1, where: "completed = false")
   end
+
+  def interruptable(conn, params) do
+    sync_render(conn, params, table: "todos", where: "completed = false", interruptable: true)
+  end
+
+  def interruptible(conn, params) do
+    sync_render(conn, params, table: "todos", where: "completed = false", interruptible: true)
+  end
 end

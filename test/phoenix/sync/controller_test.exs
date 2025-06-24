@@ -41,6 +41,8 @@ defmodule Phoenix.Sync.ControllerTest do
       get "/module", TodoController, :module
       get "/changeset", TodoController, :changeset
       get "/complex", TodoController, :complex
+      get "/interruptable", TodoController, :interruptable
+      get "/interruptible", TodoController, :interruptible
     end
   end
 
@@ -238,61 +240,90 @@ defmodule Phoenix.Sync.ControllerTest do
   end
 
   describe "interrupt" do
+    alias Phoenix.Sync.Controller
     alias Phoenix.Sync.ShapeRequestRegistry
     alias Phoenix.Sync.PredefinedShape
 
     @describetag interrupt: true
     @describetag long_poll_timeout: 2_000
 
-    test "exits a long-poll request immediately", _ctx do
-      resp =
-        Phoenix.ConnTest.build_conn()
-        |> Phoenix.ConnTest.get("/todos/all", %{offset: "-1"})
-
-      assert resp.status == 200
-      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
-
-      assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
-
-      resp =
-        Phoenix.ConnTest.build_conn()
-        |> Phoenix.ConnTest.get("/todos/all", %{offset: "0_0", handle: handle})
-
-      assert resp.status == 200
-      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
-
-      assert [^handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
-
-      task =
-        Task.async(fn ->
+    for path <- ~w(/todos/interruptable /todos/interruptible) do
+      test "exits a long-poll request immediately #{path}", _ctx do
+        resp =
           Phoenix.ConnTest.build_conn()
-          |> Phoenix.ConnTest.get("/todos/all", %{
-            offset: "0_inf",
-            handle: handle,
-            live: "true"
-          })
-        end)
+          |> Phoenix.ConnTest.get(unquote(path), %{offset: "-1"})
 
-      # let the request start and register itself
-      Process.sleep(100)
+        assert resp.status == 200
+        assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
 
-      assert {:ok, 1} = ShapeRequestRegistry.interrupt_matching(table: "todos")
+        assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
 
-      # in http mode this test only terminates when the client's request to the
-      # backend completes even though we've terminated the calling process
-      # which is why the long_poll_timeout is set to 2 seconds and not higher
-      # and this await timeout is so low
-      response = Task.await(task, 100)
+        resp =
+          Phoenix.ConnTest.build_conn()
+          |> Phoenix.ConnTest.get(unquote(path), %{offset: "0_0", handle: handle})
 
-      assert 200 == response.status
-      assert ["0_inf"] = Plug.Conn.get_resp_header(response, "electric-offset")
-      assert [^handle] = Plug.Conn.get_resp_header(response, "electric-handle")
-      assert ["application/json" <> _] = Plug.Conn.get_resp_header(response, "content-type")
-      assert [cache_control] = Plug.Conn.get_resp_header(response, "cache-control")
-      assert cache_control =~ "no-cache"
-      assert cache_control =~ "no-store"
+        assert resp.status == 200
+        assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
 
-      assert [] = ShapeRequestRegistry.registered_requests()
+        assert [^handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+
+        task =
+          Task.async(fn ->
+            Phoenix.ConnTest.build_conn()
+            |> Phoenix.ConnTest.get(unquote(path), %{
+              offset: "0_inf",
+              handle: handle,
+              live: "true"
+            })
+          end)
+
+        # let the request start and register itself
+        Process.sleep(100)
+
+        assert {:ok, 1} = Controller.interrupt_matching(table: "todos")
+
+        # in http mode this test only terminates when the client's request to the
+        # backend completes even though we've terminated the calling process
+        # which is why the long_poll_timeout is set to 2 seconds and not higher
+        # and this await timeout is so low
+        response = Task.await(task, 100)
+
+        assert 200 == response.status
+        assert ["0_inf"] = Plug.Conn.get_resp_header(response, "electric-offset")
+        assert [^handle] = Plug.Conn.get_resp_header(response, "electric-handle")
+        assert ["application/json" <> _] = Plug.Conn.get_resp_header(response, "content-type")
+        assert [cache_control] = Plug.Conn.get_resp_header(response, "cache-control")
+        assert cache_control =~ "no-cache"
+        assert cache_control =~ "no-store"
+
+        assert [] = ShapeRequestRegistry.registered_requests()
+      end
+    end
+
+    test "shape matching w/params" do
+      defns = [
+        [[table: "todos"]],
+        [[table: "todos"]],
+        [[table: "todos", where: "completed = $1"]],
+        [[table: "todos", where: "completed = $1", params: [true]]],
+        [[table: "todos", where: "completed = $1", params: %{1 => true}]]
+      ]
+
+      shape =
+        PredefinedShape.new!(
+          table: "todos",
+          where: "completed = $1",
+          params: [true]
+        )
+
+      {:ok, key} = ShapeRequestRegistry.register_shape(shape)
+
+      for args <- defns do
+        assert {:ok, 1} == apply(Controller, :interrupt_matching, args),
+               "failed to match shape spec #{inspect(args)}"
+
+        assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
+      end
     end
 
     test "shape matching w/namespace" do
@@ -322,7 +353,7 @@ defmodule Phoenix.Sync.ControllerTest do
       {:ok, key} = ShapeRequestRegistry.register_shape(shape)
 
       for args <- defns do
-        assert {:ok, 1} = apply(ShapeRequestRegistry, :interrupt_matching, args)
+        assert {:ok, 1} = apply(Controller, :interrupt_matching, args)
 
         assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
       end
@@ -352,7 +383,7 @@ defmodule Phoenix.Sync.ControllerTest do
       {:ok, key} = ShapeRequestRegistry.register_shape(shape)
 
       for args <- defns do
-        assert {:ok, 1} = apply(ShapeRequestRegistry, :interrupt_matching, args)
+        assert {:ok, 1} = apply(Controller, :interrupt_matching, args)
 
         assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
       end
@@ -360,6 +391,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
     test "shape matching w/o namespace" do
       defns = [
+        ["todos"],
         [[table: "todos"]],
         [[table: "todos", where: "completed = true"]],
         [Support.Todo, [where: "completed = true"]]
@@ -375,7 +407,7 @@ defmodule Phoenix.Sync.ControllerTest do
       {:ok, key} = ShapeRequestRegistry.register_shape(shape)
 
       for args <- defns do
-        assert {:ok, 1} = apply(ShapeRequestRegistry, :interrupt_matching, args)
+        assert {:ok, 1} = apply(Controller, :interrupt_matching, args)
 
         assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
       end

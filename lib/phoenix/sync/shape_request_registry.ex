@@ -1,19 +1,12 @@
 defmodule Phoenix.Sync.ShapeRequestRegistry do
-  @moduledoc """
-  Track active shape subscriptions so they can be interrupted.
+  @moduledoc false
 
-  Note that the implementation of register and unregister depend on the call
-  coming from the same process that's requesting the shape. We then register
-  the pid along with the shape definition and then when interrupting, we
-  brutally kill that pid if the shape definition matches.
-  """
   use GenServer
 
   alias Phoenix.Sync.PredefinedShape
 
   # Client API
 
-  @doc false
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -28,11 +21,13 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
 
   def interrupt_matching(shape, shape_opts \\ [])
 
-  def interrupt_matching(config, _opts) when is_list(config) do
+  def interrupt_matching(match_spec, _opts) when is_list(match_spec) do
+    match_spec = Keyword.replace_lazy(match_spec, :params, &normalize_params_form/1)
+
     do_interrupt_matching(fn %PredefinedShape{} = shape ->
       params = PredefinedShape.to_shape_params(shape)
 
-      Enum.all?(config, fn {k, v} -> Keyword.get(params, k) == v end)
+      Enum.all?(match_spec, fn {k, v} -> Keyword.get(params, k) == v end)
     end)
   end
 
@@ -58,6 +53,16 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
 
   defp do_interrupt_matching(fun) do
     GenServer.call(__MODULE__, {:interrupt_matching, fun})
+  end
+
+  defp normalize_params_form(params) when is_list(params) do
+    params
+    |> Enum.with_index(fn elem, index -> {to_string(index + 1), to_string(elem)} end)
+    |> Map.new()
+  end
+
+  defp normalize_params_form(params) when is_map(params) do
+    Map.new(params, fn {k, v} -> {to_string(k), to_string(v)} end)
   end
 
   def registered_requests do
