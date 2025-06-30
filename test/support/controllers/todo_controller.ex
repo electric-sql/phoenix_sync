@@ -30,11 +30,21 @@ defmodule Phoenix.Sync.LiveViewTest.TodoController do
     sync_render(conn, params, &Support.Todo.changeset/1, where: "completed = false")
   end
 
-  def interruptable(conn, params) do
-    sync_render(conn, params, table: "todos", where: "completed = false", interruptable: true)
+  def interruptible(conn, params) do
+    sync_render(conn, params, fn ->
+      &Support.Todo.changeset/1
+    end)
   end
 
-  def interruptible(conn, params) do
-    sync_render(conn, params, table: "todos", where: "completed = false", interruptible: true)
+  def interruptable_dynamic(conn, params) do
+    sync_render(conn, params, fn ->
+      shape_params = Agent.get(:interruptable_dynamic_agent, & &1)
+
+      Phoenix.Sync.shape!(
+        table: "todos",
+        where: "completed = $1",
+        params: shape_params
+      )
+    end)
   end
 end

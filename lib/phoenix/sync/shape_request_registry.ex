@@ -24,10 +24,8 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
   def interrupt_matching(match_spec, _opts) when is_list(match_spec) do
     match_spec = Keyword.replace_lazy(match_spec, :params, &normalize_params_form/1)
 
-    do_interrupt_matching(fn %PredefinedShape{} = shape ->
-      params = PredefinedShape.to_shape_params(shape)
-
-      Enum.all?(match_spec, fn {k, v} -> Keyword.get(params, k) == v end)
+    do_interrupt_matching(fn shape ->
+      Enum.all?(match_spec, fn {k, v} -> Map.get(shape, k) == v end)
     end)
   end
 
@@ -37,12 +35,12 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
 
   def interrupt_matching(queryable, shape_opts)
       when is_atom(queryable) or is_struct(queryable, Ecto.Query) do
-    match_params =
-      queryable |> PredefinedShape.new!(shape_opts) |> PredefinedShape.to_shape_params()
+    match_shape =
+      queryable
+      |> PredefinedShape.new!(shape_opts)
+      |> match_params()
 
-    do_interrupt_matching(fn %PredefinedShape{} = shape ->
-      match_params == PredefinedShape.to_shape_params(shape)
-    end)
+    do_interrupt_matching(fn shape -> match_shape == shape end)
   rescue
     e -> {:error, e}
   end
@@ -83,15 +81,13 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
       subscriptions: subscriptions
     } = state
 
-    key = make_ref()
-
     monitor_ref = Process.monitor(request_pid)
-    monitors = Map.put(monitors, monitor_ref, key)
+    monitors = Map.put(monitors, monitor_ref, monitor_ref)
 
     shape_info = {shape, request_pid}
-    subscriptions = Map.put(subscriptions, key, shape_info)
+    subscriptions = Map.put(subscriptions, monitor_ref, shape_info)
 
-    {:reply, {:ok, key}, %{state | monitors: monitors, subscriptions: subscriptions}}
+    {:reply, {:ok, monitor_ref}, %{state | monitors: monitors, subscriptions: subscriptions}}
   end
 
   def handle_call({:unregister_shape, key}, _from, %{subscriptions: subscriptions} = state) do
@@ -101,7 +97,11 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
   def handle_call({:interrupt_matching, matcher}, _from, state) do
     interrupted_count =
       state.subscriptions
-      |> Enum.filter(fn {_id, {shape, _request_pid}} -> matcher.(shape) end)
+      |> Enum.filter(fn {_id, {shape, _request_pid}} ->
+        shape
+        |> match_params()
+        |> matcher.()
+      end)
       |> Enum.reduce(0, fn {key, {_shape, request_pid}}, acc ->
         send(request_pid, {:interrupt_shape, key, :server_interrupt})
 
@@ -126,5 +126,12 @@ defmodule Phoenix.Sync.ShapeRequestRegistry do
 
         {:noreply, %{state | subscriptions: subscriptions, monitors: monitors}}
     end
+  end
+
+  defp match_params(%PredefinedShape{} = shape) do
+    shape
+    |> PredefinedShape.to_shape_params()
+    |> Map.new()
+    |> Map.drop([:replica])
   end
 end

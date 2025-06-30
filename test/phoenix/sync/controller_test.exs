@@ -41,8 +41,8 @@ defmodule Phoenix.Sync.ControllerTest do
       get "/module", TodoController, :module
       get "/changeset", TodoController, :changeset
       get "/complex", TodoController, :complex
-      get "/interruptable", TodoController, :interruptable
       get "/interruptible", TodoController, :interruptible
+      get "/interruptable_dynamic", TodoController, :interruptable_dynamic
     end
   end
 
@@ -197,6 +197,18 @@ defmodule Phoenix.Sync.ControllerTest do
     get "/shape/todos" do
       sync_render(conn, table: "todos")
     end
+
+    get "/shape/interruptible-todos" do
+      sync_render(conn, fn ->
+        shape_params = Agent.get(:interruptable_dynamic_agent, & &1)
+
+        Phoenix.Sync.shape!(
+          table: "todos",
+          where: "completed = $1",
+          params: shape_params
+        )
+      end)
+    end
   end
 
   describe "plug: sync_render/3" do
@@ -239,178 +251,182 @@ defmodule Phoenix.Sync.ControllerTest do
     end
   end
 
-  describe "interrupt" do
-    alias Phoenix.Sync.Controller
+  describe "plug: interruptible sync_render/3" do
     alias Phoenix.Sync.ShapeRequestRegistry
-    alias Phoenix.Sync.PredefinedShape
 
     @describetag interrupt: true
-    @describetag long_poll_timeout: 2_000
+    @describetag long_poll_timeout: 5_000
 
-    for path <- ~w(/todos/interruptable /todos/interruptible) do
-      test "exits a long-poll request immediately #{path}", _ctx do
-        resp =
-          Phoenix.ConnTest.build_conn()
-          |> Phoenix.ConnTest.get(unquote(path), %{offset: "-1"})
+    setup(ctx) do
+      [plug_opts: [phoenix_sync: Phoenix.Sync.plug_opts(ctx.electric_opts)]]
+    end
 
-        assert resp.status == 200
-        assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+    test "re-tries the request after an interrupt", ctx do
+      agent = start_supervised!({Agent, fn -> [false] end})
 
-        assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+      Process.register(agent, :interruptable_dynamic_agent)
 
-        resp =
-          Phoenix.ConnTest.build_conn()
-          |> Phoenix.ConnTest.get(unquote(path), %{offset: "0_0", handle: handle})
+      conn = conn(:get, "/shape/interruptible-todos", %{"offset" => "-1"})
 
-        assert resp.status == 200
-        assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
+      resp = PlugRouter.call(conn, PlugRouter.init(ctx.plug_opts))
 
-        assert [^handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+      assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
 
-        task =
-          Task.async(fn ->
-            Phoenix.ConnTest.build_conn()
-            |> Phoenix.ConnTest.get(unquote(path), %{
-              offset: "0_inf",
-              handle: handle,
-              live: "true"
+      conn = conn(:get, "/shape/interruptible-todos", %{"offset" => "0_0", "handle" => handle})
+      resp = PlugRouter.call(conn, PlugRouter.init(ctx.plug_opts))
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
+
+      task =
+        Task.async(fn ->
+          conn =
+            conn(:get, "/shape/interruptible-todos", %{
+              "offset" => "0_inf",
+              "handle" => handle,
+              "live" => "true"
             })
-          end)
 
-        # let the request start and register itself
-        Process.sleep(100)
+          PlugRouter.call(conn, PlugRouter.init(ctx.plug_opts))
+        end)
 
-        assert {:ok, 1} = Controller.interrupt_matching(table: "todos")
+      # let the request start and register itself
+      Process.sleep(100)
 
-        # in http mode this test only terminates when the client's request to the
-        # backend completes even though we've terminated the calling process
-        # which is why the long_poll_timeout is set to 2 seconds and not higher
-        # and this await timeout is so low
-        response = Task.await(task, 100)
+      # change the shape definition while the request is running
+      Agent.update(:interruptable_dynamic_agent, fn _ -> [true] end)
 
-        assert 200 == response.status
-        assert ["0_inf"] = Plug.Conn.get_resp_header(response, "electric-offset")
-        assert [^handle] = Plug.Conn.get_resp_header(response, "electric-handle")
-        assert ["application/json" <> _] = Plug.Conn.get_resp_header(response, "content-type")
-        assert [cache_control] = Plug.Conn.get_resp_header(response, "cache-control")
-        assert cache_control =~ "no-cache"
-        assert cache_control =~ "no-store"
+      # interrupt forcing a re-request which will pick up the changed shape definition
+      assert {:ok, 1} = Phoenix.Sync.interrupt(table: "todos")
 
-        assert [] = ShapeRequestRegistry.registered_requests()
-      end
+      response = Task.await(task, 1000)
+
+      assert 409 == response.status
+
+      assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(response.resp_body)
+
+      assert [] = ShapeRequestRegistry.registered_requests()
+    end
+  end
+
+  describe "interrupt[ia]ble" do
+    alias Phoenix.Sync.ShapeRequestRegistry
+
+    @describetag interrupt: true
+    @describetag long_poll_timeout: 5_000
+
+    test "retries an interrupted long-poll", ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/interruptible", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/interruptible", %{offset: "0_0", handle: handle})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
+
+      assert [^handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
+
+      task =
+        Task.async(fn ->
+          Phoenix.ConnTest.build_conn()
+          |> Phoenix.ConnTest.get("/todos/interruptible", %{
+            offset: "0_inf",
+            handle: handle,
+            live: "true"
+          })
+        end)
+
+      # let the request start and register itself
+      Process.sleep(100)
+
+      assert {:ok, 1} = Phoenix.Sync.interrupt(table: "todos")
+
+      Process.sleep(100)
+
+      Postgrex.query!(
+        ctx.db_conn,
+        "INSERT INTO todos (title, completed) VALUES ($1, $2)",
+        ["new todo", false]
+      )
+
+      # in http mode this test only terminates when the client's request to the
+      # backend completes even though we've terminated the calling process
+      # which is why the long_poll_timeout is set to 2 seconds and not higher
+      # and this await timeout is so low
+      response = Task.await(task, 500)
+
+      assert 200 == response.status
+
+      assert [%{"value" => %{"title" => "new todo"}}, %{"headers" => %{}}] =
+               Jason.decode!(response.resp_body)
+
+      assert [_offset] = Plug.Conn.get_resp_header(response, "electric-offset")
+      assert [cache_control] = Plug.Conn.get_resp_header(response, "cache-control")
+      assert cache_control =~ "public"
+      assert cache_control =~ "max-age=5"
+
+      assert [] = ShapeRequestRegistry.registered_requests()
     end
 
-    test "shape matching w/params" do
-      defns = [
-        [[table: "todos"]],
-        [[table: "todos"]],
-        [[table: "todos", where: "completed = $1"]],
-        [[table: "todos", where: "completed = $1", params: [true]]],
-        [[table: "todos", where: "completed = $1", params: %{1 => true}]]
-      ]
+    test "returns must-refetch for invalidated shape", _ctx do
+      agent = start_supervised!({Agent, fn -> [false] end})
 
-      shape =
-        PredefinedShape.new!(
-          table: "todos",
-          where: "completed = $1",
-          params: [true]
-        )
+      Process.register(agent, :interruptable_dynamic_agent)
 
-      {:ok, key} = ShapeRequestRegistry.register_shape(shape)
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/interruptable_dynamic", %{offset: "-1"})
 
-      for args <- defns do
-        assert {:ok, 1} == apply(Controller, :interrupt_matching, args),
-               "failed to match shape spec #{inspect(args)}"
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
 
-        assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
-      end
-    end
+      assert [handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
 
-    test "shape matching w/namespace" do
-      import Ecto.Query, only: [from: 2]
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/interruptable_dynamic", %{offset: "0_0", handle: handle})
 
-      defns = [
-        [[table: "todos"]],
-        [[namespace: "public", table: "todos"]],
-        [[table: "todos", where: "completed = true"]],
-        [Ecto.Query.put_query_prefix(Support.Todo, "public"), [where: "completed = true"]],
-        [
-          fn %{shape_config: config} ->
-            config[:table] == "todos"
-          end,
-          []
-        ]
-      ]
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
 
-      shape =
-        PredefinedShape.new!(
-          table: "todos",
-          namespace: "public",
-          where: "completed = true",
-          columns: ["id", "title", "completed"]
-        )
+      assert [^handle] = Plug.Conn.get_resp_header(resp, "electric-handle")
 
-      {:ok, key} = ShapeRequestRegistry.register_shape(shape)
+      task =
+        Task.async(fn ->
+          Phoenix.ConnTest.build_conn()
+          |> Phoenix.ConnTest.get("/todos/interruptable_dynamic", %{
+            offset: "0_inf",
+            handle: handle,
+            live: "true"
+          })
+        end)
 
-      for args <- defns do
-        assert {:ok, 1} = apply(Controller, :interrupt_matching, args)
+      # let the request start and register itself
+      Process.sleep(100)
 
-        assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
-      end
-    end
+      # change the shape definition while the request is running
+      Agent.update(:interruptable_dynamic_agent, fn _ -> [true] end)
 
-    test "shape matching against Ecto.Query" do
-      import Ecto.Query, only: [from: 2]
+      # interrupt forcing a re-request which will pick up the changed shape definition
+      assert {:ok, 1} = Phoenix.Sync.interrupt(table: "todos")
 
-      defns = [
-        [[table: "todos"]],
-        [[namespace: "public", table: "todos"]],
-        [from(t in Support.Todo, prefix: "public", where: t.completed == true), []],
-        [
-          fn %PredefinedShape{} = shape ->
-            params = PredefinedShape.to_shape_params(shape)
-            params[:table] == "todos"
-          end,
-          []
-        ]
-      ]
+      response = Task.await(task, 1000)
 
-      shape =
-        PredefinedShape.new!(
-          from(t in Support.Todo, prefix: "public", where: t.completed == true)
-        )
+      assert 409 == response.status
 
-      {:ok, key} = ShapeRequestRegistry.register_shape(shape)
+      assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(response.resp_body)
 
-      for args <- defns do
-        assert {:ok, 1} = apply(Controller, :interrupt_matching, args)
-
-        assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
-      end
-    end
-
-    test "shape matching w/o namespace" do
-      defns = [
-        ["todos"],
-        [[table: "todos"]],
-        [[table: "todos", where: "completed = true"]],
-        [Support.Todo, [where: "completed = true"]]
-      ]
-
-      shape =
-        PredefinedShape.new!(
-          table: "todos",
-          where: "completed = true",
-          columns: ["id", "title", "completed"]
-        )
-
-      {:ok, key} = ShapeRequestRegistry.register_shape(shape)
-
-      for args <- defns do
-        assert {:ok, 1} = apply(Controller, :interrupt_matching, args)
-
-        assert_receive {:interrupt_shape, ^key, :server_interrupt}, 500
-      end
+      assert [] = ShapeRequestRegistry.registered_requests()
     end
   end
 end

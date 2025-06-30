@@ -40,7 +40,8 @@ defmodule Phoenix.Sync.PredefinedShape do
   ]
 
   @type t :: %__MODULE__{}
-  @type options() :: [unquote(NimbleOptions.option_typespec(@public_schema))]
+  @type option() :: unquote(NimbleOptions.option_typespec(@public_schema))
+  @type options() :: [option()]
 
   if Code.ensure_loaded?(Ecto) do
     @type shape() :: options() | Electric.Client.ecto_shape()
@@ -52,7 +53,7 @@ defmodule Phoenix.Sync.PredefinedShape do
   def shape_schema, do: @shape_schema
 
   @doc false
-  def schema, do: @public_schema
+  def schema, do: @keyword_shape_schema
 
   @doc false
   @spec new!(shape(), options()) :: t()

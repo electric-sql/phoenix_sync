@@ -43,35 +43,84 @@ defmodule Phoenix.Sync.Controller do
 
   ## Shape definitions
 
-  Shape definitions can be any of the following:
-
-  - An `Ecto.Schema` module:
-
-        sync_render(conn, MyPlugApp.Todos.Todo)
-
-  - An `Ecto` query:
-
-        sync_render(conn, params, from(t in Todos.Todo, where: t.owner_id == ^user_id))
-
-  - A `changeset/1` function which defines the table and columns:
-
-        sync_render(conn, params, &Todos.Todo.changeset/1)
-
-  - A `changeset/1` function plus a where clause:
-
-        sync_render(conn, params, &Todos.Todo.changeset/1, where: "completed = false")
-
-    or a parameterized where clause:
-
-        sync_render(conn, params, &Todos.Todo.changeset/1, where: "completed = $1", params: [false])
-
-  - A keyword list defining the shape parameters:
-
-        sync_render(conn, params, table: "todos", namespace: "my_app", where: "completed = $1", params: [false])
+  See `Phoenix.Sync.shape!/2` for examples of shape definitions
 
   ## Interruptible calls
 
-  There may be circumstances where shape definitions are dynamic based on, say, a database query.
+  There may be circumstances where shape definitions are dynamic based on, say,
+  a database query. In this case you should wrap your shape definitions in a
+  function and use `sync_render/3` so that changes to clients' shapes can be.
+  immediately picked up by the clients.
+
+  For more information see `Phoenix.Sync.Controller.sync_render/3` and
+  `Phoenix.Sync.interrupt/2`.
+  """
+
+  alias Phoenix.Sync.Adapter
+  alias Phoenix.Sync.Plug.CORS
+  alias Phoenix.Sync.PredefinedShape
+  alias Phoenix.Sync.ShapeRequestRegistry
+
+  require Logger
+
+  @type shape_option() :: PredefinedShape.option()
+  @type shape_options() :: [shape_option()]
+
+  if Code.ensure_loaded?(Ecto) do
+    @type shape() :: shape_options() | Electric.Client.ecto_shape()
+  else
+    @type shape() :: shape_options()
+  end
+
+  defmacro __using__(opts \\ []) do
+    # validate that we're being used in the context of a Plug.Router impl
+    Phoenix.Sync.Plug.Utils.env!(__CALLER__)
+
+    quote do
+      @plug_assign_opts Phoenix.Sync.Plug.Utils.opts_in_assign!(
+                          unquote(opts),
+                          __MODULE__,
+                          Phoenix.Sync.Controller
+                        )
+
+      def sync_render(conn, shape_fun) when is_function(shape_fun, 0) do
+        conn
+        |> Phoenix.Sync.Controller.configure_plug_conn!(@plug_assign_opts)
+        |> Phoenix.Sync.Controller.sync_render(conn.params, shape_fun)
+      end
+
+      def sync_render(conn, shape, shape_opts \\ []) do
+        conn
+        |> Phoenix.Sync.Controller.configure_plug_conn!(@plug_assign_opts)
+        |> Phoenix.Sync.Controller.sync_render(conn.params, shape, shape_opts)
+      end
+    end
+  end
+
+  @doc false
+  def configure_plug_conn!(conn, assign_opts) do
+    case get_in(conn.assigns, [assign_opts, :phoenix_sync]) do
+      %_{} = api ->
+        conn
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.put_private(:phoenix_sync_api, api)
+
+      nil ->
+        raise RuntimeError,
+          message:
+            "Please configure your Router opts with [phoenix_sync: Phoenix.Sync.plug_opts()]"
+    end
+  end
+
+  @doc """
+  Return the sync events for the given shape as a `Plug.Conn` response.
+
+  By passing the shape definition as a function you enable interruptible
+  requests. This is useful when the shape definition is dynamic and may change.
+
+  By interrupting the long running requests to the sync API, changes to the
+  client's shape can be picked up immediately without waiting for the long-poll
+  timeout to expire.
 
   For instance, when creating a task manager apps your clients will have a list
   of tasks and each task will have a set of steps.
@@ -101,9 +150,17 @@ defmodule Phoenix.Sync.Controller do
   like so:
 
       def steps(conn, %{"user_id" => user_id} = params) do
-        # queries as before..
+        sync_render(conn, params, fn ->
+          task_ids =
+            from(t in Tasks.Task, where: t.user_id == ^user_id, select: t.id)
+            |> Repo.all()
 
-        sync_render(conn, params, steps_query, interruptible: true)
+          Enum.reduce(
+            task_ids,
+            from(s in Tasks.Step),
+            fn query, task_id -> or_where(query, [s], s.task_id == ^task_id) end
+          )
+        end)
       end
 
   And add an interrupt call in your tasks controller to trigger the interrupt:
@@ -112,78 +169,67 @@ defmodule Phoenix.Sync.Controller do
         # create the task as before...
 
         # interrupt all active steps shapes
-        Phoenix.Sync.Controller.interrupt_matching(Tasks.Step)
+        Phoenix.Sync.interrupt(Tasks.Step)
 
         # return the response...
       end
 
-  Now active long-poll requests will be interrupted and the clients will
-  immediately re-try and receive the updated shape data including the new task.
+  Now active long-poll requests to the `steps` table will be interrupted and
+  re-tried and clients will receive the updated shape data including the new
+  task immediately.
 
-  For more information see `Phoenix.Sync.Controller.interrupt_matching/2`.
+  If you want to use keyword-based shapes instead of Ecto queries or add
+  options to Ecto shapes, you can use `Phoenix.Sync.shape!/2` in the shape
+  definition function:
+
+      sync_render(conn, params, fn ->
+        Phoenix.Sync.shape!(query, replica: :full)
+      end)
+
   """
+  @spec sync_render(
+          Plug.Conn.t(),
+          Plug.Conn.params(),
+          (-> PredefinedShape.t() | PredefinedShape.shape())
+        ) :: Plug.Conn.t()
+  def sync_render(conn, params, shape_fun) when is_function(shape_fun, 0) do
+    api = configured_api!(conn)
 
-  alias Phoenix.Sync.Plug.CORS
-  alias Phoenix.Sync.PredefinedShape
-
-  defmacro __using__(opts \\ []) do
-    # validate that we're being used in the context of a Plug.Router impl
-    Phoenix.Sync.Plug.Utils.env!(__CALLER__)
-
-    quote do
-      @plug_assign_opts Phoenix.Sync.Plug.Utils.opts_in_assign!(
-                          unquote(opts),
-                          __MODULE__,
-                          Phoenix.Sync.Controller
-                        )
-
-      def sync_render(conn, shape, shape_opts \\ []) do
-        case get_in(conn.assigns, [@plug_assign_opts, :phoenix_sync]) do
-          %_{} = api ->
-            conn =
-              conn
-              |> Plug.Conn.fetch_query_params()
-              |> Plug.Conn.put_private(:phoenix_sync_api, api)
-
-            Phoenix.Sync.Controller.sync_render(conn, conn.params, shape, shape_opts)
-
-          nil ->
-            raise RuntimeError,
-              message:
-                "Please configure your Router opts with [phoenix_sync: Phoenix.Sync.plug_opts()]"
-        end
-      end
+    if interruptible_call?(params) do
+      interruptible_call(conn, api, params, shape_fun)
+    else
+      predefined_shape = call_shape_fun(shape_fun)
+      sync_render_call(conn, api, params, predefined_shape)
     end
   end
 
   @doc """
   Return the sync events for the given shape as a `Plug.Conn` response.
   """
-  @spec sync_render(
-          Plug.Conn.t(),
-          Plug.Conn.params(),
-          PredefinedShape.shape(),
-          PredefinedShape.options()
-        ) :: Plug.Conn.t()
+  @spec sync_render(Plug.Conn.t(), Plug.Conn.params(), shape(), shape_options()) :: Plug.Conn.t()
   def sync_render(conn, params, shape, shape_opts \\ [])
 
-  def sync_render(%{private: %{phoenix_endpoint: endpoint}} = conn, params, shape, shape_opts) do
-    api =
-      endpoint.config(:phoenix_sync) ||
-        raise RuntimeError,
-          message:
-            "Please configure your Endpoint with [phoenix_sync: Phoenix.Sync.plug_opts()] in your `c:Application.start/2`"
+  def sync_render(conn, params, shape, shape_opts) do
+    api = configured_api!(conn)
+    predefined_shape = PredefinedShape.new!(shape, shape_opts)
+    sync_render_call(conn, api, params, predefined_shape)
+  end
 
-    sync_render_api(conn, api, params, shape, shape_opts)
+  # The Phoenix.Controller version
+  defp configured_api!(%{private: %{phoenix_endpoint: endpoint}} = _conn) do
+    endpoint.config(:phoenix_sync) ||
+      raise RuntimeError,
+        message:
+          "Please configure your Endpoint with [phoenix_sync: Phoenix.Sync.plug_opts()] in your `c:Application.start/2`"
   end
 
   # the Plug.{Router, Builder} version
-  def sync_render(%{private: %{phoenix_sync_api: api}} = conn, params, shape, shape_opts) do
-    sync_render_api(conn, api, params, shape, shape_opts)
+  defp configured_api!(%{private: %{phoenix_sync_api: api}} = _conn) do
+    api
   end
 
-  defp sync_render_api(conn, api, params, shape, shape_opts) do
-    {interruptible?, shape, shape_opts} = interruptible_call?(shape, shape_opts, params)
+  defp sync_render_call(conn, api, params, predefined_shape) do
+    {:ok, shape_api} = Adapter.PlugApi.predefined_shape(api, predefined_shape)
 
     predefined_shape = PredefinedShape.new!(shape, shape_opts)
 
@@ -197,39 +243,26 @@ defmodule Phoenix.Sync.Controller do
     |> CORS.call()
   end
 
-  defp interruptible_call?(shape, shape_opts, params) do
-    # support both spellings because I'm even switching between them randomly
-    # as I write this feature and the difference is hard to spot
-    Enum.reduce([:interruptible, :interruptable], {false, shape, shape_opts}, fn
-      opt, {interruptible?, shape, shape_opts} ->
-        {shape_interruptible?, shape} = interruptible_call_opts(shape, opt)
-        {shape_opts_interruptible?, shape_opts} = interruptible_call_opts(shape_opts, opt)
-        {interruptible? || shape_interruptible? || shape_opts_interruptible?, shape, shape_opts}
-    end)
-    |> then(fn {interruptible?, shape, shape_opts} ->
-      {interruptible? && params["live"] == "true", shape, shape_opts}
-    end)
+  defp interruptible_call?(params) do
+    params["live"] == "true"
   end
 
-  defp interruptible_call_opts(shape_opts, key) when is_list(shape_opts) do
-    Keyword.pop(shape_opts, key, false)
-  end
+  defp now, do: System.monotonic_time(:millisecond)
 
-  defp interruptible_call_opts(shape_opts, _key), do: {false, shape_opts}
+  defp interruptible_call(conn, api, params, shape_fun) do
+    predefined_shape = call_shape_fun(shape_fun)
 
-  defp interruptible_call(shape_api, predefined_shape, conn, params) do
-    alias Phoenix.Sync.ShapeRequestRegistry
+    {:ok, shape_api} = Adapter.PlugApi.predefined_shape(api, predefined_shape)
+
     {:ok, key} = ShapeRequestRegistry.register_shape(predefined_shape)
 
     try do
       parent = self()
+      start_time = now()
 
       {:ok, pid} =
         Task.start_link(fn ->
-          send(
-            parent,
-            {:response, self(), Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, params)}
-          )
+          send(parent, {:response, self(), Adapter.PlugApi.call(shape_api, conn, params)})
         end)
 
       ref = Process.monitor(pid)
@@ -239,7 +272,17 @@ defmodule Phoenix.Sync.Controller do
           Process.demonitor(ref, [:flush])
           Process.unlink(pid)
           Process.exit(pid, :kill)
-          interruption_response(conn, params)
+          # immediately retry the same request -- if the shape_fun returns a
+          # different shape the client will receive a must-refetch response but
+          # if the shape is the same then the request will continue with no
+          # interruption.
+          #
+          # if possible adjust the long poll timeout to account for the time
+          # already spent before the interrupt.
+
+          api = reduce_long_poll_timeout(api, start_time)
+
+          interruptible_call(conn, api, params, shape_fun)
 
         {:response, ^pid, conn} ->
           Process.demonitor(ref, [:flush])
@@ -253,113 +296,28 @@ defmodule Phoenix.Sync.Controller do
     end
   end
 
-  @map_params %{
-    "handle" => "electric-handle",
-    "offset" => "electric-offset",
-    "cursor" => "electric-cursor"
-  }
+  # only calls to the embedded api can have their timeout's adjusted
+  defp reduce_long_poll_timeout(%{long_poll_timeout: long_poll_timeout} = api, start_time) do
+    timeout = long_poll_timeout - (now() - start_time)
 
-  defp interruption_response(conn, params) do
-    headers =
-      for {key, value} <- params, header = Map.get(@map_params, key), !is_nil(header), into: [] do
-        {header, value}
-      end
+    Logger.debug(fn ->
+      ["Restarting interrupted request with timeout: ", to_string(timeout), "ms"]
+    end)
 
-    headers
-    |> Enum.reduce(conn, &Plug.Conn.put_resp_header(&2, elem(&1, 0), elem(&1, 1)))
-    |> Plug.Conn.put_resp_header("content-type", "application/json; charset=utf-8")
-    |> Plug.Conn.put_resp_header(
-      "cache-control",
-      "no-cache, no-store, must-revalidate, max-age=0"
-    )
-    |> Plug.Conn.send_resp(200, "[]")
+    %{api | long_poll_timeout: timeout}
   end
 
-  @params_types {:or, [:string, :integer, :float, :boolean]}
-  @schema NimbleOptions.new!(
-            table: [type: :string, required: true],
-            namespace: [
-              type: {:or, [nil, :string]}
-            ],
-            where: [
-              type: {:or, [nil, :string]}
-            ],
-            columns: [
-              type: {:or, [nil, {:list, :string}]}
-            ],
-            params: [
-              type: {:or, [nil, {:map, :pos_integer, @params_types}, {:list, @params_types}]}
-            ]
-          )
-
-  @type options() :: [unquote(NimbleOptions.option_typespec(@schema))]
-
-  if Code.ensure_loaded?(Ecto) do
-    @type shape() :: options() | Electric.Client.ecto_shape()
-  else
-    @type shape() :: options()
+  defp reduce_long_poll_timeout(api_impl, _start_time) do
+    api_impl
   end
 
-  @type shape_opts() :: options()
+  defp call_shape_fun(shape_fun) when is_function(shape_fun, 0) do
+    case shape_fun.() do
+      %PredefinedShape{} = predefined_shape ->
+        predefined_shape
 
-  @doc """
-  Breaks all long-polling requests maching the give shape definition.
-
-  The broader the shape definition, the more requests will be interrupted.
-
-  ### Examples
-
-  To interrupt all shapes on the "todos" table:
-
-      Phoenix.Sync.Controller.interrupt_matching("todos")
-      Phoenix.Sync.Controller.interrupt_matching(table: "todos")
-
-  or the same using an `Ecto.Schema` module:
-
-      Phoenix.Sync.Controller.interrupt_matching(Todos.Todo)
-
-  all shapes with the given parameterized where clause:
-
-      Phoenix.Sync.Controller.interrupt_matching(table: "todos", where: "user_id = $1")
-
-  or a single shape for the given user:
-
-      Phoenix.Sync.Controller.interrupt_matching(
-        from(t in Todos.Todo, where: t.user_id == ^user_id)
-      )
-
-  Be careful when mixing `Ecto` query-based shapes with interrupt calls using
-  hand-written where clauses.
-
-  The shape
-
-      Phoenix.Sync.Controller.sync_stream(
-        conn,
-        params,
-        from(t in Todos.Todo, where: t.user_id == ^user_id)
-      )
-
-  will **not** be interrupted by
-
-      Phoenix.Sync.Controller.interrupt_matching(
-        table: "todos",
-        where: "user_id = '\#{user_id}'"
-      )
-
-  because the where clause matching is *exact string-based*.
-
-  You're better off being too broad with your interrupt calls than too narrow
-  as if a shape is unaffected, the clients will experience very little or no
-  delay in their sync data.
-
-  Returns the number of interrupted requests.
-
-  ## Supported options
-
-  #{NimbleOptions.docs(@schema)}
-  """
-  @spec interrupt_matching(shape(), shape_opts()) :: {:ok, pos_integer()}
-  def interrupt_matching(shape, shape_opts \\ []) do
-    Phoenix.Sync.ShapeRequestRegistry.interrupt_matching(shape, shape_opts)
+      shape_defn ->
+        PredefinedShape.new!(shape_defn)
+    end
   end
 end
