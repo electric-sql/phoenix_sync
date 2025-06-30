@@ -43,6 +43,8 @@ defmodule Phoenix.Sync.Controller do
 
   """
 
+  alias Phoenix.Sync.Plug.CORS
+
   defmacro __using__(opts \\ []) do
     # validate that we're being used in the context of a Plug.Router impl
     Phoenix.Sync.Plug.Utils.env!(__CALLER__)
@@ -98,6 +100,6 @@ defmodule Phoenix.Sync.Controller do
 
     {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, predefined_shape)
 
-    Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, params)
+    Phoenix.Sync.Adapter.PlugApi.call(shape_api, CORS.call(conn), params)
   end
 end
