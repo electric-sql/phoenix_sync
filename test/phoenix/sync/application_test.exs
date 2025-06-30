@@ -3,6 +3,8 @@ defmodule Phoenix.Sync.ApplicationTest do
 
   alias Phoenix.Sync.Application, as: App
 
+  import ExUnit.CaptureLog
+
   Code.ensure_loaded!(Support.ConfigTestRepo)
 
   defp validate_repo_connection_opts!(opts, overrides \\ []) do
@@ -78,7 +80,20 @@ defmodule Phoenix.Sync.ApplicationTest do
     end
 
     test "disabled mode" do
-      assert {:ok, []} = App.children(mode: :disabled)
+      refute capture_log(fn ->
+               assert {:ok, []} = App.children(mode: :disabled)
+             end) =~ ~r/No `env` specified for :phoenix_sync: defaulting to `:prod`/
+    end
+
+    test "warns if env not set" do
+      config = [
+        mode: :embedded,
+        repo: Support.ConfigTestRepo
+      ]
+
+      assert capture_log(fn ->
+               assert {:ok, _} = App.children(config)
+             end) =~ ~r/No `env` specified for :phoenix_sync: defaulting to `:prod`/
     end
 
     test "embedded mode dev env" do
