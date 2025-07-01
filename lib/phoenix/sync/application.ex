@@ -9,6 +9,8 @@ defmodule Phoenix.Sync.Application do
 
   @impl true
   def start(_type, _args) do
+    base_children = [Phoenix.Sync.ShapeRequestRegistry]
+
     children =
       case children() do
         {:ok, children} ->
@@ -19,7 +21,10 @@ defmodule Phoenix.Sync.Application do
           []
       end
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: Phoenix.Sync.Supervisor)
+    Supervisor.start_link(base_children ++ children,
+      strategy: :one_for_one,
+      name: Phoenix.Sync.Supervisor
+    )
   end
 
   @doc false
