@@ -71,32 +71,5 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         end)
       end)
     end
-
-    # defp interruption_response(%Client.Fetch.Request{params: params}) do
-    #   cursor =
-    #     case Map.get(params, "cursor", nil) do
-    #       nil -> nil
-    #       val -> String.to_integer(val)
-    #     end
-    #
-    #   %Client.Fetch.Response{
-    #     status: 200,
-    #     headers: %{
-    #       # Construct a non-cachable response to make the client reconnect again
-    #       # on the same URL. This avoids guessing the cache config. The subsequent
-    #       # response will replace the response in the shared and browser cache.
-    #       "cache-control" => "no-cache, no-store, must-revalidate, max-age=0",
-    #       "content-type" => "application/json",
-    #       "electric-cursor" => cursor,
-    #       "electric-handle" => Map.fetch!(params, "handle"),
-    #       "electric-offset" => Map.fetch!(params, "offset"),
-    #       "expires" => "0",
-    #       "pragma" => "no-cache",
-    #       "sync-interrupted" => "true"
-    #     },
-    #     body: [],
-    #     request_timestamp: DateTime.utc_now()
-    #   }
-    # end
   end
 end
