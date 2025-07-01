@@ -3,7 +3,7 @@ defmodule Phoenix.Sync.Plug.CORS do
   A `Plug` that adds the necessary CORS headers to responses from Electric sync
   endpoints.
 
-  `Phoenix.Sync.Controller.sync_render/4` and `Phoenix.Sync.Router.sync/2`
+  `Phoenix.Sync.Controller.sync_render/3` and `Phoenix.Sync.Router.sync/2`
   already include these headers so there's no need to add this plug to your
   `Phoenix` or `Plug` router. This module is just exposed as a convenience.
   """
