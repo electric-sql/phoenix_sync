@@ -15,7 +15,8 @@ defmodule Phoenix.Sync.Plug.CORS do
     "electric-handle",
     "electric-offset",
     "electric-schema",
-    "electric-up-to-date"
+    "electric-up-to-date",
+    "electric-internal-known-error"
   ]
 
   @expose_headers ["transfer-encoding" | @electric_headers]
