@@ -196,7 +196,7 @@ defmodule Phoenix.Sync.Controller do
     api = configured_api!(conn)
 
     if interruptible_call?(params) do
-      interruptible_call(conn, api, params, shape_fun)
+      interruptible_call(CORS.call(conn), api, params, shape_fun)
     else
       predefined_shape = call_shape_fun(shape_fun)
       sync_render_call(conn, api, params, predefined_shape)
@@ -229,18 +229,9 @@ defmodule Phoenix.Sync.Controller do
   end
 
   defp sync_render_call(conn, api, params, predefined_shape) do
-    {:ok, shape_api} = Adapter.PlugApi.predefined_shape(api, predefined_shape)
-
-    predefined_shape = PredefinedShape.new!(shape, shape_opts)
-
     {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, predefined_shape)
 
-    if interruptible? do
-      interruptible_call(shape_api, predefined_shape, conn, params)
-    else
-      Phoenix.Sync.Adapter.PlugApi.call(shape_api, conn, params)
-    end
-    |> CORS.call()
+    Phoenix.Sync.Adapter.PlugApi.call(shape_api, CORS.call(conn), params)
   end
 
   defp interruptible_call?(params) do
@@ -286,6 +277,7 @@ defmodule Phoenix.Sync.Controller do
 
         {:response, ^pid, conn} ->
           Process.demonitor(ref, [:flush])
+
           conn
 
         {:DOWN, ^ref, :process, _pid, reason} ->
