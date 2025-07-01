@@ -196,7 +196,9 @@ defmodule Phoenix.Sync.Controller do
     api = configured_api!(conn)
 
     if interruptible_call?(params) do
-      interruptible_call(CORS.call(conn), api, params, shape_fun)
+      conn
+      |> CORS.call()
+      |> interruptible_call(api, params, shape_fun)
     else
       predefined_shape = call_shape_fun(shape_fun)
       sync_render_call(conn, api, params, predefined_shape)
@@ -233,12 +235,6 @@ defmodule Phoenix.Sync.Controller do
 
     Phoenix.Sync.Adapter.PlugApi.call(shape_api, CORS.call(conn), params)
   end
-
-  defp interruptible_call?(params) do
-    params["live"] == "true"
-  end
-
-  defp now, do: System.monotonic_time(:millisecond)
 
   defp interruptible_call(conn, api, params, shape_fun) do
     predefined_shape = call_shape_fun(shape_fun)
@@ -287,6 +283,12 @@ defmodule Phoenix.Sync.Controller do
       ShapeRequestRegistry.unregister_shape(key)
     end
   end
+
+  defp interruptible_call?(params) do
+    params["live"] == "true"
+  end
+
+  defp now, do: System.monotonic_time(:millisecond)
 
   # only calls to the embedded api can have their timeout's adjusted
   defp reduce_long_poll_timeout(%{long_poll_timeout: long_poll_timeout} = api, start_time) do
