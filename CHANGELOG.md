@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2025-06-30
+
+### Added
+
+- Both controller- and router-based shapes now return CORS headers for all requests requests ([#62](https://github.com/electric-sql/phoenix_sync/pull/62))
+
+### Changed
+
+- Updated `electric_client` to support `Ecto.ULID`, `:map` and `:array` types ([v0.6.3](https://github.com/electric-sql/electric/releases/tag/%40core%2Felixir-client%400.6.3))
+- Updated `electric` to latest version ([v1.0.21](https://github.com/electric-sql/electric/releases/tag/%40core%2Fsync-service%401.0.21))
+
+### Fixed
+
+- `Phoenix.Sync` will now emit a warning if the configuration is missing the `env` setting ([#60](https://github.com/electric-sql/phoenix_sync/pull/60))
+
 ## [0.4.3] - 2025-05-20
 
 ### Changed

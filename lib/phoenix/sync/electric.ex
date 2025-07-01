@@ -364,6 +364,9 @@ defmodule Phoenix.Sync.Electric do
         :error ->
           opts
       end
+      # TODO: remove this once https://github.com/electric-sql/electric/pull/2863
+      # is released
+      |> Keyword.put_new(:http_api_num_acceptors, nil)
     end
   else
     defp start_embedded(_env, _mode, _db_config_fun, _message) do
