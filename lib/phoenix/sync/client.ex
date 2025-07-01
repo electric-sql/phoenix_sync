@@ -124,26 +124,16 @@ defmodule Phoenix.Sync.Client do
   end
 
   @doc false
-  def stream(shape, stream_opts, sync_opts) do
-    client = new!(sync_opts)
-    {shape, shape_stream_opts} = resolve_shape(shape)
-    Electric.Client.stream(client, shape, Keyword.merge(shape_stream_opts, stream_opts))
+  # used for testing. `config` replace the application configuration
+  def stream(shape, stream_opts, config) do
+    client = new!(config)
+    {shape, stream_opts} = resolve_shape(shape, stream_opts)
+    Electric.Client.stream(client, shape, stream_opts)
   end
 
-  defp resolve_shape(table) when is_binary(table) do
-    {table, []}
-  end
-
-  defp resolve_shape(definition) when is_list(definition) do
-    shape = PredefinedShape.new!(definition)
-    PredefinedShape.to_stream_params(shape)
-  end
-
-  defp resolve_shape(schema) when is_atom(schema) do
-    {schema, []}
-  end
-
-  defp resolve_shape(%Ecto.Query{} = query) do
-    {query, []}
+  defp resolve_shape(shape, stream_opts) do
+    shape
+    |> PredefinedShape.new!(stream_opts)
+    |> Phoenix.Sync.PredefinedShape.to_stream_params()
   end
 end

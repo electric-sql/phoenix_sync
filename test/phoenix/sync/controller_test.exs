@@ -39,6 +39,8 @@ defmodule Phoenix.Sync.ControllerTest do
       get "/complete", TodoController, :complete
       get "/flexible", TodoController, :flexible
       get "/module", TodoController, :module
+      get "/changeset", TodoController, :changeset
+      get "/complex", TodoController, :complex
     end
   end
 
@@ -150,6 +152,35 @@ defmodule Phoenix.Sync.ControllerTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    test "allows for changeset function", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/changeset", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    test "allows for complex shapes", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/complex", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
              ] = Jason.decode!(resp.resp_body)
     end
   end

@@ -21,4 +21,12 @@ defmodule Phoenix.Sync.LiveViewTest.TodoController do
   def module(conn, params) do
     sync_render(conn, params, Support.Todo)
   end
+
+  def changeset(conn, params) do
+    sync_render(conn, params, &Support.Todo.changeset/1)
+  end
+
+  def complex(conn, params) do
+    sync_render(conn, params, &Support.Todo.changeset/1, where: "completed = false")
+  end
 end

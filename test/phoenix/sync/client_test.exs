@@ -145,6 +145,27 @@ defmodule Phoenix.Sync.ClientTest do
              ] = events
     end
 
+    test "with ecto query and additional shape opts", ctx do
+      stream =
+        Phoenix.Sync.Client.stream(
+          from(t in Support.Todo, where: t.completed == true),
+          [namespace: "app", replica: :full, live: false, errors: :stream],
+          ctx.electric_opts
+        )
+
+      assert %Electric.Client.Stream{
+               client: %{
+                 params: %{
+                   "columns" => "id,title,completed",
+                   "replica" => "full",
+                   "table" => "app.todos",
+                   "where" => "(\"completed\" = TRUE)"
+                 }
+               },
+               opts: %{errors: :stream, live: false}
+             } = stream
+    end
+
     test "with table name", ctx do
       stream =
         Phoenix.Sync.Client.stream(

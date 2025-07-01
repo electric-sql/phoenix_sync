@@ -41,9 +41,37 @@ defmodule Phoenix.Sync.Controller do
         end
       end
 
+  ## Shape definitions
+
+  Shape definitions can be any of the following:
+
+  - An `Ecto.Schema` module:
+
+        sync_render(conn, MyPlugApp.Todos.Todo)
+
+  - An `Ecto` query:
+
+        sync_render(conn, params, from(t in Todos.Todo, where: t.owner_id == ^user_id))
+
+  - A `changeset/1` function which defines the table and columns:
+
+        sync_render(conn, params, &Todos.Todo.changeset/1)
+
+  - A `changeset/1` function plus a where clause:
+
+        sync_render(conn, params, &Todos.Todo.changeset/1, where: "completed = false")
+
+    or a parameterized where clause:
+
+        sync_render(conn, params, &Todos.Todo.changeset/1, where: "completed = $1", params: [false])
+
+  - A keyword list defining the shape parameters:
+
+        sync_render(conn, params, table: "todos", namespace: "my_app", where: "completed = $1", params: [false])
   """
 
   alias Phoenix.Sync.Plug.CORS
+  alias Phoenix.Sync.PredefinedShape
 
   defmacro __using__(opts \\ []) do
     # validate that we're being used in the context of a Plug.Router impl
@@ -78,25 +106,31 @@ defmodule Phoenix.Sync.Controller do
   @doc """
   Return the sync events for the given shape as a `Plug.Conn` response.
   """
-  @spec sync_render(Plug.Conn.t(), Plug.Conn.params(), Electric.Shapes.Api.shape_opts()) ::
-          Plug.Conn.t()
-  def sync_render(%{private: %{phoenix_endpoint: endpoint}} = conn, params, shape) do
+  @spec sync_render(
+          Plug.Conn.t(),
+          Plug.Conn.params(),
+          PredefinedShape.shape(),
+          PredefinedShape.options()
+        ) :: Plug.Conn.t()
+  def sync_render(conn, params, shape, shape_opts \\ [])
+
+  def sync_render(%{private: %{phoenix_endpoint: endpoint}} = conn, params, shape, shape_opts) do
     api =
       endpoint.config(:phoenix_sync) ||
         raise RuntimeError,
           message:
             "Please configure your Endpoint with [phoenix_sync: Phoenix.Sync.plug_opts()] in your `c:Application.start/2`"
 
-    sync_render_api(conn, api, params, shape)
+    sync_render_api(conn, api, params, shape, shape_opts)
   end
 
   # the Plug.{Router, Builder} version
-  def sync_render(%{private: %{phoenix_sync_api: api}} = conn, params, shape) do
-    sync_render_api(conn, api, params, shape)
+  def sync_render(%{private: %{phoenix_sync_api: api}} = conn, params, shape, shape_opts) do
+    sync_render_api(conn, api, params, shape, shape_opts)
   end
 
-  defp sync_render_api(conn, api, params, shape) do
-    predefined_shape = Phoenix.Sync.PredefinedShape.new!(shape)
+  defp sync_render_api(conn, api, params, shape, shape_opts) do
+    predefined_shape = PredefinedShape.new!(shape, shape_opts)
 
     {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, predefined_shape)
 
