@@ -311,7 +311,7 @@ defmodule Phoenix.Sync.ControllerTest do
     end
   end
 
-  describe "interrupt[ia]ble" do
+  describe "interruptible" do
     alias Phoenix.Sync.ShapeRequestRegistry
 
     @describetag interrupt: true
@@ -376,6 +376,16 @@ defmodule Phoenix.Sync.ControllerTest do
       assert cache_control =~ "max-age=5"
 
       assert [] = ShapeRequestRegistry.registered_requests()
+    end
+
+    test "include cors headers" do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/interruptible", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert [expose] = Plug.Conn.get_resp_header(resp, "access-control-expose-headers")
+      assert String.contains?(expose, "electric-offset")
     end
 
     test "returns must-refetch for invalidated shape", _ctx do
