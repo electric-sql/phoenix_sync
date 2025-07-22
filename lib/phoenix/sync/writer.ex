@@ -1413,7 +1413,7 @@ if Code.ensure_loaded?(Ecto) do
     end
 
     @txid_name {:__phoenix_sync__, :txid}
-    @txid_query "SELECT txid_current() as txid"
+    @txid_query "SELECT txid_current()::text as txid"
 
     defp start_multi do
       Ecto.Multi.new()
