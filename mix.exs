@@ -41,17 +41,18 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:electric, "~> 1.0.21", optional: true},
-      {:electric_client, "~> 0.6.3"}
+      {:electric, "~> 1.0.24", optional: true},
+      {:electric_client, ">= 0.6.4"}
     ] ++ deps_for_env(Mix.env())
   end
 
   defp deps_for_env(:test) do
     [
-      {:floki, "~> 0.36", only: [:test]},
       {:bandit, "~> 1.5", only: [:test], override: true},
-      {:uuid, "~> 1.1", only: [:test]},
-      {:mox, "~> 1.1", only: [:test]}
+      {:floki, "~> 0.36", only: [:test]},
+      {:lazy_html, ">= 0.1.0", only: :test},
+      {:mox, "~> 1.1", only: [:test]},
+      {:uuid, "~> 1.1", only: [:test]}
     ]
   end
 
@@ -124,7 +125,13 @@ defmodule Phoenix.Sync.MixProject do
       end
       """)
 
-      mix_cmd_with_status_check(["do", "deps.get,", "compile", "--force" | args])
+      mix_cmd_with_status_check([
+        "do",
+        "deps.get,",
+        "compile",
+        "--force",
+        "--warnings-as-errors" | args
+      ])
     end)
   end
 

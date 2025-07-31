@@ -96,6 +96,15 @@ defmodule Phoenix.Sync.ApplicationTest do
              end) =~ ~r/No `env` specified for :phoenix_sync: defaulting to `:prod`/
     end
 
+    test "sandbox mode" do
+      config = [
+        mode: :sandbox,
+        repo: Support.ConfigTestRepo
+      ]
+
+      assert {:ok, [Phoenix.Sync.Sandbox]} = App.children(config)
+    end
+
     test "embedded mode dev env" do
       tmp_dir = System.tmp_dir!()
 
@@ -387,6 +396,17 @@ defmodule Phoenix.Sync.ApplicationTest do
                  endpoint: ^endpoint
                }
              } = api
+    end
+
+    test "sandbox mode" do
+      config = [
+        mode: :sandbox,
+        repo: Support.ConfigTestRepo
+      ]
+
+      api = App.plug_opts(config)
+
+      assert %Phoenix.Sync.Sandbox.APIAdapter{} = api
     end
   end
 end

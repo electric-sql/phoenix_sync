@@ -10,7 +10,7 @@ defmodule Support.DbSetup do
 
   def with_unique_db(ctx) do
     base_config = Application.fetch_env!(:electric, :connection_opts)
-    {:ok, utility_pool} = start_db_pool(base_config)
+    {:ok, utility_pool} = start_db_pool(base_config, :linked)
     Process.unlink(utility_pool)
 
     full_db_name = to_string(ctx.test)
@@ -44,7 +44,7 @@ defmodule Support.DbSetup do
     end)
 
     updated_config = Keyword.put(base_config, :database, db_name)
-    {:ok, pool} = start_db_pool(updated_config)
+    {:ok, pool} = start_db_pool(updated_config, :supervised)
 
     {:ok, %{utility_pool: utility_pool, db_config: updated_config, pool: pool, db_conn: pool}}
   end
@@ -64,7 +64,7 @@ defmodule Support.DbSetup do
 
   def with_shared_db(_ctx) do
     config = Application.fetch_env!(:electric, :connection_opts)
-    {:ok, pool} = start_db_pool(config)
+    {:ok, pool} = start_db_pool(config, :supervised)
     {:ok, %{pool: pool, db_config: config, db_conn: pool}}
   end
 
@@ -127,9 +127,18 @@ defmodule Support.DbSetup do
       |> Base.encode64()
       |> String.replace_trailing("==", "")
 
-  defp start_db_pool(connection_opts) do
+  defp start_db_pool(connection_opts, :linked) do
     start_opts = Electric.Utils.deobfuscate_password(connection_opts) ++ @postgrex_start_opts
+
     Postgrex.start_link(start_opts)
+  end
+
+  defp start_db_pool(connection_opts, :supervised) do
+    start_opts = Electric.Utils.deobfuscate_password(connection_opts) ++ @postgrex_start_opts
+
+    ExUnit.Callbacks.start_supervised({Postgrex, start_opts},
+      id: :"#{System.unique_integer([:positive])}_db_pool"
+    )
   end
 
   def with_table(ctx) do

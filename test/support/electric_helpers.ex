@@ -9,7 +9,7 @@ defmodule Support.ElectricHelpers do
     endpoint_module = opts[:endpoint] || @endpoint
 
     start_endpoint =
-      if endpoint_module != @endpoint do
+      if endpoint_module && endpoint_module != @endpoint do
         quote do
           setup_all do
             ExUnit.CaptureLog.capture_log(fn -> start_supervised!(unquote(endpoint_module)) end)
