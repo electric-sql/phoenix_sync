@@ -349,6 +349,10 @@ children = [
 ]
 ```
 
+## Examples
+
+See [the `examples` folder](./examples).
+
 ## Notes
 
 ### ElectricSQL
