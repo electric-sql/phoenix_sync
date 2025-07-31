@@ -126,9 +126,15 @@ defmodule Phoenix.Sync.PredefinedShape do
   end
 
   defp from_queryable!(%{query: queryable} = predefined_shape) do
-    queryable
-    |> Electric.Client.EctoAdapter.shape_from_query!()
-    |> from_shape_definition(predefined_shape)
+    try do
+      queryable
+      |> Electric.Client.EctoAdapter.shape_from_query!()
+      |> from_shape_definition(predefined_shape)
+    rescue
+      e in Protocol.UndefinedError ->
+        raise ArgumentError,
+          message: "Invalid query `#{inspect(queryable)}`: #{e.description}"
+    end
   end
 
   defp from_shape_definition(%ShapeDefinition{} = shape_definition, predefined_shape) do
