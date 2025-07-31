@@ -6,7 +6,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       Transaction,
       NewRecord,
       UpdatedRecord,
-      DeletedRecord
+      DeletedRecord,
+      TruncatedRelation
     }
 
     alias Electric.Replication.LogOffset
@@ -31,6 +32,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
     def emit_changes(stack_id, changes) when is_binary(stack_id) do
       GenServer.cast(name(stack_id), {:emit_changes, changes})
+    end
+
+    def truncate(stack_id, relation) do
+      GenServer.cast(name(stack_id), {:truncate, relation})
     end
 
     def name(stack_id) do
@@ -58,6 +63,17 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
         |> ShapeLogCollector.store_transaction(ShapeLogCollector.name(stack_id))
 
       {:noreply, %{state | txid: next_txid}}
+    end
+
+    def handle_cast({:truncate, relation}, state) do
+      changes = [%TruncatedRelation{relation: relation}]
+
+      :ok =
+        state.txid
+        |> transaction(changes)
+        |> ShapeLogCollector.store_transaction(ShapeLogCollector.name(state.stack_id))
+
+      {:noreply, %{state | txid: state.txid + 100}}
     end
 
     defp transaction(txid, changes) do

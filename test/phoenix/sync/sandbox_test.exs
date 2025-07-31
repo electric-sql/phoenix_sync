@@ -1,6 +1,7 @@
 defmodule Phoenix.Sync.SandboxTest do
   use ExUnit.Case, async: true
   use Support.ElectricHelpers, endpoint: __MODULE__.Endpoint
+  use Support.RepoSetup, repo: Support.SandboxRepo
 
   @moduletag :sandbox
 
@@ -53,47 +54,6 @@ defmodule Phoenix.Sync.SandboxTest do
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
   import Plug.Conn
-
-  defp with_repo_table(ctx) do
-    case ctx do
-      %{table: {name, columns}} ->
-        sql =
-          """
-          CREATE TABLE #{Support.DbSetup.inspect_relation(name)} (
-          #{Enum.join(columns, ",\n")}
-          )
-          """
-
-        Repo.query!(sql, [])
-
-        :ok
-
-      _ ->
-        :ok
-    end
-
-    :ok
-  end
-
-  defp with_repo_data(ctx) do
-    case Map.get(ctx, :data, nil) do
-      {schema, columns, values} ->
-        Enum.each(values, fn row_values ->
-          todo =
-            struct(
-              schema,
-              Enum.zip(columns, row_values) |> Enum.map(fn {c, v} -> {String.to_atom(c), v} end)
-            )
-
-          Repo.insert(todo)
-        end)
-
-        :ok
-
-      nil ->
-        :ok
-    end
-  end
 
   setup(ctx) do
     Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)

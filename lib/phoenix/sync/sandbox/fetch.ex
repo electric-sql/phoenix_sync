@@ -64,4 +64,3 @@ defmodule Phoenix.Sync.Sandbox.Fetch do
     }
   end
 end
-
