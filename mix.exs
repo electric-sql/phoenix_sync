@@ -41,8 +41,7 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      # TODO: remove the override when the client depends on 1.1
-      {:electric, "~> 1.1.0", optional: true, override: true},
+      {:electric, "~> 1.0.21", optional: true},
       {:electric_client, ">= 0.6.4"}
     ] ++ deps_for_env(Mix.env())
   end
@@ -126,7 +125,13 @@ defmodule Phoenix.Sync.MixProject do
       end
       """)
 
-      mix_cmd_with_status_check(["do", "deps.get,", "compile", "--force" | args])
+      mix_cmd_with_status_check([
+        "do",
+        "deps.get,",
+        "compile",
+        "--force",
+        "--warnings-as-errors" | args
+      ])
     end)
   end
 

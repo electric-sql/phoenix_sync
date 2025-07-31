@@ -289,8 +289,16 @@ defmodule Phoenix.Sync.Electric do
       |> Keyword.fetch!(:api)
     end
 
-    defp plug_opts(_env, :sandbox, _electric_opts) do
-      %Phoenix.Sync.Sandbox.APIAdapter{}
+    if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
+      defp plug_opts(_env, :sandbox, _electric_opts) do
+        %Phoenix.Sync.Sandbox.APIAdapter{}
+      end
+    else
+      defp plug_opts(_env, :sandbox, _electric_opts) do
+        raise ArgumentError,
+          message:
+            "phoenix_sync configured in `mode: :sandbox` but Ecto.SQL not installed. Please add `:ecto_sql` to your dependencies or use `:http` mode."
+      end
     end
   else
     defp plug_opts(_env, :embedded, _electric_opts) do
@@ -529,8 +537,14 @@ defmodule Phoenix.Sync.Electric do
     # to a real instance -- I think that's reasonable. The overhead of a real
     # electric consuming a real replication stream is way too high for a simple
     # consumer of streams
-    defp configure_client(_opts, :sandbox) do
-      Phoenix.Sync.Sandbox.client()
+    if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
+      defp configure_client(_opts, :sandbox) do
+        Phoenix.Sync.Sandbox.client()
+      end
+    else
+      defp configure_client(_opts, :sandbox) do
+        {:error, "sandbox mode is only available if Ecto.SQL is installed"}
+      end
     end
   else
     defp configure_client(_opts, :embedded) do
