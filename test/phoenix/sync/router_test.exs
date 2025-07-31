@@ -63,6 +63,8 @@ defmodule Phoenix.Sync.RouterTest do
       # query version also accepts shape config
       sync "/query-config", Support.Todo, replica: :full
       sync "/query-config2", Support.Todo, replica: :full, storage: %{compaction: :disabled}
+
+      sync "/typo", Support.Todoo
     end
 
     scope "/namespaced-sync", WebNamespace do
@@ -90,7 +92,7 @@ defmodule Phoenix.Sync.RouterTest do
     :configure_endpoint
   ]
 
-  describe "Phoenix.Router - shape/2" do
+  describe "Phoenix.Router - sync/2" do
     @tag table: {
            "todos",
            [
@@ -374,6 +376,15 @@ defmodule Phoenix.Sync.RouterTest do
         })
 
       assert ["0"] = Plug.Conn.get_resp_header(resp, "electric-cursor")
+    end
+
+    test "raises clear error error if the schema module is not found" do
+      assert_raise ArgumentError,
+                   ~r/Invalid query `Support.Todoo`: the given module does not exist/,
+                   fn ->
+                     Phoenix.ConnTest.build_conn()
+                     |> Phoenix.ConnTest.get("/sync/typo", %{offset: "-1"})
+                   end
     end
   end
 
