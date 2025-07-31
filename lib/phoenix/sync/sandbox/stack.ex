@@ -42,16 +42,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       Postgrex.transaction(
         db_pool,
         fn conn ->
-          # %{rows: [[pg_snapshot]]} = Postgrex.query!(conn, "SELECT pg_current_snapshot()", [])
-
-          %{rows: [[xmin, xmax]]} =
-            Postgrex.query!(
-              conn,
-              "SELECT pg_snapshot_xmin(pg_current_snapshot()), pg_snapshot_xmax(pg_current_snapshot())",
-              []
-            )
-
-          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {xmin, xmax, []}})
+          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {1000, 1100, []}})
 
           # Enforce display settings *before* querying initial data to maintain consistent
           # formatting between snapshot and live log entries.

@@ -33,10 +33,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       GenServer.cast(name(stack_id), {:emit_changes, changes})
     end
 
-    def sync(stack_id) do
-      GenServer.call(name(stack_id), :sync)
-    end
-
     def name(stack_id) do
       Phoenix.Sync.Sandbox.name({__MODULE__, stack_id})
     end
@@ -48,18 +44,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
     def init(stack_id) do
       state = %{txid: 10000, stack_id: stack_id}
       {:ok, state}
-    end
-
-    # get the current xmax from pg so that our change events are properly ordered
-    # after the initial sync
-    # has to come after start up and after we've allowed the inspector access to the
-    # sandboxed connection
-    def handle_call(:sync, _from, state) do
-      with {:ok, xmax} <- Phoenix.Sync.Sandbox.Inspector.current_xmax(state.stack_id) do
-        {:reply, :ok, Map.put(state, :txid, xmax + 1000)}
-      else
-        error -> {:reply, error, state}
-      end
     end
 
     def handle_cast({:emit_changes, changes}, %{txid: txid, stack_id: stack_id} = state) do

@@ -252,7 +252,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
           # give the inspector access to the sandboxed connection
           Ecto.Adapters.SQL.Sandbox.allow(repo, owner, Sandbox.Inspector.name(stack_id))
-          :ok = Sandbox.Producer.sync(stack_id)
 
           # mark the stack as ready
           Electric.StatusMonitor.mark_pg_lock_acquired(stack_id, owner)

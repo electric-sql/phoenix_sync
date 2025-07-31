@@ -36,10 +36,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       Phoenix.Sync.Sandbox.name({__MODULE__, stack_id})
     end
 
-    def current_xmax(stack_id) do
-      GenServer.call(name(stack_id), :current_xmax)
-    end
-
     @impl GenServer
     def init(args) do
       {:ok, stack_id} = Keyword.fetch(args, :stack_id)
@@ -71,16 +67,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
         Electric.Postgres.Inspector.DirectInspector.load_column_info(relation, pool(state)),
         state
       }
-    end
-
-    def handle_call(:current_xmax, _from, state) do
-      reply =
-        with {:ok, %{rows: [[xmax]]}} <-
-               Postgrex.query(pool(state), "SELECT pg_snapshot_xmax(pg_current_snapshot())", []) do
-          {:ok, xmax}
-        end
-
-      {:reply, reply, state}
     end
 
     defp pool(state) do
