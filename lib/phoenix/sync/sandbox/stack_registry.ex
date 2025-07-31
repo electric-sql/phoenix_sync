@@ -8,31 +8,31 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       GenServer.start_link(__MODULE__, [], name: __MODULE__)
     end
 
-    def register(pid, stack_id) do
-      GenServer.call(__MODULE__, {:register, pid, stack_id})
+    def register(registry \\ __MODULE__, pid, stack_id) do
+      GenServer.call(registry, {:register, pid, stack_id})
     end
 
-    def lookup(pid) do
-      GenServer.call(__MODULE__, {:lookup, pid})
+    def lookup(registry \\ __MODULE__, pid) do
+      GenServer.call(registry, {:lookup, pid})
     end
 
-    def configure(stack_id, api, client) do
-      GenServer.call(__MODULE__, {:configure, self(), stack_id, api, client})
+    def configure(registry \\ __MODULE__, stack_id, api, client) do
+      GenServer.call(registry, {:configure, self(), stack_id, api, client})
     end
 
     # api should be removed when test pid exits
     # registered pid should be removed when it exits
 
-    def get_api(stack_id) do
-      GenServer.call(__MODULE__, {:get, :api, stack_id})
+    def get_api(registry \\ __MODULE__, stack_id) do
+      GenServer.call(registry, {:get, :api, stack_id})
     end
 
-    def get_client(stack_id) do
-      GenServer.call(__MODULE__, {:get, :client, stack_id})
+    def get_client(registry \\ __MODULE__, stack_id) do
+      GenServer.call(registry, {:get, :client, stack_id})
     end
 
-    def shared_mode(owner, stack_id) do
-      GenServer.call(__MODULE__, {:shared_mode, owner, stack_id})
+    def shared_mode(registry \\ __MODULE__, owner, stack_id) do
+      GenServer.call(registry, {:shared_mode, owner, stack_id})
     end
 
     ## callbacks

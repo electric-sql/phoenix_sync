@@ -336,11 +336,19 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
     end
 
     defp lookup_stack_id(pids) when is_list(pids) do
-      pids
-      |> Stream.flat_map(fn pid ->
-        Sandbox.StackRegistry.lookup(pid) |> List.wrap()
-      end)
-      |> Enum.find(&(!is_nil(&1)))
+      # things can be inserted into a repo before the Phoenix.Sync application
+      # has even started
+      case GenServer.whereis(Sandbox.StackRegistry) do
+        nil ->
+          nil
+
+        registry_pid when is_pid(registry_pid) ->
+          pids
+          |> Stream.map(fn pid ->
+            Sandbox.StackRegistry.lookup(registry_pid, pid)
+          end)
+          |> Enum.find(&(!is_nil(&1)))
+      end
     end
 
     @doc """
