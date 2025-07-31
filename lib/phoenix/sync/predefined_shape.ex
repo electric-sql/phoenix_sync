@@ -55,6 +55,13 @@ defmodule Phoenix.Sync.PredefinedShape do
   @doc false
   def schema, do: @keyword_shape_schema
 
+  def is_queryable?(schema) when is_atom(schema) do
+    Code.ensure_loaded?(schema) && function_exported?(schema, :__schema__, 1) &&
+      !is_nil(schema.__schema__(:source))
+  end
+
+  def is_queryable?(q) when is_struct(q, Ecto.Query) or is_struct(q, Ecto.Changeset), do: true
+
   @doc false
   @spec new!(shape(), options()) :: t()
   def new!(opts, config \\ [])

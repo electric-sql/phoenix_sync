@@ -53,6 +53,9 @@ defmodule Phoenix.Sync.ClientTest do
     assert %Electric.Client{endpoint: ^endpoint, fetch: {Electric.Client.Fetch.HTTP, _}} = client
   end
 
+  defp is_mock_client?(%Electric.Client{fetch: {Electric.Client.Mock, _}}), do: true
+  defp is_mock_client?(%Electric.Client{}), do: false
+
   setup [
     :with_stack_id_from_test,
     :with_unique_db,
@@ -104,8 +107,12 @@ defmodule Phoenix.Sync.ClientTest do
   end
 
   describe "stream" do
+    setup(ctx) do
+      {:ok, client: Client.new!(ctx.electric_opts)}
+    end
+
     test "with schema module", ctx do
-      stream = Phoenix.Sync.Client.stream(Support.Todo, [], ctx.electric_opts)
+      stream = Phoenix.Sync.Client.stream(Support.Todo, client: ctx.client)
 
       events = Enum.take(stream, 4)
 
@@ -130,8 +137,7 @@ defmodule Phoenix.Sync.ClientTest do
       stream =
         Phoenix.Sync.Client.stream(
           from(t in Support.Todo, where: t.completed == true),
-          [],
-          ctx.electric_opts
+          client: ctx.client
         )
 
       events = Enum.take(stream, 2)
@@ -168,11 +174,7 @@ defmodule Phoenix.Sync.ClientTest do
 
     test "with table name", ctx do
       stream =
-        Phoenix.Sync.Client.stream(
-          "todos",
-          [],
-          ctx.electric_opts
-        )
+        Phoenix.Sync.Client.stream("todos", client: ctx.client)
 
       events = Enum.take(stream, 4)
 
@@ -193,17 +195,36 @@ defmodule Phoenix.Sync.ClientTest do
              ] = events
     end
 
+    test "allows for specifying a custom client", _ctx do
+      {:ok, client} = Electric.Client.Mock.new()
+
+      stream =
+        Phoenix.Sync.Client.stream(
+          table: "todos",
+          where: "completed = true",
+          client: client
+        )
+
+      assert is_mock_client?(stream.client)
+
+      stream =
+        Phoenix.Sync.Client.stream(
+          "todos",
+          where: "completed = true",
+          client: client
+        )
+
+      assert is_mock_client?(stream.client)
+    end
+
     test "with shape params", ctx do
       stream =
         Phoenix.Sync.Client.stream(
-          [
-            table: "todos",
-            namespace: "public",
-            where: "completed = true",
-            columns: ["id", "title"]
-          ],
-          [],
-          ctx.electric_opts
+          table: "todos",
+          namespace: "public",
+          where: "completed = true",
+          columns: ["id", "title"],
+          client: ctx.client
         )
 
       events = Enum.take(stream, 2)

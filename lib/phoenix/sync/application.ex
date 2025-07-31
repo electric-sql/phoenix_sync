@@ -9,7 +9,7 @@ defmodule Phoenix.Sync.Application do
 
   @impl true
   def start(_type, _args) do
-    base_children = [Phoenix.Sync.ShapeRequestRegistry]
+    base_children = [Phoenix.Sync.Shape.Supervisor, Phoenix.Sync.ShapeRequestRegistry]
 
     children =
       case children() do
