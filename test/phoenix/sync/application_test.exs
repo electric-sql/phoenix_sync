@@ -18,7 +18,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       base_opts = [
         username: "postgres",
         hostname: "localhost",
-        database: "electric",
+        database: "phoenix_sync",
         port: 5432,
         sslmode: :disable
       ]
@@ -221,13 +221,13 @@ defmodule Phoenix.Sync.ApplicationTest do
         replication_connection_opts: [
           username: "postgres",
           hostname: "localhost",
-          database: "electric",
+          database: "phoenix_sync",
           password: "password"
         ],
         query_connection_opts: [
           username: "postgres",
           hostname: "localhost-pooled",
-          database: "electric",
+          database: "phoenix_sync",
           password: "password"
         ],
         storage_dir: storage_dir
@@ -241,7 +241,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert connection_opts == [
                username: "postgres",
                hostname: "localhost",
-               database: "electric"
+               database: "phoenix_sync"
              ]
 
       assert {"password", connection_opts} =
@@ -250,7 +250,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert connection_opts == [
                username: "postgres",
                hostname: "localhost-pooled",
-               database: "electric"
+               database: "phoenix_sync"
              ]
 
       assert %{
@@ -268,7 +268,7 @@ defmodule Phoenix.Sync.ApplicationTest do
         connection_opts: [
           username: "postgres",
           hostname: "localhost",
-          database: "electric",
+          database: "phoenix_sync",
           password: "password"
         ],
         storage_dir: storage_dir
@@ -281,7 +281,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert connection_opts == [
                username: "postgres",
                hostname: "localhost",
-               database: "electric"
+               database: "phoenix_sync"
              ]
 
       assert %{
