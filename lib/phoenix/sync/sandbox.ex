@@ -342,7 +342,14 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       # has even started
       case GenServer.whereis(Sandbox.StackRegistry) do
         nil ->
-          nil
+          raise """
+          Phoenix.Sync.Sandbox is not running. Have you set the mode to `:sandbox` in `config/test.exs`?
+
+          # config/test.exs
+          config :phoenix_sync,
+            env: config_env(),
+            mode: :sandbox
+          """
 
         registry_pid when is_pid(registry_pid) ->
           pids
