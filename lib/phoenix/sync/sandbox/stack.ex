@@ -82,7 +82,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       registry = :"#{__MODULE__}.Registry-#{stack_id}"
 
       [
-        purge_all_shapes?: true,
+        purge_all_shapes?: false,
         stack_id: stack_id,
         storage: {
           Electric.ShapeCache.InMemoryStorage,
