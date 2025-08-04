@@ -287,6 +287,17 @@ if Code.ensure_loaded?(Ecto.Adapters.Postgres) do
     end
 
     @impl true
+    def insert(
+          adapter_meta,
+          %{source: "schema_migrations"} = schema_meta,
+          params,
+          on_conflict,
+          returning,
+          opts
+        ) do
+      @adapter.insert(adapter_meta, schema_meta, params, on_conflict, returning, opts)
+    end
+
     def insert(adapter_meta, schema_meta, params, on_conflict, returning, opts) do
       if stack_id = Phoenix.Sync.Sandbox.stack_id() do
         all_columns = schema_meta.schema.__schema__(:fields)
