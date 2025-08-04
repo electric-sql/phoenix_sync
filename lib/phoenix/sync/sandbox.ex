@@ -20,7 +20,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
     In your `config/test.exs` file, set the `mode` to `:sandbox`:
 
-        config :phoenix_sync, mode: :sandbox
+        config :phoenix_sync,
+          env: config_env(),
+          mode: :sandbox
 
     ### Step 2
 
