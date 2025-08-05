@@ -24,7 +24,7 @@ jobs:
         image: "postgres:17-alpine"
         env:
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: electric
+          POSTGRES_DB: phoenix_sync
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -60,7 +60,7 @@ jobs:
         with:
           path: |
             _build/*/lib
-            !_build/*/lib/electric_phoenix
+            !_build/*/lib/phoenix_sync
           key: ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
