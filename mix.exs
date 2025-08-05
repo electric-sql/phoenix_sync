@@ -43,7 +43,8 @@ defmodule Phoenix.Sync.MixProject do
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
       {:electric, "~> 1.0.24", optional: true},
-      {:electric_client, ">= 0.6.4"}
+      # 0.6.5 has the decoding fix
+      {:electric_client, "> 0.6.4"}
     ] ++ deps_for_env(Mix.env())
   end
 

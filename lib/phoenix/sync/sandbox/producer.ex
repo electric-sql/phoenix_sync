@@ -76,7 +76,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       {
         %NewRecord{
           relation: relation(schema_meta),
-          record: record(values),
+          record: record(values, schema_meta),
           log_offset: log_offset(txid, i)
         },
         lsn + 100
@@ -87,8 +87,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       {
         UpdatedRecord.new(
           relation: relation(schema_meta),
-          old_record: record(old),
-          record: record(new),
+          old_record: record(old, schema_meta),
+          record: record(new, schema_meta),
           log_offset: log_offset(txid, i)
         ),
         lsn + 100
@@ -99,7 +99,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       {
         %DeletedRecord{
           relation: relation(schema_meta),
-          old_record: record(old),
+          old_record: record(old, schema_meta),
           log_offset: log_offset(txid, i)
         },
         lsn + 100
@@ -113,13 +113,93 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
     defp namespace(nil), do: "public"
     defp namespace(ns) when is_binary(ns), do: ns
 
-    defp record(values) do
-      # FIXME: should we use the schema to cast these values?
-      Map.new(values, fn {k, v} -> {to_string(k), to_string(v)} end)
+    defp record(values, %{schema: schema}) do
+      Map.new(values, &load_value(&1, schema))
     end
+
+    defp load_value({field, raw_value}, schema) do
+      type = schema.__schema__(:type, field)
+
+      {:ok, value} =
+        Ecto.Type.adapter_load(
+          Ecto.Adapters.Postgres,
+          type,
+          raw_value
+        )
+
+      # Converts to lower level postgrex type which depends on the type's
+      # `type/0` value. Postgrex does the actual serialization of maps in real
+      # usage so this converts embed structs to plain maps.
+      #
+      # Postgrex also encodes date & time types, lists and decimals itself (so
+      # ecto just leaves these as-is) so the `dump/1` function needs to do the
+      # work normally done by postgrex
+      {:ok, value} = Ecto.Type.dump(type, value)
+
+      {to_string(field), dump(value)}
+    end
+
+    defp dump(%Decimal{} = decimal) do
+      Decimal.to_string(decimal)
+    end
+
+    defp dump(%type{} = datetime)
+         when type in [NaiveDateTime, DateTime, Time, Date] do
+      type.to_iso8601(datetime)
+    end
+
+    defp dump(map) when is_map(map), do: JSON.encode!(map)
+    defp dump(list) when is_list(list), do: encode_array(list)
+    defp dump(nil), do: nil
+    defp dump(value), do: to_string(value)
 
     defp log_offset(txid, index) do
       LogOffset.new(txid, index)
+    end
+
+    @doc ~S"""
+    ## Examples
+
+        iex> encode_array([1, 2, 3])
+        "{1,2,3}"
+
+        iex> encode_array(["a", "b", "c"])
+        ~s|{"a","b","c"}|
+
+        iex> encode_array(["a\"", "b", "c"])
+        ~S|{"a\"","b","c"}|
+
+        iex> encode_array([])
+        "{}"
+
+        iex> encode_array([1, nil, 3])
+        "{1,NULL,3}"
+
+        iex> encode_array([[1, [2]], [3, 4]])
+        "{{1,{2}},{3,4}}"
+    """
+    def encode_array(array) when is_list(array) do
+      encode_array_inner(array) |> IO.iodata_to_binary()
+    end
+
+    defp encode_array_inner(array) do
+      [?{, Enum.map_intersperse(array, ",", &encode_value/1), ?}]
+    end
+
+    defp encode_value(list) when is_list(list) do
+      encode_array_inner(list)
+    end
+
+    defp encode_value(nil) do
+      "NULL"
+    end
+
+    defp encode_value(value) when is_binary(value) do
+      [?", String.replace(value, "\"", "\\\""), ?"]
+    end
+
+    defp encode_value(value) do
+      dump(value)
     end
   end
 end
