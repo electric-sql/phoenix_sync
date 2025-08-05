@@ -177,6 +177,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
         iex> encode_array([[1, [2]], [3, 4]])
         "{{1,{2}},{3,4}}"
+
+        iex> encode_array([%{value: 1}, %{value: 2}])
+        ~S|{"{\"value\":1}","{\"value\":2}"}|
     """
     def encode_array(array) when is_list(array) do
       encode_array_inner(array) |> IO.iodata_to_binary()
@@ -198,8 +201,12 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       [?", String.replace(value, "\"", "\\\""), ?"]
     end
 
+    defp encode_value(int) when is_integer(int) do
+      to_string(int)
+    end
+
     defp encode_value(value) do
-      dump(value)
+      value |> dump() |> encode_value()
     end
   end
 end
