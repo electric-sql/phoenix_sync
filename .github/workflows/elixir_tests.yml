@@ -101,6 +101,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       MIX_ENV: test
+    services:
+      postgres:
+        image: "postgres:17-alpine"
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: phoenix_sync
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 55555:5432
     steps:
       - uses: actions/checkout@v4
 
