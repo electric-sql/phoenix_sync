@@ -658,8 +658,10 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
     parent = self()
     ref = make_ref()
 
+    {:ok, task_supervisor} = start_supervised(Task.Supervisor)
+
     task =
-      Task.async(fn ->
+      Task.Supervisor.async(task_supervisor, fn ->
         receive do
           {:ready, ^ref} -> Repo.transaction(write_fun)
         end

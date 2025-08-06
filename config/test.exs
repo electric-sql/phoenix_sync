@@ -6,6 +6,10 @@ config :logger,
     [application: :electric, level_lower_than: :error]
   ]
 
+config :logger, :default_formatter,
+  format: "[$level] $message $metadata\n",
+  metadata: [:application, :file, :line]
+
 config :phoenix_sync, Phoenix.Sync.LiveViewTest.Endpoint, []
 
 db_config = [
