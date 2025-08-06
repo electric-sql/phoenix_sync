@@ -60,7 +60,7 @@ defmodule PhoenixSyncExample.CarsTest do
   end
 
   describe "sync" do
-    test "sync_cars/0 syncs cars with the sync service" do
+    test "works with the sandbox" do
       parent = self()
       client = Phoenix.Sync.client!()
 
