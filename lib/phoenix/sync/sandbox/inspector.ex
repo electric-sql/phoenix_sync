@@ -9,17 +9,23 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
     @impl Electric.Postgres.Inspector
 
     def load_relation_oid(relation, stack_id) do
-      GenServer.call(name(stack_id), {:load_relation_oid, relation})
+      with {:ok, pid} <- validate_stack_alive(stack_id) do
+        GenServer.call(pid, {:load_relation_oid, relation})
+      end
     end
 
     @impl Electric.Postgres.Inspector
     def load_relation_info(relation, stack_id) do
-      GenServer.call(name(stack_id), {:load_relation_info, relation})
+      with {:ok, pid} <- validate_stack_alive(stack_id) do
+        GenServer.call(pid, {:load_relation_info, relation})
+      end
     end
 
     @impl Electric.Postgres.Inspector
     def load_column_info(relation, stack_id) do
-      GenServer.call(name(stack_id), {:load_column_info, relation})
+      with {:ok, pid} <- validate_stack_alive(stack_id) do
+        GenServer.call(pid, {:load_column_info, relation})
+      end
     end
 
     @impl Electric.Postgres.Inspector
@@ -34,6 +40,16 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
     def name(stack_id) do
       Phoenix.Sync.Sandbox.name({__MODULE__, stack_id})
+    end
+
+    defp validate_stack_alive(stack_id) do
+      case GenServer.whereis(name(stack_id)) do
+        nil ->
+          {:error, "stack #{inspect(stack_id)} is not available"}
+
+        pid ->
+          {:ok, pid}
+      end
     end
 
     @impl GenServer
