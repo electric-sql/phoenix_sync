@@ -136,77 +136,105 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       # work normally done by postgrex
       {:ok, value} = Ecto.Type.dump(type, value)
 
-      {to_string(field), dump(value)}
+      {to_string(field), dump(value, type)}
     end
 
-    defp dump(%Decimal{} = decimal) do
+    defp dump(%Decimal{} = decimal, _type) do
       Decimal.to_string(decimal)
     end
 
-    defp dump(%type{} = datetime)
+    defp dump(%type{} = datetime, _type)
          when type in [NaiveDateTime, DateTime, Time, Date] do
       type.to_iso8601(datetime)
     end
 
-    defp dump(map) when is_map(map), do: JSON.encode!(map)
-    defp dump(list) when is_list(list), do: encode_array(list)
-    defp dump(nil), do: nil
-    defp dump(value), do: to_string(value)
+    defp dump(map, _type) when is_map(map), do: JSON.encode!(map)
+
+    defp dump(list, type) when is_list(list) do
+      if encode_list_json?(type) do
+        JSON.encode!(list)
+      else
+        encode_array(list, type)
+      end
+    end
+
+    defp dump(nil, _type), do: nil
+    defp dump(value, _type), do: to_string(value)
 
     defp log_offset(txid, index) do
       LogOffset.new(txid, index)
     end
 
+    defp encode_list_json?(type) do
+      case type do
+        {:array, _inner_type} ->
+          false
+
+        {t, _} when t in [:map, :json, :jsonb] ->
+          true
+
+        {:parameterized, {module, params}} ->
+          encode_list_json?(module.type(params))
+
+        t ->
+          if function_exported?(t, :type, 0) do
+            encode_list_json?(t.type())
+          else
+            false
+          end
+      end
+    end
+
     @doc ~S"""
     ## Examples
 
-        iex> encode_array([1, 2, 3])
+        iex> encode_array([1, 2, 3], {:array, :integer})
         "{1,2,3}"
 
-        iex> encode_array(["a", "b", "c"])
+        iex> encode_array(["a", "b", "c"], {:array, :string})
         ~s|{"a","b","c"}|
 
-        iex> encode_array(["a\"", "b", "c"])
-        ~S|{"a\"","b","c"}|
+        iex> encode_array(["\"a\"", "b", "c"], {:array, :string})
+        ~S|{"\"a\"","b","c"}|
 
-        iex> encode_array([])
+        iex> encode_array([], {:array, :string})
         "{}"
 
-        iex> encode_array([1, nil, 3])
+        iex> encode_array([1, nil, 3], {:array, :integer})
         "{1,NULL,3}"
 
-        iex> encode_array([[1, [2]], [3, 4]])
+        iex> encode_array([[1, [2]], [3, 4]], {:array, :integer})
         "{{1,{2}},{3,4}}"
 
-        iex> encode_array([%{value: 1}, %{value: 2}])
+        iex> encode_array([%{value: 1}, %{value: 2}], {:array, :jsonb})
         ~S|{"{\"value\":1}","{\"value\":2}"}|
     """
-    def encode_array(array) when is_list(array) do
-      encode_array_inner(array) |> IO.iodata_to_binary()
+    def encode_array(array, type) when is_list(array) do
+      encode_array_inner(array, type) |> IO.iodata_to_binary()
     end
 
-    defp encode_array_inner(array) do
-      [?{, Enum.map_intersperse(array, ",", &encode_value/1), ?}]
+    defp encode_array_inner(array, type) do
+      [?{, Enum.map_intersperse(array, ",", &encode_value(&1, type)), ?}]
     end
 
-    defp encode_value(list) when is_list(list) do
-      encode_array_inner(list)
+    defp encode_value(list, type) when is_list(list) do
+      encode_array_inner(list, type)
     end
 
-    defp encode_value(nil) do
+    defp encode_value(nil, _type) do
       "NULL"
     end
 
-    defp encode_value(value) when is_binary(value) do
+    defp encode_value(value, _type) when is_binary(value) do
       [?", String.replace(value, "\"", "\\\""), ?"]
     end
 
-    defp encode_value(int) when is_integer(int) do
+    defp encode_value(int, _type) when is_integer(int) do
       to_string(int)
     end
 
-    defp encode_value(value) do
-      value |> dump() |> encode_value()
+    defp encode_value(value, {:array, value_type} = type) do
+      value |> dump(value_type) |> encode_value(type)
     end
   end
 end

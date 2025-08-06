@@ -485,15 +485,16 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
     defmodule BinaryId do
       use Ecto.Schema
 
-      @primary_key false
+      @primary_key {:id, :binary_id, autogenerate: false}
+
       schema "binary_ids" do
-        field :id, :binary_id
         field :the_time, :time
         field :the_date, :date
         field :the_price, :decimal
         field :the_array, {:array, :integer}
+        field :the_json, :map
 
-        embeds_one :embedded, Thing do
+        embeds_many :things, Thing do
           field :name, :string
           field :timestamp, :utc_datetime
         end
@@ -505,58 +506,78 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
     @tag table: {
            "binary_ids",
            [
-             "id uuid not null",
-             "embedded jsonb",
+             "id uuid not null primary key",
+             "things jsonb",
              "inserted_at timestamp with time zone",
              "updated_at timestamp with time zone",
              "the_time time",
              "the_date date",
              "the_price decimal(10, 2)",
-             "the_array integer[]"
+             "the_array integer[]",
+             "the_json jsonb"
            ]
          },
          data: {
            BinaryId,
            [
              "id",
-             "embedded",
+             "things",
              "inserted_at",
              "updated_at",
              "the_time",
              "the_date",
              "the_price",
-             "the_array"
+             "the_array",
+             "the_json"
            ],
            [
              [
                "6a939b05-f467-442b-ad30-de81df681b3e",
-               %{
-                 __struct__: BinaryId.Thing,
-                 id: "c65ae689-3cbe-4e41-8da6-7b212d26b587",
-                 name: "thing 1",
-                 timestamp: ~U[2025-01-01T12:25:17Z]
-               },
+               [
+                 %{
+                   __struct__: BinaryId.Thing,
+                   id: "c65ae689-3cbe-4e41-8da6-7b212d26b587",
+                   name: "thing 1",
+                   timestamp: ~U[2025-01-01T12:25:17Z]
+                 },
+                 %{
+                   __struct__: BinaryId.Thing,
+                   id: "21bdbe9b-0b51-4dbd-b326-5ad381092b56",
+                   name: "thing 2",
+                   timestamp: ~U[2025-01-01T12:25:18Z]
+                 }
+               ],
                ~U[2025-08-12T16:34:04Z],
                ~U[2025-08-12T16:34:05Z],
                ~T[13:24:00],
                ~D[2025-01-02],
                Decimal.new("6.99"),
-               [1, 2, 1]
+               [1, 2, 1],
+               %{a: 1, b: 2}
              ],
              [
                "74828fe4-1339-420a-8c37-f474900d62d5",
-               %{
-                 __struct__: BinaryId.Thing,
-                 id: "788f7861-0116-4da7-b218-b36e97c6d478",
-                 name: "thing 2",
-                 timestamp: ~U[2025-02-02T12:25:17Z]
-               },
+               [
+                 %{
+                   __struct__: BinaryId.Thing,
+                   id: "788f7861-0116-4da7-b218-b36e97c6d478",
+                   name: "thing 3",
+                   timestamp: ~U[2025-02-02T12:25:17Z]
+                 },
+                 %{
+                   __struct__: BinaryId.Thing,
+                   id: "26995e04-665d-4dd6-a8f2-0954b12d8555",
+                   name: "thing 4",
+                   timestamp: ~U[2025-02-02T12:25:18Z]
+                 }
+               ],
                ~U[2025-08-13T17:44:04Z],
                ~U[2025-08-13T17:44:05Z],
                ~T[13:25:01],
                ~D[2025-02-02],
                Decimal.new("9.99"),
-               [2, 3, 2]
+               [2, 3, 2],
+               %{c: 1, d: 2}
              ]
            ]
          }
@@ -578,17 +599,25 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
                       %Electric.Client.Message.ChangeMessage{
                         value: %BinaryId{
                           id: "6a939b05-f467-442b-ad30-de81df681b3e",
-                          embedded: %BinaryId.Thing{
-                            id: "c65ae689-3cbe-4e41-8da6-7b212d26b587",
-                            name: "thing 1",
-                            timestamp: ~U[2025-01-01T12:25:17Z]
-                          },
+                          things: [
+                            %BinaryId.Thing{
+                              id: "c65ae689-3cbe-4e41-8da6-7b212d26b587",
+                              name: "thing 1",
+                              timestamp: ~U[2025-01-01T12:25:17Z]
+                            },
+                            %BinaryId.Thing{
+                              id: "21bdbe9b-0b51-4dbd-b326-5ad381092b56",
+                              name: "thing 2",
+                              timestamp: ~U[2025-01-01T12:25:18Z]
+                            }
+                          ],
                           inserted_at: ~U[2025-08-12T16:34:04Z],
                           updated_at: ~U[2025-08-12T16:34:05Z],
                           the_time: ~T[13:24:00],
                           the_date: ~D[2025-01-02],
                           the_price: %Decimal{exp: -2, sign: 1, coef: 699},
-                          the_array: [1, 2, 1]
+                          the_array: [1, 2, 1],
+                          the_json: %{"a" => 1, "b" => 2}
                         },
                         headers: %{operation: :insert}
                       }},
@@ -598,17 +627,25 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
                       %Electric.Client.Message.ChangeMessage{
                         value: %BinaryId{
                           id: "74828fe4-1339-420a-8c37-f474900d62d5",
-                          embedded: %BinaryId.Thing{
-                            id: "788f7861-0116-4da7-b218-b36e97c6d478",
-                            name: "thing 2",
-                            timestamp: ~U[2025-02-02T12:25:17Z]
-                          },
+                          things: [
+                            %BinaryId.Thing{
+                              id: "788f7861-0116-4da7-b218-b36e97c6d478",
+                              name: "thing 3",
+                              timestamp: ~U[2025-02-02T12:25:17Z]
+                            },
+                            %BinaryId.Thing{
+                              id: "26995e04-665d-4dd6-a8f2-0954b12d8555",
+                              name: "thing 4",
+                              timestamp: ~U[2025-02-02T12:25:18Z]
+                            }
+                          ],
                           inserted_at: ~U[2025-08-13T17:44:04Z],
                           updated_at: ~U[2025-08-13T17:44:05Z],
                           the_time: ~T[13:25:01],
                           the_date: ~D[2025-02-02],
                           the_price: %Decimal{exp: -2, sign: 1, coef: 999},
-                          the_array: [2, 3, 2]
+                          the_array: [2, 3, 2],
+                          the_json: %{"c" => 1, "d" => 2}
                         },
                         headers: %{operation: :insert}
                       }}
@@ -621,17 +658,25 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
       Repo.transaction(fn ->
         Repo.insert!(%BinaryId{
           id: "778247a6-2dcb-4278-b696-8e1b974cf073",
-          embedded: %BinaryId.Thing{
-            id: "b266d1aa-cd5a-4bbe-8766-d7f7c041ffb3",
-            name: "thing 3",
-            timestamp: ~U[2025-03-03T12:25:17Z]
-          },
+          things: [
+            %BinaryId.Thing{
+              id: "b266d1aa-cd5a-4bbe-8766-d7f7c041ffb3",
+              name: "thing 5",
+              timestamp: ~U[2025-03-03T12:25:17Z]
+            },
+            %BinaryId.Thing{
+              id: "77f2929f-5ad7-4c06-8d60-6efcd9dcb19c",
+              name: "thing 6",
+              timestamp: ~U[2025-03-03T12:25:18Z]
+            }
+          ],
           inserted_at: ~U[2025-08-13T18:44:04Z],
           updated_at: ~U[2025-08-13T18:44:05Z],
           the_time: ~T[14:34:00],
           the_date: ~D[2025-03-02],
           the_price: Decimal.new("16.51"),
-          the_array: [1, 2, 3]
+          the_array: [1, 2, 3],
+          the_json: %{"e" => 1, "f" => 2}
         })
       end)
 
@@ -639,15 +684,23 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
                       %Electric.Client.Message.ChangeMessage{
                         value: %BinaryId{
                           id: "778247a6-2dcb-4278-b696-8e1b974cf073",
-                          embedded: %BinaryId.Thing{
-                            id: "b266d1aa-cd5a-4bbe-8766-d7f7c041ffb3",
-                            name: "thing 3",
-                            timestamp: ~U[2025-03-03T12:25:17Z]
-                          },
+                          things: [
+                            %BinaryId.Thing{
+                              id: "b266d1aa-cd5a-4bbe-8766-d7f7c041ffb3",
+                              name: "thing 5",
+                              timestamp: ~U[2025-03-03T12:25:17Z]
+                            },
+                            %BinaryId.Thing{
+                              id: "77f2929f-5ad7-4c06-8d60-6efcd9dcb19c",
+                              name: "thing 6",
+                              timestamp: ~U[2025-03-03T12:25:18Z]
+                            }
+                          ],
                           inserted_at: ~U[2025-08-13T18:44:04Z],
                           updated_at: ~U[2025-08-13T18:44:05Z],
                           the_time: ~T[14:34:00],
-                          the_array: [1, 2, 3]
+                          the_array: [1, 2, 3],
+                          the_json: %{"e" => 1, "f" => 2}
                         },
                         headers: %{operation: :insert}
                       }}
