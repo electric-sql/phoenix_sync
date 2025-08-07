@@ -14,6 +14,8 @@ defmodule Phoenix.Sync.LiveViewTest do
 
   Code.ensure_loaded(Support.User)
 
+  @moduletag :capture_log
+
   setup do
     {:ok, conn: Plug.Test.init_test_session(build_conn(), %{})}
   end
