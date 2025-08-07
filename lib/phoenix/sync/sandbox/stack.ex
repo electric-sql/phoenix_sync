@@ -140,7 +140,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
           restart: :temporary
         ),
         {Sandbox.Inspector, stack_id: stack_id, repo: repo},
-        {Sandbox.Producer, stack_id: stack_id}
+        {Sandbox.Producer, stack_id: stack_id},
+        {DynamicSupervisor,
+         name: Phoenix.Sync.Sandbox.Fetch.name(stack_id), strategy: :one_for_one}
       ]
 
       Supervisor.init(children, strategy: :one_for_one)

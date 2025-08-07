@@ -266,6 +266,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
           {:ok, client} =
             Phoenix.Sync.Electric.client(:test, Keyword.put(api_config, :mode, :embedded))
 
+          client = Map.put(client, :pool, {Phoenix.Sync.Sandbox.Fetch, stack_id: stack_id})
+
           # we link the sandbox to the current (test) process not the connection
           # owner because that's the ownership route that works. The owner
           # is a convenience to link the repo connection to a process who's lifetime
