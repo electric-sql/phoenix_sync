@@ -187,6 +187,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
     alias __MODULE__
 
+    defmodule Error do
+      @moduledoc false
+      defexception [:message]
+    end
+
     @type start_opts() :: [{:shared, boolean()}]
 
     @registry __MODULE__.Registry
@@ -282,7 +287,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
         stack_id ->
           case GenServer.whereis(__MODULE__.Stack.name(stack_id)) do
-            nil -> raise RuntimeError, message: "no stack found for #{inspect(stack_id)}"
+            nil -> raise Error, message: "no stack found for #{inspect(stack_id)}"
             _pid -> :ok
           end
       end
@@ -330,7 +335,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
 
     @doc false
     def stack_id! do
-      stack_id() || raise "No stack_id found. Did you call Phoenix.Sync.Sandbox.start!/1?"
+      stack_id() ||
+        raise Error, message: "No stack_id found. Did you call Phoenix.Sync.Sandbox.start!/1?"
     end
 
     @doc false
@@ -344,14 +350,15 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       # has even started
       case GenServer.whereis(Sandbox.StackRegistry) do
         nil ->
-          raise """
-          Phoenix.Sync.Sandbox is not running. Have you set the mode to `:sandbox` in `config/test.exs`?
+          raise Error,
+            message: """
+            Phoenix.Sync.Sandbox is not running. Have you set the mode to `:sandbox` in `config/test.exs`?
 
-          # config/test.exs
-          config :phoenix_sync,
-            env: config_env(),
-            mode: :sandbox
-          """
+            # config/test.exs
+            config :phoenix_sync,
+              env: config_env(),
+              mode: :sandbox
+            """
 
         registry_pid when is_pid(registry_pid) ->
           pids
@@ -380,8 +387,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
         |> lookup_stack_id()
         |> case do
           nil ->
-            raise RuntimeError,
-                  "No stack_id found for process #{inspect(parent)}. Did you call Phoenix.Sync.Sandbox.start!/1?"
+            raise Error,
+              message:
+                "No stack_id found for process #{inspect(parent)}. Did you call Phoenix.Sync.Sandbox.start!/1?"
 
           stack_id ->
             case GenServer.whereis(name_or_pid) do
@@ -389,7 +397,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
                 Sandbox.StackRegistry.register(pid, stack_id)
 
               other ->
-                raise "`allow/4` expects a PID or a locally registered process name but lookup returned: #{inspect(other)}"
+                raise Error,
+                  message:
+                    "`allow/4` expects a PID or a locally registered process name but lookup returned: #{inspect(other)}"
             end
         end
       end
@@ -424,7 +434,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       if stack_id = stack_id() do
         Sandbox.StackRegistry.get_client(stack_id)
       else
-        {:error, "No stack_id found. Did you call Phoenix.Sync.Sandbox.start!/1?"}
+        raise Error, message: "No stack_id found. Did you call Phoenix.Sync.Sandbox.start!/1?"
       end
     end
 
@@ -437,6 +447,17 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       {:ok, client} = Sandbox.StackRegistry.get_client(stack_id!())
 
       client
+    end
+
+    def must_refetch!(shape) do
+      stack_id = stack_id!()
+
+      {%{namespace: namespace, table: table}, _} =
+        shape
+        |> Phoenix.Sync.PredefinedShape.new!()
+        |> Phoenix.Sync.PredefinedShape.to_stream_params()
+
+      Sandbox.Producer.truncate(stack_id, {namespace, table})
     end
 
     @impl true

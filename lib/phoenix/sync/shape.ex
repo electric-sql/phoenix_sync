@@ -1,0 +1,346 @@
+defmodule Phoenix.Sync.Shape do
+  @moduledoc """
+  Materialize a shape stream into memory and subscribe to changes.
+
+  Add a `#{inspect(__MODULE__)}` to your supervision tree to subscribe to a
+  sync stream and maintain a synchronized local copy of the data in-memory.
+
+      defmodule MyApp.Application do
+        use Application
+
+        def start(_type, _args) do
+          children = [
+            {Phoenix.Sync.Shape, [MyApp.Todo, name: MyApp.TodoShape]}
+          ]
+
+          opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+          Supervisor.start_link(children, opts)
+        end
+      end
+
+  This allows you to `subscribe/2` to the shape and receive notifications and
+  also retrieve the current dataset:
+
+      # use the registered `name` of the shape to receive change events
+      # within a GenServer or other process
+      def init(_args) do
+        ref = #{inspect(__MODULE__)}.subscribe(MyApp.TodoShape)
+        {:ok, ref}
+      end
+
+      # handle the shape events...
+      def handle_info({:sync, ref, {:insert, {_key, todo}}}, ref) do
+        {:noreply, state}
+      end
+
+      def handle_info({:sync, ref, {:update, {_key, todo}}}, ref) do
+        {:noreply, state}
+      end
+
+      def handle_info({:sync, ref, {:delete, {_key, todo}}}, ref) do
+        {:noreply, state}
+      end
+
+      def handle_info({:sync, ref, :up_to_date}, ref) do
+        {:noreply, state}
+      end
+
+      def handle_info({:sync, ref, :must_refetch}, ref) do
+        {:noreply, state}
+      end
+  """
+
+  use GenServer
+
+  alias Phoenix.Sync.PredefinedShape
+  alias Electric.Client.Message
+  alias Phoenix.Sync.Shape
+
+  @type key() :: String.t()
+  @type tag() :: term()
+  @type operation() :: :insert | :update | :delete
+  @type control() :: :up_to_date | :must_refetch
+  @type payload() :: {operation(), {key(), term()}} | control()
+  @type event() :: {tag(), reference(), payload()}
+
+  @type subscription_msg_type() :: operation() | control()
+  @type subscribe_opts() :: [{:only, [subscription_msg_type()]} | {:tag, term()}]
+
+  def start_link(args) do
+    with {:ok, stream_args, shape_opts} <- validate_args(args) do
+      GenServer.start_link(
+        __MODULE__,
+        {stream_args, shape_opts},
+        Keyword.take(shape_opts, [:name])
+      )
+    end
+  end
+
+  @doc """
+  Subscribe the current process to the given shape and receive notifications
+  about new changes on the stream.
+
+      # create a shape that holds all the completed todos
+      {:ok, shape} = Phoenix.Sync.Shape.start_link(from(t in Todo, where: t.completed == true))
+
+      # subscribe this process to the shape events
+      ref = Phoenix.Sync.Shape.subscribe(shape)
+
+      receive do
+        {:sync, ^ref, {:insert, {_key, todo}} ->
+          # a todo has been marked as completed
+        {:sync, ^ref, {:delete, {_key, todo}} ->
+          # a todo has been deleted or moved from completed to not completed
+        {:sync, ^ref, {:update, {_key, todo}} ->
+          # the todo's title has been changed
+      end
+
+  In the example above, changes in the `completed` state of a todo will move
+  the affected item into or out of the shape because it's built using a filter
+  that only allows completed todos. These moves into or out of the shape are
+  mapped to `:insert` and `:delete` events, respectively.
+
+  The message format is `{tag, reference, payload}`
+
+  - `tag` defaults to `:sync` but can be customized using the `:tag` option (see below).
+
+  - `reference` is the unique reference for the subscription returned by `subscribe/2`.
+
+  - `type` is the operation type, which can be one of `:insert`, `:update`,
+    `:delete`, `:up_to_date`, or `:must_refetch`.
+    - `:up_to_date` indicates that the shape is fully synchronized.
+    - `:must_refetch` indicates that the shape needs to be refetched due to a
+    schema change, table truncation or some other server-side change.
+
+  - `payload` depends on the operation type:
+    - For `:insert`, `:update` and `:delete`, it is a tuple `{operation, {key, value}}` where `key` is a unique
+      identifier for the value and `value` is the actual data.
+    - For `:up_to_date` and `:must_refetch`, it is just the operation.
+
+  ## Options
+
+  - `only` - Limit events to only a subset of the available message types  (see
+    above). If not provided, all message types will be sent.
+  - `tag` - change the tag of the message sent to subscriber. Defaults to `:sync`.
+
+  ## Examples
+
+      # only receive notification when the shape is fully synchronized
+      ref = Phoenix.Sync.Shape.subscribe(query, only: [:up_do_date])
+
+      # only receive notification of deletes
+      ref = Phoenix.Sync.Shape.subscribe(query, only: [:delete])
+
+      # only receive notification when the shape has been invalidated and needs
+      # to be refetched. Give the message a custom tag to make it easier to
+      # identify the originating shape.
+      ref = Phoenix.Sync.Shape.subscribe(Todo, only: [:must_refetch], tag: {:sync, :todo})
+  """
+  @spec subscribe(GenServer.server(), subscribe_opts()) :: reference()
+  def subscribe(shape, opts \\ []) do
+    GenServer.call(shape, {:subscribe, opts})
+  end
+
+  @doc """
+  Unsubscribe the current process from the given shape.
+  """
+  @spec unsubscribe(GenServer.server()) :: :ok
+  def unsubscribe(shape) do
+    GenServer.call(shape, :unsubscribe)
+  end
+
+  @doc """
+  Get a list of the current subscribers to the given shape.
+  """
+  @spec subscribers(GenServer.server()) :: [pid()]
+  def subscribers(shape) do
+    GenServer.call(shape, :subscribers)
+  end
+
+  @doc """
+  Get all values in the shape.
+
+  Returns a list of `{key, value}` tuples, where `key` is a unique identifier
+  for the value.
+
+  ## Options
+
+  - `keys` (default: `true`) - if set to false, returns only the values without keys.
+  """
+  @spec to_list(GenServer.server(), opts :: [{:keys, boolean()}]) :: [{key(), term()}] | [term()]
+  def to_list(shape, opts \\ []) do
+    case Shape.Registry.whereis(shape) do
+      {:ok, table} ->
+        table
+        |> :ets.match_object(:_)
+        |> map_all(Keyword.get(opts, :keys, true))
+
+      :error ->
+        raise ArgumentError, "Shape #{inspect(shape)} is not registered"
+    end
+  end
+
+  defp map_all(rows, true) do
+    rows
+  end
+
+  defp map_all(rows, false) do
+    Enum.map(rows, &elem(&1, 1))
+  end
+
+  def init({stream_args, _shape_opts}) do
+    {:ok, %{stream_pid: nil, table: nil, subscriptions: %{}},
+     {:continue, {:start_shape, stream_args}}}
+  end
+
+  def handle_continue({:start_shape, stream_args}, state) do
+    {:ok, table_name} = Shape.Registry.register(self())
+
+    table =
+      :ets.new(table_name, [:named_table, :ordered_set, :protected, read_concurrency: true])
+
+    pid = self()
+
+    stream =
+      try do
+        apply(Phoenix.Sync.Client, :stream, stream_args)
+      rescue
+        Phoenix.Sync.Sandbox.Error ->
+          # TODO: some way of lazily subscribing to the stream once a shared-mode sandbox
+          # is available.
+          # Emit a single up-to-date message to indicate that the shape is ready
+          # followed by an infinite but empty stream.
+          Stream.concat(
+            [[%Message.ControlMessage{control: :up_to_date}]],
+            Stream.repeatedly(fn -> [] end)
+          )
+          |> Stream.flat_map(& &1)
+      end
+
+    {:ok, pid} =
+      Task.start_link(fn ->
+        stream |> Stream.each(&send(pid, {:sync_message, &1})) |> Stream.run()
+      end)
+
+    {:noreply, %{state | stream_pid: pid, table: table}}
+  end
+
+  def handle_call(:subscribers, _from, state) do
+    {:reply, Map.keys(state.subscriptions), state}
+  end
+
+  def handle_call({:subscribe, opts}, {pid, _}, state) do
+    ref = Process.monitor(pid)
+    filter = build_subscription_filter(opts)
+    tag = Keyword.get(opts, :tag, :sync)
+
+    state = Map.update!(state, :subscriptions, &Map.put(&1, pid, {filter, tag, ref}))
+
+    {:reply, ref, state}
+  end
+
+  def handle_call(:unsubscribe, {pid, _}, state) do
+    subscriptions = Map.delete(state.subscriptions, pid)
+    {:reply, :ok, %{state | subscriptions: subscriptions}}
+  end
+
+  def handle_info({:sync_message, msg}, state) do
+    state = state |> handle_sync_message(msg) |> notify_subscribers(msg)
+
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    subscriptions = Map.delete(state.subscriptions, pid)
+    {:noreply, %{state | subscriptions: subscriptions}}
+  end
+
+  defp notify_subscribers(state, msg) do
+    event = msg_event(msg)
+
+    Enum.each(state.subscriptions, fn {pid, {filter, tag, ref}} ->
+      if filter.(msg), do: send(pid, {tag, ref, event})
+    end)
+
+    state
+  end
+
+  defp msg_event(%Message.ChangeMessage{key: key, headers: %{operation: operation}} = msg) do
+    {operation, {key, msg.value}}
+  end
+
+  defp msg_event(%Message.ControlMessage{control: control}) do
+    control
+  end
+
+  defp handle_sync_message(state, %Message.ChangeMessage{headers: %{operation: operation}} = msg) do
+    case operation do
+      :delete ->
+        :ets.delete(state.table, msg.key)
+
+      op when op in [:insert, :update] ->
+        :ets.insert(state.table, {msg.key, msg.value})
+    end
+
+    state
+  end
+
+  defp handle_sync_message(state, %Message.ControlMessage{control: :up_to_date}) do
+    state
+  end
+
+  defp handle_sync_message(state, %Message.ControlMessage{control: :must_refetch}) do
+    :ets.delete_all_objects(state.table)
+    state
+  end
+
+  defp build_subscription_filter(opts) do
+    case Keyword.fetch(opts, :only) do
+      {:ok, only} ->
+        types = List.wrap(only)
+
+        fn msg -> Enum.any?(types, &message_matches_type(&1, msg)) end
+
+      :error ->
+        fn _ -> true end
+    end
+  end
+
+  defp message_matches_type(operation, %Message.ChangeMessage{headers: %{operation: operation}}),
+    do: true
+
+  defp message_matches_type(control, %Message.ControlMessage{control: control}), do: true
+  defp message_matches_type(_, _), do: false
+
+  # shape may be of form [SchemaModule, where: "..."] which is fine syntactically but breaks Keyword functions
+  defp validate_args(args) when is_list(args) do
+    case Enum.split_with(args, &is_tuple/1) do
+      {opts, []} ->
+        {stream_opts, shape_opts} = extract_shape_opts(opts)
+        {:ok, [shape_opts], stream_opts}
+
+      {opts, [queryable]} ->
+        if PredefinedShape.is_queryable?(queryable) do
+          {stream_opts, shape_opts} = extract_shape_opts(opts)
+          {:ok, [queryable, shape_opts], stream_opts}
+        else
+          {:error, "#{queryable} is not a valid Ecto query"}
+        end
+
+      {_opts, [_s1, _s2 | _] = queryables} ->
+        {:error, "Multiple queryables provided: #{inspect(queryables)}"}
+    end
+  end
+
+  defp validate_args(queryable) do
+    if PredefinedShape.is_queryable?(queryable) do
+      {:ok, [queryable, []], []}
+    else
+      {:error, "#{queryable} is not a valid Ecto query"}
+    end
+  end
+
+  defp extract_shape_opts(args) when is_list(args) do
+    Keyword.split(args, [:name])
+  end
+end
