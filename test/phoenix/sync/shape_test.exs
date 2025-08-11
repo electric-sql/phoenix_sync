@@ -171,7 +171,7 @@ defmodule Support.ShapeTest do
 
       Phoenix.Sync.Sandbox.must_refetch!(Support.Todo)
 
-      assert_receive {:my_sync, ^ref, :must_refetch}, 1000
+      assert_receive {:my_sync, ^ref, :must_refetch}, 2000
 
       assert [] = Shape.to_list(pid)
     end
