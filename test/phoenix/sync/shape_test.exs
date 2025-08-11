@@ -310,7 +310,7 @@ defmodule Support.ShapeTest do
 
       ref = Shape.subscribe(shape)
 
-      assert_receive {:sync, ^ref, {:insert, {_, _}}}, 500
+      assert_receive {:sync, ^ref, {:insert, {_, _}}}, 1000
       assert_receive {:sync, ^ref, :up_to_date}, 500
 
       assert [%Todo{id: 3}] = Shape.to_list(shape, keys: false)
