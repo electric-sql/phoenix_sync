@@ -1,4 +1,6 @@
 defmodule Phoenix.Sync.Shape.Registry do
+  @moduledoc false
+
   use GenServer
 
   def start_link(opts) do

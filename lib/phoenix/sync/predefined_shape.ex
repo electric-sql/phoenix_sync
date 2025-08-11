@@ -61,6 +61,7 @@ defmodule Phoenix.Sync.PredefinedShape do
   end
 
   def is_queryable?(q) when is_struct(q, Ecto.Query) or is_struct(q, Ecto.Changeset), do: true
+  def is_queryable?(_), do: false
 
   @doc false
   @spec new!(shape(), options()) :: t()

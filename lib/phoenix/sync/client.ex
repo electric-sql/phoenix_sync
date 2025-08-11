@@ -123,9 +123,6 @@ defmodule Phoenix.Sync.Client do
   Elixir/Ecto types, rather than raw column data in the form `%{"column_name"
   => "column_value"}`.
   """
-  # stream(Todo, replica: full, client: client)
-  # stream("todos", where: "...", replica: full, client: client)
-  # stream(table: "todos", where: "...", replica: full, client: client)
   @spec stream(Phoenix.Sync.shape_definition(), Electric.Client.stream_options()) :: Enum.t()
   def stream(shape, stream_opts \\ [])
 

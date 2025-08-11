@@ -18,8 +18,20 @@ defmodule Phoenix.Sync.Shape do
         end
       end
 
-  This allows you to `subscribe/2` to the shape and receive notifications and
-  also retrieve the current dataset:
+  This allows you to subscribe to the shape and receive notifications and
+  also retrieve the current dataset.
+
+  `to_list/2` will return the current state of the shape as a list:
+
+      #{inspect(__MODULE__)}.to_list(MyApp.TodoShape)
+      [
+        {~s|"public"."todos"/"1"|, %MyApp.Todo{id: 1}},
+        {~s|"public"."todos"/"2"|, %MyApp.Todo{id: 2}},
+        # ...
+      ]
+
+  `subscribe/2` registers the current process to receive change events (and
+  `unsubscribe/1` allows you to stop receiving them):
 
       # use the registered `name` of the shape to receive change events
       # within a GenServer or other process
@@ -29,27 +41,14 @@ defmodule Phoenix.Sync.Shape do
       end
 
       # handle the shape events...
-      def handle_info({:sync, ref, {:insert, {_key, todo}}}, ref) do
+      def handle_info({:sync, ref, event}, ref) do
+        dbg(sync_event: event)
         {:noreply, state}
       end
 
-      def handle_info({:sync, ref, {:update, {_key, todo}}}, ref) do
-        {:noreply, state}
-      end
-
-      def handle_info({:sync, ref, {:delete, {_key, todo}}}, ref) do
-        {:noreply, state}
-      end
-
-      def handle_info({:sync, ref, :up_to_date}, ref) do
-        {:noreply, state}
-      end
-
-      def handle_info({:sync, ref, :must_refetch}, ref) do
-        {:noreply, state}
-      end
   """
 
+  @doc false
   use GenServer
 
   alias Phoenix.Sync.PredefinedShape
@@ -66,6 +65,48 @@ defmodule Phoenix.Sync.Shape do
   @type subscription_msg_type() :: operation() | control()
   @type subscribe_opts() :: [{:only, [subscription_msg_type()]} | {:tag, term()}]
 
+  @type shape_options() :: [
+          String.t()
+          | Ecto.Queryable.t()
+          | unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
+          | {:name, GenServer.name()}
+        ]
+
+  @doc """
+  Start a new shape process that will receive the sync stream events and
+  maintain an in-memory copy of the dataset in sync with Postgres.
+
+  ## Options
+
+  Shapes are defined exactly as for `Phoenix.Sync.Client.stream/2`:
+
+      # using an `Ecto.Schema` module
+      {:ok, pid} = #{inspect(__MODULE__)}.start_link(MyApp.Todo)
+
+      # or a full `Ecto.Query`
+      {:ok, pid} = #{inspect(__MODULE__)}.start_link(
+        from(t in MyApp.Todo, where: t.completed == true)
+      )
+
+      # we can pass extra sync options
+      {:ok, pid} = #{inspect(__MODULE__)}.start_link(
+        from(t in MyApp.Todo, where: t.completed == true),
+        replica: :full
+      )
+
+  but also accept a `:name` much like other `GenServer` processes.
+
+      {:ok, pid} = #{inspect(__MODULE__)}.start_link(MyApp.Todo, name: TodosShape)
+
+  To start a Shape within a supervision tree, you pass the options as the child
+  spec as if they were arguments:
+
+      children = [
+        {#{inspect(__MODULE__)}, [MyApp.Todo, name: TodoShape]}
+      ]
+
+  """
+  @spec start_link(shape_options()) :: GenServer.on_start()
   def start_link(args) do
     with {:ok, stream_args, shape_opts} <- validate_args(args) do
       GenServer.start_link(
@@ -188,11 +229,13 @@ defmodule Phoenix.Sync.Shape do
     Enum.map(rows, &elem(&1, 1))
   end
 
+  @impl GenServer
   def init({stream_args, _shape_opts}) do
     {:ok, %{stream_pid: nil, table: nil, subscriptions: %{}},
      {:continue, {:start_shape, stream_args}}}
   end
 
+  @impl GenServer
   def handle_continue({:start_shape, stream_args}, state) do
     {:ok, table_name} = Shape.Registry.register(self())
 
@@ -225,6 +268,7 @@ defmodule Phoenix.Sync.Shape do
     {:noreply, %{state | stream_pid: pid, table: table}}
   end
 
+  @impl GenServer
   def handle_call(:subscribers, _from, state) do
     {:reply, Map.keys(state.subscriptions), state}
   end
@@ -244,6 +288,7 @@ defmodule Phoenix.Sync.Shape do
     {:reply, :ok, %{state | subscriptions: subscriptions}}
   end
 
+  @impl GenServer
   def handle_info({:sync_message, msg}, state) do
     state = state |> handle_sync_message(msg) |> notify_subscribers(msg)
 

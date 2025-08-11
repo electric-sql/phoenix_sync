@@ -449,6 +449,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
       client
     end
 
+    @doc false
     def must_refetch!(shape) do
       stack_id = stack_id!()
 
