@@ -45,7 +45,7 @@ defmodule Phoenix.Sync.Controller do
 
   See `Phoenix.Sync.shape!/2` for examples of shape definitions
 
-  ## Interruptible calls
+  ## Interruptible requests
 
   There may be circumstances where shape definitions are dynamic based on, say,
   a database query. In this case you should wrap your shape definitions in a
@@ -113,7 +113,7 @@ defmodule Phoenix.Sync.Controller do
   end
 
   @doc """
-  Return the sync events for the given shape as a `Plug.Conn` response.
+  Return the sync events for the given shape with an interruptible response.
 
   By passing the shape definition as a function you enable interruptible
   requests. This is useful when the shape definition is dynamic and may change.

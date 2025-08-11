@@ -183,7 +183,7 @@ defmodule Phoenix.Sync do
   end
 
   @doc """
-  Breaks all long-polling requests maching the give shape definition.
+  Interrupts all long-polling requests maching the give shape definition.
 
   The broader the shape definition, the more requests will be interrupted.
 
@@ -226,8 +226,8 @@ defmodule Phoenix.Sync do
       )
 
   If you want more control over the match, you can pass a function that will
-  receive a normalized shape definition and should `true` if the active shape
-  matches.
+  receive a normalized shape definition and should return `true` if the active
+  shape matches.
 
         Phoenix.Sync.interrupt(fn %{table: _, where: _, params: _} = shape ->
           shape.table == "todos" &&
