@@ -7,22 +7,38 @@ defmodule Phoenix.Sync do
 
   alias Electric.Client.ShapeDefinition
 
+  alias Phoenix.Sync.PredefinedShape
+
   @shape_keys [:namespace, :where, :columns]
   @shape_params @shape_keys |> Enum.map(&to_string/1)
 
-  @type shape_specification :: [
-          unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
+  @type shape_options :: [
+          unquote(NimbleOptions.option_typespec(PredefinedShape.schema()))
         ]
-  @type shape_definition ::
-          String.t()
-          | Ecto.Queryable.t()
-          | shape_specification()
+
+  if Code.ensure_loaded?(Ecto) do
+    @type shape_definition ::
+            String.t()
+            | Ecto.Queryable.t()
+            | shape_options()
+  else
+    @type shape_definition() :: shape_options()
+  end
+
   @type param_override ::
           {:namespace, String.t()}
           | {:table, String.t()}
           | {:where, String.t()}
           | {:columns, String.t()}
   @type param_overrides :: [param_override()]
+
+  @type match_shape_params() :: %{
+          table: String.t(),
+          namespace: nil | String.t(),
+          where: nil | String.t(),
+          params: nil | %{String.t() => String.t()},
+          columns: nil | [String.t(), ...]
+        }
 
   @doc """
   Returns the required adapter configuration for your Phoenix Endpoint or
@@ -164,5 +180,167 @@ defmodule Phoenix.Sync do
     else
       {:error, "Missing `table` parameter"}
     end
+  end
+
+  @doc """
+  Interrupts all long-polling requests maching the give shape definition.
+
+  The broader the shape definition, the more requests will be interrupted.
+
+  Returns the number of interrupted requests.
+
+  ### Examples
+
+  To interrupt all shapes on the `todos` table:
+
+      Phoenix.Sync.interrupt("todos")
+      Phoenix.Sync.interrupt(table: "todos")
+
+  or the same using an `Ecto.Schema` module:
+
+      Phoenix.Sync.interrupt(Todos.Todo)
+
+  all shapes with the given parameterized where clause:
+
+      Phoenix.Sync.interrupt(table: "todos", where: "user_id = $1")
+
+  or a single shape for the given user:
+
+      Phoenix.Sync.interrupt(
+        from(t in Todos.Todo, where: t.user_id == ^user_id)
+      )
+
+      # or
+
+      Phoenix.Sync.interrupt(
+        table: "todos",
+        where: "user_id = $1",
+        params: [user_id]
+      )
+
+      # or
+
+      Phoenix.Sync.interrupt(
+        table: "todos",
+        where: "user_id = '\#{user_id}'"
+      )
+
+  If you want more control over the match, you can pass a function that will
+  receive a normalized shape definition and should return `true` if the active
+  shape matches.
+
+        Phoenix.Sync.interrupt(fn %{table: _, where: _, params: _} = shape ->
+          shape.table == "todos" &&
+            shape.where == "user_id = $1" &&
+            shape.params["0"] == user_id
+        end)
+
+  The normalized shape argument is a map with the following keys:
+
+  - `table`, e.g. `"todos"`
+  - `namespace`, e.g. `"public"`
+  - `where`, e.g. `"where user_id = $1"`
+  - `params`, a map of argument position to argument value, e.g. `%{"0" => "true", "1" => "..."}`
+  - `columns`, e.g. `["id", "title"]`
+
+  All except `table` may be `nil`.
+
+  ### Interrupting Ecto Query-based Shapes
+
+  Be careful when mixing `Ecto` query-based shapes with interrupt calls using
+  hand-written where clauses.
+
+  The shape
+
+      Phoenix.Sync.Controller.sync_stream(conn, params, fn ->
+        from(t in Todos.Todo, where: t.user_id == ^user_id)
+      end)
+
+  will **not** be interrupted by
+
+      Phoenix.Sync.interrupt(
+        table: "todos",
+        where: "user_id = '\#{user_id}'"
+      )
+
+  because the where clause matching is a simple *exact string* match and `Ecto` query
+  generated where clauses will generally be different from the equivalent
+  hand-written version. If you want to interrupt a query-based shape you should
+  use the same query as the interrupt criteria.
+
+  > #### Writing interrupts {: .tip}
+  >
+  > It's better to be too broad with your interrupt calls than too narrow.
+  > Only clients whose shape definition changes after the `interrupt/1` call
+  > will be affected.
+
+  ## Supported options
+
+  The more options you give the more specific the interrupt call will be. Only
+  the table name is required.
+
+  - `table` - Required. Interrupts all shapes matching the given table. E.g. `"todos"`
+  - `namespace` - The table namespace. E.g. `"public"`
+  - `where` - The shape's where clause. Can in be parameterized and will match
+    all shapes with the same where filter irrespective of the parameters (unless
+    provided). E.g. `"status = $1"`, `"completed = true"`
+  - `columns` - The columns included in the shape. E.g. `["id", "title", "completed"]`
+  - `params` - The values associated with a parameterized where clause. E.g. `[true, 1, "alive"]`, `%{1 => true}`
+  """
+  @spec interrupt(shape_definition() | (match_shape_params() -> boolean()), shape_options()) ::
+          {:ok, non_neg_integer()}
+  def interrupt(shape, shape_opts \\ []) do
+    Phoenix.Sync.ShapeRequestRegistry.interrupt_matching(shape, shape_opts)
+  end
+
+  @doc """
+  Returns a shape definition for the given params.
+
+  ## Examples
+
+  - An `Ecto.Schema` module:
+
+        Phoenix.Sync.shape!(MyPlugApp.Todos.Todo)
+
+  - An `Ecto` query:
+
+        Phoenix.Sync.shape!(from(t in Todos.Todo, where: t.owner_id == ^user_id))
+
+  - A `changeset/1` function which defines the table and columns:
+
+        Phoenix.Sync.shape!(&Todos.Todo.changeset/1)
+
+  - A `changeset/1` function plus a where clause:
+
+        Phoenix.Sync.shape!(
+          &Todos.Todo.changeset/1,
+          where: "completed = false"
+        )
+
+    or a parameterized where clause:
+
+        Phoenix.Sync.shape!(
+          &Todos.Todo.changeset/1,
+          where: "completed = $1", params: [false]
+        )
+
+  - A keyword list defining the shape parameters:
+
+        Phoenix.Sync.shape!(
+          table: "todos",
+          namespace: "my_app",
+          where: "completed = $1",
+          params: [false]
+        )
+
+  ## Options
+
+  When defining a shape via a keyword list, it supports the following options:
+
+  #{NimbleOptions.docs(PredefinedShape.schema())}
+  """
+  @spec shape!(shape_definition(), shape_options()) :: PredefinedShape.t()
+  def shape!(shape, shape_opts \\ []) do
+    PredefinedShape.new!(shape, shape_opts)
   end
 end

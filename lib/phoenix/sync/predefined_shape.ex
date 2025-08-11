@@ -1,6 +1,4 @@
 defmodule Phoenix.Sync.PredefinedShape do
-  @moduledoc false
-
   # A self-contained way to hold shape definition information, alongside stream
   # configuration, compatible with both the embedded and HTTP API versions.
   # Defers to the client code to validate shape options, so we can keep up with
@@ -42,7 +40,8 @@ defmodule Phoenix.Sync.PredefinedShape do
   ]
 
   @type t :: %__MODULE__{}
-  @type options() :: [unquote(NimbleOptions.option_typespec(@public_schema))]
+  @type option() :: unquote(NimbleOptions.option_typespec(@public_schema))
+  @type options() :: [option()]
 
   if Code.ensure_loaded?(Ecto) do
     @type shape() :: options() | Electric.Client.ecto_shape()
@@ -50,8 +49,13 @@ defmodule Phoenix.Sync.PredefinedShape do
     @type shape() :: options()
   end
 
-  def schema, do: @public_schema
+  @doc false
+  def shape_schema, do: @shape_schema
 
+  @doc false
+  def schema, do: @keyword_shape_schema
+
+  @doc false
   @spec new!(shape(), options()) :: t()
   def new!(opts, config \\ [])
 
@@ -122,12 +126,14 @@ defmodule Phoenix.Sync.PredefinedShape do
     Electric.Client.merge_params(client, to_client_params(predefined_shape))
   end
 
+  @doc false
   def to_client_params(%__MODULE__{} = predefined_shape) do
     predefined_shape
     |> to_shape_definition()
     |> ShapeDefinition.params()
   end
 
+  @doc false
   def to_api_params(%__MODULE__{} = predefined_shape) do
     predefined_shape
     |> to_shape_definition()
@@ -135,6 +141,14 @@ defmodule Phoenix.Sync.PredefinedShape do
     |> Keyword.merge(predefined_shape.api_config)
   end
 
+  @doc false
+  def to_shape_params(%__MODULE__{} = predefined_shape) do
+    predefined_shape
+    |> to_shape_definition()
+    |> ShapeDefinition.params(format: :keyword)
+  end
+
+  @doc false
   def to_stream_params(%__MODULE__{} = predefined_shape) do
     {to_shape_definition(predefined_shape), predefined_shape.stream_config}
   end

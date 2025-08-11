@@ -119,11 +119,8 @@ defmodule Phoenix.Sync.ApplicationTest do
       validate_repo_connection_opts!(opts)
 
       assert %{
-               storage:
-                 {Electric.ShapeCache.FileStorage, [storage_dir: ^tmp_dir <> "/" <> storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{
-                 root: ^tmp_dir <> "/" <> storage_dir
-               }
+               storage: {Electric.ShapeCache.FileStorage, [storage_dir: ^tmp_dir <> storage_dir]},
+               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^tmp_dir <> storage_dir}
              } = Map.new(opts)
     end
 
