@@ -183,7 +183,7 @@ defmodule Phoenix.Sync do
   end
 
   @doc """
-  Interrupts all long-polling requests maching the give shape definition.
+  Interrupts all long-polling requests matching the given shape definition.
 
   The broader the shape definition, the more requests will be interrupted.
 

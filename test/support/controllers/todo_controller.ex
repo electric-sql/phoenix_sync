@@ -36,9 +36,9 @@ defmodule Phoenix.Sync.LiveViewTest.TodoController do
     end)
   end
 
-  def interruptable_dynamic(conn, params) do
+  def interruptible_dynamic(conn, params) do
     sync_render(conn, params, fn ->
-      shape_params = Agent.get(:interruptable_dynamic_agent, & &1)
+      shape_params = Agent.get(:interruptible_dynamic_agent, & &1)
 
       Phoenix.Sync.shape!(
         table: "todos",

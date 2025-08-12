@@ -42,7 +42,7 @@ defmodule Phoenix.Sync.ControllerTest do
       get "/changeset", TodoController, :changeset
       get "/complex", TodoController, :complex
       get "/interruptible", TodoController, :interruptible
-      get "/interruptable_dynamic", TodoController, :interruptable_dynamic
+      get "/interruptible_dynamic", TodoController, :interruptible_dynamic
     end
   end
 
@@ -200,7 +200,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
     get "/shape/interruptible-todos" do
       sync_render(conn, fn ->
-        shape_params = Agent.get(:interruptable_dynamic_agent, & &1)
+        shape_params = Agent.get(:interruptible_dynamic_agent, & &1)
 
         Phoenix.Sync.shape!(
           table: "todos",
@@ -264,7 +264,7 @@ defmodule Phoenix.Sync.ControllerTest do
     test "re-tries the request after an interrupt", ctx do
       agent = start_supervised!({Agent, fn -> [false] end})
 
-      Process.register(agent, :interruptable_dynamic_agent)
+      Process.register(agent, :interruptible_dynamic_agent)
 
       conn = conn(:get, "/shape/interruptible-todos", %{"offset" => "-1"})
 
@@ -296,7 +296,7 @@ defmodule Phoenix.Sync.ControllerTest do
       Process.sleep(100)
 
       # change the shape definition while the request is running
-      Agent.update(:interruptable_dynamic_agent, fn _ -> [true] end)
+      Agent.update(:interruptible_dynamic_agent, fn _ -> [true] end)
 
       # interrupt forcing a re-request which will pick up the changed shape definition
       assert {:ok, 1} = Phoenix.Sync.interrupt(table: "todos")
@@ -391,11 +391,11 @@ defmodule Phoenix.Sync.ControllerTest do
     test "returns must-refetch for invalidated shape", _ctx do
       agent = start_supervised!({Agent, fn -> [false] end})
 
-      Process.register(agent, :interruptable_dynamic_agent)
+      Process.register(agent, :interruptible_dynamic_agent)
 
       resp =
         Phoenix.ConnTest.build_conn()
-        |> Phoenix.ConnTest.get("/todos/interruptable_dynamic", %{offset: "-1"})
+        |> Phoenix.ConnTest.get("/todos/interruptible_dynamic", %{offset: "-1"})
 
       assert resp.status == 200
       assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
@@ -404,7 +404,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
       resp =
         Phoenix.ConnTest.build_conn()
-        |> Phoenix.ConnTest.get("/todos/interruptable_dynamic", %{offset: "0_0", handle: handle})
+        |> Phoenix.ConnTest.get("/todos/interruptible_dynamic", %{offset: "0_0", handle: handle})
 
       assert resp.status == 200
       assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_inf"]
@@ -414,7 +414,7 @@ defmodule Phoenix.Sync.ControllerTest do
       task =
         Task.async(fn ->
           Phoenix.ConnTest.build_conn()
-          |> Phoenix.ConnTest.get("/todos/interruptable_dynamic", %{
+          |> Phoenix.ConnTest.get("/todos/interruptible_dynamic", %{
             offset: "0_inf",
             handle: handle,
             live: "true"
@@ -425,7 +425,7 @@ defmodule Phoenix.Sync.ControllerTest do
       Process.sleep(100)
 
       # change the shape definition while the request is running
-      Agent.update(:interruptable_dynamic_agent, fn _ -> [true] end)
+      Agent.update(:interruptible_dynamic_agent, fn _ -> [true] end)
 
       # interrupt forcing a re-request which will pick up the changed shape definition
       assert {:ok, 1} = Phoenix.Sync.interrupt(table: "todos")
