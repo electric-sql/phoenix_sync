@@ -44,7 +44,8 @@ defmodule Phoenix.Sync.PredefinedShape do
   @type options() :: [option()]
 
   if Code.ensure_loaded?(Ecto) do
-    @type shape() :: options() | Electric.Client.ecto_shape()
+    @type queryable() :: Electric.Client.ecto_shape()
+    @type shape() :: options() | queryable()
   else
     @type shape() :: options()
   end
@@ -54,6 +55,9 @@ defmodule Phoenix.Sync.PredefinedShape do
 
   @doc false
   def schema, do: @keyword_shape_schema
+
+  def schema, do: @schema
+  def keys, do: @keys
 
   def is_queryable?(schema) when is_atom(schema) do
     Code.ensure_loaded?(schema) && function_exported?(schema, :__schema__, 1) &&

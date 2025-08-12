@@ -18,6 +18,12 @@ defmodule Phoenix.Sync.Shape do
         end
       end
 
+  Or use `start_link/1` or `start_link/2` to start a shape process manually:
+
+      {:ok, pid} = #{inspect(__MODULE__)}.start_link(MyApp.Todo)
+
+      {:ok, pid} = #{inspect(__MODULE__)}.start_link(MyApp.Todo, replica: :full)
+
   This allows you to subscribe to the shape and receive notifications and
   also retrieve the current dataset.
 
@@ -65,11 +71,14 @@ defmodule Phoenix.Sync.Shape do
   @type subscription_msg_type() :: operation() | control()
   @type subscribe_opts() :: [{:only, [subscription_msg_type()]} | {:tag, term()}]
 
+  @type stream_options() :: [
+          unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
+          | {:name, GenServer.name()}
+        ]
   @type shape_options() :: [
           String.t()
-          | Ecto.Queryable.t()
-          | unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
-          | {:name, GenServer.name()}
+          | PredefinedShape.queryable()
+          | stream_options()
         ]
 
   @doc """
@@ -105,6 +114,9 @@ defmodule Phoenix.Sync.Shape do
         {#{inspect(__MODULE__)}, [MyApp.Todo, name: TodoShape]}
       ]
 
+  ## Options
+
+  #{Electric.Client.ShapeDefinition.schema_definition() |> NimbleOptions.new!() |> NimbleOptions.docs()}
   """
   @spec start_link(shape_options()) :: GenServer.on_start()
   def start_link(args) do
@@ -115,6 +127,15 @@ defmodule Phoenix.Sync.Shape do
         Keyword.take(shape_opts, [:name])
       )
     end
+  end
+
+  @doc """
+  See `start_link/1`.
+  """
+  @spec start_link(String.t() | PredefinedShape.queryable(), stream_options()) ::
+          GenServer.on_start()
+  def start_link(queryable, opts) do
+    start_link([queryable | opts])
   end
 
   @doc """

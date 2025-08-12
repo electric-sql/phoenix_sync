@@ -62,6 +62,16 @@ defmodule Support.ShapeTest do
     end
   end
 
+  describe "start_link/2" do
+    test "starts a shape process with the given queryable", ctx do
+      {:ok, pid} = Shape.start_link(Support.Todo, client: ctx.client)
+
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+    end
+  end
+
   describe "streaming" do
     @describetag streaming: true
 
