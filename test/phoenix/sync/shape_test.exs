@@ -471,6 +471,24 @@ defmodule Support.ShapeTest do
 
       assert Shape.subscribers(shape) == [self()]
     end
+
+    test "maps only: :changes to only: [:insert, :update, :delete]", ctx do
+      {:ok, shape} = start_shape(Support.Todo, client: ctx.client)
+
+      ref = Shape.subscribe(shape, only: :changes)
+
+      assert_receive {:sync, ^ref, {:insert, {_, %Todo{id: 1}}}}, 500
+      assert_receive {:sync, ^ref, {:insert, {_, %Todo{id: 2}}}}, 500
+      assert_receive {:sync, ^ref, {:insert, {_, %Todo{id: 3}}}}, 500
+      refute_receive {:sync, ^ref, :up_to_date}, 100
+
+      Repo.transaction(fn ->
+        Repo.delete!(%Todo{id: 1})
+      end)
+
+      assert_receive {:sync, ^ref, {:delete, {_, %Todo{id: 1}}}}, 500
+      refute_receive {:sync, ^ref, :up_to_date}, 100
+    end
   end
 
   describe "resumable streams" do

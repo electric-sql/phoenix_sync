@@ -173,6 +173,10 @@ defmodule Phoenix.Sync.Shape do
           # a todo has been deleted or moved from completed to not completed
         {:sync, ^ref, {:update, {_key, todo}} ->
           # the todo's title has been changed
+        {:sync, ^ref, :up_to_date} ->
+          # the local shape is fully synchronized with the remote server
+        {:sync, ^ref, :must_refetch} ->
+          # the local data has been invalidated and needs to be refetched
       end
 
   In the example above, changes in the `completed` state of a todo will move
@@ -200,7 +204,10 @@ defmodule Phoenix.Sync.Shape do
   ## Options
 
   - `only` - Limit events to only a subset of the available message types  (see
-    above). If not provided, all message types will be sent.
+    above). If not provided, all message types will be sent. If you want to
+    receive all `:insert`, `:update` and `:delete` events, you can use `only:
+    :changes`.
+
   - `tag` - change the tag of the message sent to subscriber. Defaults to `:sync`.
 
   ## Examples
@@ -480,6 +487,14 @@ defmodule Phoenix.Sync.Shape do
     case Keyword.fetch(opts, :only) do
       {:ok, only} ->
         types = List.wrap(only)
+
+        types =
+          types
+          |> Enum.flat_map(fn
+            :changes -> [:insert, :update, :delete]
+            type -> type
+          end)
+          |> Enum.uniq()
 
         fn msg -> Enum.any?(types, &message_matches_type(&1, msg)) end
 
