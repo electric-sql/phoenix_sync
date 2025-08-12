@@ -20,6 +20,20 @@ defmodule Support.ShapeTest do
     :ok
   end
 
+  @todos table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         },
+         data: {
+           Support.Todo,
+           ["title", "completed"],
+           [["one", false], ["two", false], ["three", true]]
+         }
+
   setup [
     :with_repo_table,
     :with_repo_data
@@ -39,19 +53,7 @@ defmodule Support.ShapeTest do
     {:ok, pid}
   end
 
-  @moduletag table: {
-               "todos",
-               [
-                 "id int8 not null primary key generated always as identity",
-                 "title text",
-                 "completed boolean default false"
-               ]
-             },
-             data: {
-               Support.Todo,
-               ["title", "completed"],
-               [["one", false], ["two", false], ["three", true]]
-             }
+  @moduletag @todos
 
   setup(_ctx) do
     if Phoenix.Sync.Sandbox.stack_id() do
@@ -72,7 +74,7 @@ defmodule Support.ShapeTest do
     end
   end
 
-  describe "streaming" do
+  describe "sync updates" do
     @describetag streaming: true
 
     test "supports an Ecto query stream", ctx do
@@ -233,20 +235,7 @@ defmodule Support.ShapeTest do
   end
 
   describe "all/2" do
-    @describetag table: {
-                   "todos",
-                   [
-                     "id int8 not null primary key generated always as identity",
-                     "title text",
-                     "completed boolean default false"
-                   ]
-                 },
-                 data: {
-                   Support.Todo,
-                   ["title", "completed"],
-                   [["one", false], ["two", false], ["three", true]]
-                 },
-                 all: true
+    @describetag all: true
 
     test "keys: false returns only the values", ctx do
       {:ok, pid} = start_shape(Support.Todo, client: ctx.client)
@@ -259,6 +248,106 @@ defmodule Support.ShapeTest do
                %Support.Todo{id: 2, title: "two", completed: false},
                %Support.Todo{id: 3, title: "three", completed: true}
              ] = Shape.to_list(pid, keys: false)
+    end
+  end
+
+  describe "stream/2" do
+    @describetag stream: true
+
+    test "returns a lazily evaluated stream of {key, value} pairs", ctx do
+      {:ok, pid} = start_shape(Support.Todo, client: ctx.client)
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      stream = Shape.stream(pid)
+
+      assert Enum.into(stream, []) == Shape.to_list(pid)
+    end
+
+    test "removes keys if keys: false", ctx do
+      {:ok, pid} = start_shape(Support.Todo, client: ctx.client)
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      stream = Shape.stream(pid, keys: false)
+
+      assert Enum.into(stream, []) == Shape.to_list(pid, keys: false)
+    end
+
+    test "returns an empty stream if the shape is empty", ctx do
+      import Ecto.Query, only: [from: 2]
+
+      {:ok, pid} =
+        start_shape(from(t in Support.Todo, where: t.title == "missing"), client: ctx.client)
+
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      stream = Shape.stream(pid)
+
+      assert Enum.into(stream, []) == []
+    end
+  end
+
+  describe "to_map" do
+    @describetag to_map: true
+
+    test "returns a map of key -> value", ctx do
+      {:ok, pid} = start_shape(table: "todos", client: ctx.client)
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      assert %{
+               "\"public\".\"todos\"/\"1\"" => %{
+                 "completed" => "false",
+                 "id" => 1,
+                 "title" => "one"
+               },
+               "\"public\".\"todos\"/\"2\"" => %{
+                 "completed" => "false",
+                 "id" => 2,
+                 "title" => "two"
+               },
+               "\"public\".\"todos\"/\"3\"" => %{
+                 "completed" => "true",
+                 "id" => 3,
+                 "title" => "three"
+               }
+             } = Shape.to_map(pid)
+    end
+
+    test "allows for specifying the map transform", ctx do
+      {:ok, pid} = start_shape(table: "todos", client: ctx.client)
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      assert %{1 => "one", 2 => "two", 3 => "three"} =
+               Shape.to_map(pid, fn {"\"public\".\"todos\"/" <> _,
+                                     %{"id" => id, "title" => title}} ->
+                 {id, title}
+               end)
+    end
+  end
+
+  describe "find/2" do
+    @describetag find: true
+
+    test "returns the first item that matches the test", ctx do
+      {:ok, pid} = start_shape(Support.Todo, client: ctx.client)
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      assert %Support.Todo{id: 1, title: "one", completed: false} =
+               Shape.find(pid, fn %{id: id} -> id == 1 end)
+    end
+
+    test "returns default if none match", ctx do
+      {:ok, pid} = start_shape(Support.Todo, client: ctx.client)
+      ref = Shape.subscribe(pid, only: :up_to_date, tag: :my_sync)
+      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+
+      refute Shape.find(pid, fn %{id: id} -> id == -1 end)
+      assert :error == Shape.find(pid, :error, fn %{id: id} -> id == -1 end)
     end
   end
 

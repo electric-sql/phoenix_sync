@@ -47,11 +47,26 @@ defmodule Phoenix.Sync.Shape do
       end
 
       # handle the shape events...
-      def handle_info({:sync, ref, event}, ref) do
-        dbg(sync_event: event)
+      def handle_info({:sync, ref, {operation, {key, _value}}, ref)
+          when operation in [:insert, :update, :delete] do
+        IO.inspect([{operation, key}])
         {:noreply, state}
       end
 
+      def handle_info({:sync, ref, control}, ref)
+          when control in [:up_to_date, :must_refetch] do
+        IO.inspect(control: control)
+        {:noreply, state}
+      end
+
+  ### Keys
+
+  The sync stream gives every value in the source table a unique key which is
+  defined as the full table name (with namespace) and the primary key value,
+  e.g. `~s|"public"."todos"/"1"|`.
+
+  If a table has a composite primary key, the key will include all primary key
+  values. e.g. `~s|"public"."todos"/"1"/"123"|`.
   """
 
   @doc false
@@ -61,15 +76,19 @@ defmodule Phoenix.Sync.Shape do
   alias Electric.Client.Message
   alias Phoenix.Sync.Shape
 
+  @type shape() :: GenServer.server()
   @type key() :: String.t()
+  @type value() :: term()
   @type tag() :: term()
   @type operation() :: :insert | :update | :delete
   @type control() :: :up_to_date | :must_refetch
-  @type payload() :: {operation(), {key(), term()}} | control()
+  @type payload() :: {operation(), {key(), value()}} | control()
   @type event() :: {tag(), reference(), payload()}
 
   @type subscription_msg_type() :: operation() | control()
   @type subscribe_opts() :: [{:only, [subscription_msg_type()]} | {:tag, term()}]
+
+  @type enum_opts() :: [{:keys, boolean()}]
 
   @type stream_options() :: [
           unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
@@ -197,7 +216,7 @@ defmodule Phoenix.Sync.Shape do
       # identify the originating shape.
       ref = Phoenix.Sync.Shape.subscribe(Todo, only: [:must_refetch], tag: {:sync, :todo})
   """
-  @spec subscribe(GenServer.server(), subscribe_opts()) :: reference()
+  @spec subscribe(shape(), subscribe_opts()) :: reference()
   def subscribe(shape, opts \\ []) do
     GenServer.call(shape, {:subscribe, opts})
   end
@@ -205,7 +224,7 @@ defmodule Phoenix.Sync.Shape do
   @doc """
   Unsubscribe the current process from the given shape.
   """
-  @spec unsubscribe(GenServer.server()) :: :ok
+  @spec unsubscribe(shape()) :: :ok
   def unsubscribe(shape) do
     GenServer.call(shape, :unsubscribe)
   end
@@ -213,7 +232,7 @@ defmodule Phoenix.Sync.Shape do
   @doc """
   Get a list of the current subscribers to the given shape.
   """
-  @spec subscribers(GenServer.server()) :: [pid()]
+  @spec subscribers(shape()) :: [pid()]
   def subscribers(shape) do
     GenServer.call(shape, :subscribers)
   end
@@ -228,25 +247,123 @@ defmodule Phoenix.Sync.Shape do
 
   - `keys` (default: `true`) - if set to false, returns only the values without keys.
   """
-  @spec to_list(GenServer.server(), opts :: [{:keys, boolean()}]) :: [{key(), term()}] | [term()]
+  @spec to_list(shape(), opts :: enum_opts()) :: [{key(), value()}] | [value()]
   def to_list(shape, opts \\ []) do
+    shape
+    |> whereis!()
+    |> :ets.match_object(:_)
+    |> map_all(Keyword.get(opts, :keys, true))
+  end
+
+  defp map_all(rows, true), do: rows
+  defp map_all(rows, false), do: Enum.map(rows, &elem(&1, 1))
+
+  @doc """
+  Return a lazy stream of the current values in the shape.
+
+
+      {:ok, _pid} = Phoenix.Sync.Shape.start_link(MyApp.Todo, name: :todos)
+
+      stream = Phoenix.Sync.Shape.stream(:todos)
+
+      Enum.into(stream, %{})
+      %{
+        ~s|"public"."todos"/"1"| => %MyApp.Todo{id: 1},
+        ~s|"public"."todos"/"2"| => %MyApp.Todo{id: 2},
+        # ...
+      }
+
+
+  ## Options
+
+  - `keys` (default: `true`) - if set to false, returns only the values without keys.
+  """
+  @spec stream(shape(), opts :: enum_opts()) :: Enumerable.t({key(), value()} | value())
+  def stream(shape, opts \\ []) do
+    table = whereis!(shape)
+
+    match_spec =
+      if Keyword.get(opts, :keys, true), do: :"$1", else: {:_, :"$1"}
+
+    Stream.resource(
+      fn -> nil end,
+      fn
+        nil ->
+          case :ets.match(table, match_spec, 10) do
+            {match, continuation} -> {List.flatten(match), continuation}
+            :"$end_of_table" -> {:halt, nil}
+          end
+
+        :"$end_of_table" ->
+          {:halt, nil}
+
+        continuation ->
+          case :ets.match(continuation) do
+            {match, continuation} -> {List.flatten(match), continuation}
+            :"$end_of_table" -> {:halt, nil}
+          end
+      end,
+      fn _ -> :ok end
+    )
+  end
+
+  @doc """
+  Get all data in the shape as a map.
+
+  The keys of the map will be the sync stream keys.
+
+      {:ok, _pid} = Phoenix.Sync.Shape.start_link(MyApp.Todo, name: :todos)
+
+      Phoenix.Sync.Shape.to_map(:todos)
+      %{
+        ~s|"public"."todos"/"1"| => %MyApp.Todo{id: 1},
+        ~s|"public"."todos"/"2"| => %MyApp.Todo{id: 2},
+        # ...
+      }
+  """
+  @spec to_map(shape()) :: map()
+  def to_map(shape) do
+    to_map(shape, & &1)
+  end
+
+  @doc """
+  Get all data in the shape as a map, transforming the keys and values.
+
+      {:ok, _pid} = Phoenix.Sync.Shape.start_link(MyApp.Todo, name: :todos)
+
+      Phoenix.Sync.Shape.to_map(:todos, fn {_key, %MyApp.Todo{id: id, title: title} ->
+        {id, title}
+      end)
+      %{
+        1 => "my first todo",
+        2 => "my second todo",
+        2 => "my third todo",
+      }
+  """
+  @spec to_map(shape(), ({key(), value()} -> {Map.key(), Map.value()})) :: map()
+  def to_map(shape, transform) do
+    shape
+    |> to_list()
+    |> Map.new(transform)
+  end
+
+  @doc """
+  A wrapper around `Enum.find/3` that searches for a value in the shape.
+
+  The `matcher` function is only passed the shape value, not the key.
+  """
+  @spec find(shape(), Enum.default(), (value() -> any())) :: value() | Enum.default()
+  def find(shape, default \\ nil, matcher) do
+    shape
+    |> stream(keys: false)
+    |> Enum.find(default, matcher)
+  end
+
+  defp whereis!(shape) do
     case Shape.Registry.whereis(shape) do
-      {:ok, table} ->
-        table
-        |> :ets.match_object(:_)
-        |> map_all(Keyword.get(opts, :keys, true))
-
-      :error ->
-        raise ArgumentError, "Shape #{inspect(shape)} is not registered"
+      {:ok, table} -> table
+      :error -> raise ArgumentError, "Shape #{inspect(shape)} is not registered"
     end
-  end
-
-  defp map_all(rows, true) do
-    rows
-  end
-
-  defp map_all(rows, false) do
-    Enum.map(rows, &elem(&1, 1))
   end
 
   @impl GenServer
