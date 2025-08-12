@@ -18,7 +18,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       base_opts = [
         username: "postgres",
         hostname: "localhost",
-        database: "electric",
+        database: "phoenix_sync",
         port: 5432,
         sslmode: :disable
       ]
@@ -94,6 +94,15 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert capture_log(fn ->
                assert {:ok, _} = App.children(config)
              end) =~ ~r/No `env` specified for :phoenix_sync: defaulting to `:prod`/
+    end
+
+    test "sandbox mode" do
+      config = [
+        mode: :sandbox,
+        repo: Support.ConfigTestRepo
+      ]
+
+      assert {:ok, [Phoenix.Sync.Sandbox]} = App.children(config)
     end
 
     test "embedded mode dev env" do
@@ -212,13 +221,13 @@ defmodule Phoenix.Sync.ApplicationTest do
         replication_connection_opts: [
           username: "postgres",
           hostname: "localhost",
-          database: "electric",
+          database: "phoenix_sync",
           password: "password"
         ],
         query_connection_opts: [
           username: "postgres",
           hostname: "localhost-pooled",
-          database: "electric",
+          database: "phoenix_sync",
           password: "password"
         ],
         storage_dir: storage_dir
@@ -232,7 +241,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert connection_opts == [
                username: "postgres",
                hostname: "localhost",
-               database: "electric"
+               database: "phoenix_sync"
              ]
 
       assert {"password", connection_opts} =
@@ -241,7 +250,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert connection_opts == [
                username: "postgres",
                hostname: "localhost-pooled",
-               database: "electric"
+               database: "phoenix_sync"
              ]
 
       assert %{
@@ -259,7 +268,7 @@ defmodule Phoenix.Sync.ApplicationTest do
         connection_opts: [
           username: "postgres",
           hostname: "localhost",
-          database: "electric",
+          database: "phoenix_sync",
           password: "password"
         ],
         storage_dir: storage_dir
@@ -272,7 +281,7 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert connection_opts == [
                username: "postgres",
                hostname: "localhost",
-               database: "electric"
+               database: "phoenix_sync"
              ]
 
       assert %{
@@ -387,6 +396,17 @@ defmodule Phoenix.Sync.ApplicationTest do
                  endpoint: ^endpoint
                }
              } = api
+    end
+
+    test "sandbox mode" do
+      config = [
+        mode: :sandbox,
+        repo: Support.ConfigTestRepo
+      ]
+
+      api = App.plug_opts(config)
+
+      assert %Phoenix.Sync.Sandbox.APIAdapter{} = api
     end
   end
 end

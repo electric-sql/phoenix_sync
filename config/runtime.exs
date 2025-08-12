@@ -2,7 +2,9 @@ import Config
 
 if config_env() == :test do
   # port = 3333
-  default_database_url = "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
+  default_database_url =
+    "postgresql://postgres:password@localhost:55555/phoenix_sync?sslmode=disable"
+
   database_url = System.get_env("DATABASE_URL", default_database_url)
 
   config :electric,

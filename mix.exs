@@ -19,11 +19,8 @@ defmodule Phoenix.Sync.MixProject do
       description: description(),
       source_url: "https://github.com/electric-sql/phoenix_sync",
       homepage_url: "https://hexdocs.pm/phoenix_sync",
-      aliases: [
-        "test.all": ["test", "test.as_a_dep"],
-        "test.as_a_dep": &test_as_a_dep/1
-      ],
-      preferred_cli_env: ["test.all": :test]
+      aliases: aliases(),
+      preferred_cli_env: ["test.all": :test, "test.apps": :test]
     ]
   end
 
@@ -34,6 +31,10 @@ defmodule Phoenix.Sync.MixProject do
     ]
   end
 
+  def cli do
+    [preferred_envs: ["test.all": :test, "test.apps": :test]]
+  end
+
   defp deps do
     [
       {:nimble_options, "~> 1.1"},
@@ -41,17 +42,19 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:electric, "~> 1.0.21", optional: true},
-      {:electric_client, "~> 0.6.3"}
+      {:electric, "~> 1.0.24", optional: true},
+      # 0.6.5 has the decoding fix
+      {:electric_client, "> 0.6.4"}
     ] ++ deps_for_env(Mix.env())
   end
 
   defp deps_for_env(:test) do
     [
-      {:floki, "~> 0.36", only: [:test]},
       {:bandit, "~> 1.5", only: [:test], override: true},
-      {:uuid, "~> 1.1", only: [:test]},
-      {:mox, "~> 1.1", only: [:test]}
+      {:floki, "~> 0.36", only: [:test]},
+      {:lazy_html, ">= 0.1.0", only: :test},
+      {:mox, "~> 1.1", only: [:test]},
+      {:uuid, "~> 1.1", only: [:test]}
     ]
   end
 
@@ -64,6 +67,16 @@ defmodule Phoenix.Sync.MixProject do
 
   defp deps_for_env(_) do
     []
+  end
+
+  defp aliases do
+    [
+      "test.all": ["test", "test.as_a_dep", "test.apps"],
+      "test.as_a_dep": &test_as_a_dep/1,
+      "test.apps": &test_apps/1,
+      start_dev: "cmd docker compose up -d",
+      stop_dev: "cmd docker compose down -v"
+    ]
   end
 
   defp docs do
@@ -124,7 +137,30 @@ defmodule Phoenix.Sync.MixProject do
       end
       """)
 
-      mix_cmd_with_status_check(["do", "deps.get,", "compile", "--force" | args])
+      mix_cmd_with_status_check([
+        "do",
+        "deps.get,",
+        "compile",
+        "--force",
+        "--warnings-as-errors" | args
+      ])
+    end)
+  end
+
+  defp test_apps(args) do
+    IO.puts("==> Running tests in Phoenix Sync example apps")
+
+    Path.wildcard("apps/*")
+    |> Enum.each(fn app ->
+      File.cd!(app, fn ->
+        mix_cmd_with_status_check(["deps.get"])
+
+        mix_cmd_with_status_check([
+          "test",
+          "--force",
+          "--warnings-as-errors" | args
+        ])
+      end)
     end)
   end
 

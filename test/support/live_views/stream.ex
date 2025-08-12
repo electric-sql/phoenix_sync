@@ -210,3 +210,38 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLiveComponent do
      |> Phoenix.Sync.LiveView.sync_stream(:users, Support.User, client: assigns.client)}
   end
 end
+
+defmodule Phoenix.Sync.LiveViewTest.StreamSandbox do
+  use Phoenix.LiveView
+
+  def run(lv, func) do
+    GenServer.call(lv.pid, {:run, func})
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div id="todos" phx-update="stream">
+      <div :for={{id, todo} <- @streams.todos} id={id}>
+        [<%= if(todo.completed, do: "X", else: " ") %>] <%= todo.title %>
+      </div>
+    </div>
+    """
+  end
+
+  def mount(_params, _session, socket) do
+    parent =
+      get_in(socket.private.connect_info.private, [:test_pid]) ||
+        raise "missing parent pid configuration"
+
+    {:ok,
+     socket
+     |> assign(:test_pid, parent)
+     |> Phoenix.Sync.LiveView.sync_stream(:todos, Support.Todo)}
+  end
+
+  def handle_info({:sync, event}, socket) do
+    # send messsage to test pid, just for sync
+    send(socket.assigns.test_pid, {:sync, event})
+    {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
+  end
+end

@@ -24,14 +24,14 @@ jobs:
         image: "postgres:17-alpine"
         env:
           POSTGRES_PASSWORD: password
-          POSTGRES_DB: electric
+          POSTGRES_DB: phoenix_sync
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 54321:5432
+          - 55555:5432
 
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
         with:
           path: |
             _build/*/lib
-            !_build/*/lib/electric_phoenix
+            !_build/*/lib/phoenix_sync
           key: ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.MIX_ENV }}-[${{ github.ref_name }}]-${{ github.sha }}
@@ -76,9 +76,6 @@ jobs:
 
       - name: Run tests
         run: mix test --trace
-
-      - name: Test installation as a dependency
-        run: mix test.as_a_dep
 
   test-as-dep:
     name: Test installation as a dependency
@@ -98,6 +95,38 @@ jobs:
 
       - name: Test installation as a dependency
         run: mix test.as_a_dep
+
+  test-apps:
+    name: Test integration apps
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    services:
+      postgres:
+        image: "postgres:17-alpine"
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: phoenix_sync
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 55555:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Run tests on apps
+        run: mix test.apps
 
   formatting:
     name: mix format --check-formatted
