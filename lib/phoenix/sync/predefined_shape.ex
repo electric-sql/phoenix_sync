@@ -44,7 +44,6 @@ defmodule Phoenix.Sync.PredefinedShape do
   @type options() :: [option()]
 
   if Code.ensure_loaded?(Ecto) do
-    @type queryable() :: Electric.Client.ecto_shape()
     @type shape() :: options() | queryable()
   else
     @type shape() :: options()

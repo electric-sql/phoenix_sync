@@ -12,19 +12,14 @@ defmodule Phoenix.Sync do
   @shape_keys [:namespace, :where, :columns]
   @shape_params @shape_keys |> Enum.map(&to_string/1)
 
-  @type shape_options :: [
-          unquote(NimbleOptions.option_typespec(PredefinedShape.schema()))
+  @type queryable() :: Ecto.Queryable.t() | Ecto.Schema.t() | Ecto.Changeset.t()
+  @type shape_specification :: [
+          unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
         ]
-
-  if Code.ensure_loaded?(Ecto) do
-    @type shape_definition ::
-            String.t()
-            | Ecto.Queryable.t()
-            | shape_options()
-  else
-    @type shape_definition() :: shape_options()
-  end
-
+  @type shape_definition ::
+          String.t()
+          | queryable()
+          | shape_specification()
   @type param_override ::
           {:namespace, String.t()}
           | {:table, String.t()}

@@ -76,8 +76,7 @@ defmodule Phoenix.Sync.Shape do
           | {:name, GenServer.name()}
         ]
   @type shape_options() :: [
-          String.t()
-          | PredefinedShape.queryable()
+          Phoenix.Sync.queryable()
           | stream_options()
         ]
 
