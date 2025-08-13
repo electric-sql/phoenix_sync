@@ -283,7 +283,10 @@ defmodule Phoenix.Sync.Shape do
 
   ## Options
 
-  - `keys` (default: `true`) - if set to false, returns only the values without keys.
+  - `keys` (default: `true`) - if set to `false`, returns only the values without keys.
+  - `batch_size` (default: `100`) - the number of rows to fetch from the
+    backing ETS table in each iteration. Larger values are more efficient but will use
+    more memory.
   """
   @spec stream(shape(), opts :: enum_opts()) :: Enumerable.t({key(), value()} | value())
   def stream(shape, opts \\ []) do
@@ -292,11 +295,13 @@ defmodule Phoenix.Sync.Shape do
     match_spec =
       if Keyword.get(opts, :keys, true), do: :"$1", else: {:_, :"$1"}
 
+    batch_size = Keyword.get(opts, :batch_size, 100)
+
     Stream.resource(
       fn -> nil end,
       fn
         nil ->
-          case :ets.match(table, match_spec, 10) do
+          case :ets.match(table, match_spec, batch_size) do
             {match, continuation} -> {List.flatten(match), continuation}
             :"$end_of_table" -> {:halt, nil}
           end
