@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2025-08-13
+
+### Added
+
+- A new [`Phoenix.Sync.Shape`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Shape.html) that maintains an live, in-memory representation of the current state of the database ([#77](https://github.com/electric-sql/phoenix_sync/pull/77))
+- Integration with `Ecto.Adapters.SQL.Sandbox` via [`Phoenix.Sync.Sandbox`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Sandbox.html) to enable simulating updates to shapes within a test transaction ([#73](https://github.com/electric-sql/phoenix_sync/pull/73))
+- Interruptible shape endpoints using [`Phoenix.Sync.Controller.sync_render/3`](https://hexdocs.pm/phoenix_sync/Phoenix.Sync.Controller.html#sync_render/3) ([#65](https://github.com/electric-sql/phoenix_sync/pull/65))
+- Support for defining shapes via a `changeset/1` function ([#70](https://github.com/electric-sql/phoenix_sync/pull/70))
+
+### Fixed
+
+- Improve error messages caused by invalid module names ([#74](https://github.com/electric-sql/phoenix_sync/pull/74))
+- Fix compilation errors when included with no `:ecto` dependency ([#79](https://github.com/electric-sql/phoenix_sync/pull/79))
+
 ## [0.4.4] - 2025-06-30
 
 ### Added
