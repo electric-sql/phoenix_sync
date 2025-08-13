@@ -282,7 +282,7 @@ defmodule Phoenix.Sync do
   - `columns` - The columns included in the shape. E.g. `["id", "title", "completed"]`
   - `params` - The values associated with a parameterized where clause. E.g. `[true, 1, "alive"]`, `%{1 => true}`
   """
-  @spec interrupt(shape_definition() | (match_shape_params() -> boolean()), shape_options()) ::
+  @spec interrupt(shape_definition() | (match_shape_params() -> boolean()), shape_specification()) ::
           {:ok, non_neg_integer()}
   def interrupt(shape, shape_opts \\ []) do
     Phoenix.Sync.ShapeRequestRegistry.interrupt_matching(shape, shape_opts)
@@ -334,7 +334,7 @@ defmodule Phoenix.Sync do
 
   #{NimbleOptions.docs(PredefinedShape.schema())}
   """
-  @spec shape!(shape_definition(), shape_options()) :: PredefinedShape.t()
+  @spec shape!(shape_definition(), shape_specification()) :: PredefinedShape.t()
   def shape!(shape, shape_opts \\ []) do
     PredefinedShape.new!(shape, shape_opts)
   end

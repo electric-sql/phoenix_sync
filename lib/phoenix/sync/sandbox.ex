@@ -458,7 +458,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
         |> Phoenix.Sync.PredefinedShape.new!()
         |> Phoenix.Sync.PredefinedShape.to_stream_params()
 
-      Sandbox.Producer.truncate(stack_id, {namespace, table})
+      Sandbox.Producer.truncate(stack_id, {namespace || "public", table})
     end
 
     @impl true

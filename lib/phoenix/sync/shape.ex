@@ -492,7 +492,7 @@ defmodule Phoenix.Sync.Shape do
           types
           |> Enum.flat_map(fn
             :changes -> [:insert, :update, :delete]
-            type -> type
+            type -> [type]
           end)
           |> Enum.uniq()
 

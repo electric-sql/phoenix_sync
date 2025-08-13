@@ -155,8 +155,11 @@ defmodule Phoenix.Sync.ClientTest do
       stream =
         Phoenix.Sync.Client.stream(
           from(t in Support.Todo, where: t.completed == true),
-          [namespace: "app", replica: :full, live: false, errors: :stream],
-          ctx.electric_opts
+          namespace: "app",
+          replica: :full,
+          live: false,
+          errors: :stream,
+          client: ctx.client
         )
 
       assert %Electric.Client.Stream{
