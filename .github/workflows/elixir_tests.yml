@@ -77,8 +77,8 @@ jobs:
       - name: Run tests
         run: mix test --trace
 
-  test-as-dep:
-    name: Test installation as a dependency
+  test-as-dep-standalone:
+    name: Test installation as a dependency without Electric or Ecto
     runs-on: ubuntu-latest
     env:
       MIX_ENV: test
@@ -94,7 +94,26 @@ jobs:
         run: mix deps.get && mix deps.compile
 
       - name: Test installation as a dependency
-        run: mix test.as_a_dep
+        run: mix test.as_a_dep.standalone
+
+  test-as-dep-embedded:
+    name: Test installation as a dependency with embedded Electric
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: ".tool-versions"
+
+      - name: Install dependencies
+        run: mix deps.get && mix deps.compile
+
+      - name: Test installation as a dependency
+        run: mix test.as_a_dep.embedded
 
   test-apps:
     name: Test integration apps
