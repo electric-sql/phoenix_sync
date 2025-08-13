@@ -165,15 +165,17 @@ defmodule Phoenix.Sync.PredefinedShape do
     ShapeDefinition.new!(shape_config)
   end
 
-  # we resolve the query at runtime to avoid compile-time dependencies in
-  # router modules
-  defp to_shape_definition(%__MODULE__{query: queryable, shape_config: shape_config}) do
-    try do
-      Electric.Client.EctoAdapter.shape!(queryable, shape_config)
-    rescue
-      e in Protocol.UndefinedError ->
-        raise ArgumentError,
-          message: "Invalid query `#{inspect(queryable)}`: #{e.description}"
+  if Code.ensure_loaded?(Ecto) do
+    # we resolve the query at runtime to avoid compile-time dependencies in
+    # router modules
+    defp to_shape_definition(%__MODULE__{query: queryable, shape_config: shape_config}) do
+      try do
+        Electric.Client.EctoAdapter.shape!(queryable, shape_config)
+      rescue
+        e in Protocol.UndefinedError ->
+          raise ArgumentError,
+            message: "Invalid query `#{inspect(queryable)}`: #{e.description}"
+      end
     end
   end
 end

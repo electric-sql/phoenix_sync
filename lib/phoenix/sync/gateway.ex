@@ -37,7 +37,7 @@ defmodule Phoenix.Sync.Gateway do
     Map.merge(%{"url" => url, "headers" => auth_headers}, shape_params)
   end
 
-  def configuration(%Ecto.Query{} = query, %Client{} = client) do
+  def configuration(query, %Client{} = client) when is_struct(query, Ecto.Query) do
     query
     |> Electric.Client.shape!()
     |> configuration(client)
