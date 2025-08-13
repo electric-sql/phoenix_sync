@@ -106,13 +106,6 @@ defmodule Phoenix.Sync.Client do
         columns: ["id", "title"]
       )
 
-      # consumer a pre-defined shape from a remote server, e.g.
-      # one defined using `Phoenix.Sync.Controller.sync_render/3` or
-      # `Phoenix.Sync.Router.sync/2`.
-      stream = Phoenix.Sync.Client.stream(
-        "https://myapp.com/sync/todos?user_id=1234"
-      )
-
       # once you have a stream, consume it as usual
       Enum.each(stream, &IO.inspect/1)
 
