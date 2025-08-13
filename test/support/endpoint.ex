@@ -39,9 +39,3 @@ defmodule Phoenix.Sync.LiveViewTest.Endpoint do
     Exception.message(conn.reason)
   end
 end
-
-defmodule Phoenix.ErrorView do
-  def render("500.html", %{reason: exception}) do
-    Exception.message(exception)
-  end
-end
