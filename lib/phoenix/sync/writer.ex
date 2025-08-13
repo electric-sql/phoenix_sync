@@ -17,6 +17,14 @@ if Code.ensure_loaded?(Ecto) do
     This allows you to build instant, offline-capable applications that work with
     [local optimistic state](https://electric-sql.com/docs/guides/writes).
 
+    ### Requirements
+
+    `#{inspect(__MODULE__)}` requires `Ecto`.
+
+    It's perfectly possible to use `Phoenix.Sync` without any database
+    connection (syncing via a HTTP) but the write-path requires both a database
+    and `Ecto`.
+
     ## Controller example
 
     For example, take a project management app that's using
