@@ -186,11 +186,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
     use Supervisor
 
     alias __MODULE__
-
-    defmodule Error do
-      @moduledoc false
-      defexception [:message]
-    end
+    alias __MODULE__.Error
 
     @type start_opts() :: [{:shared, boolean()}]
 

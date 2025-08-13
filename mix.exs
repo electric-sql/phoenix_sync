@@ -72,7 +72,9 @@ defmodule Phoenix.Sync.MixProject do
   defp aliases do
     [
       "test.all": ["test", "test.as_a_dep", "test.apps"],
-      "test.as_a_dep": &test_as_a_dep/1,
+      "test.as_a_dep": ["test.as_a_dep.embedded", "test.as_a_dep.standalone"],
+      "test.as_a_dep.embedded": &test_as_a_dep_embedded/1,
+      "test.as_a_dep.standalone": &test_as_a_dep_standalone/1,
       "test.apps": &test_apps/1,
       start_dev: "cmd docker compose up -d",
       stop_dev: "cmd docker compose down -v"
@@ -117,25 +119,25 @@ defmodule Phoenix.Sync.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  defp test_as_a_dep(args) do
-    IO.puts("==> Compiling ecto_sql from a dependency")
-    File.rm_rf!("tmp/as_a_dep")
-    File.mkdir_p!("tmp/as_a_dep")
+  defp test_as_a_dep_embedded(args) do
+    do_test_as_a_dep("tmp/as_a_dep_embedded", [{:electric, "~> 1.0"}], args)
+  end
 
-    File.cd!("tmp/as_a_dep", fn ->
-      File.write!("mix.exs", """
-      defmodule DepsOnPhoenixSync.MixProject do
-        use Mix.Project
+  defp test_as_a_dep_standalone(args) do
+    do_test_as_a_dep("tmp/as_a_dep_standalone", [], args)
+  end
 
-        def project do
-          [
-            app: :deps_on_ecto_sql,
-            version: "0.0.1",
-            deps: [{:phoenix_sync, path: "../.."}, {:electric, "~> 1.0"}]
-          ]
-        end
-      end
-      """)
+  defp do_test_as_a_dep(dir, extra_deps, args) do
+    IO.puts("==> Running tests in Phoenix Sync as a dependency")
+
+    dep_names = Enum.map(extra_deps, &elem(&1, 0))
+    IO.puts("==> Compiling phoenix_sync from a dependency with: #{inspect(dep_names)}")
+
+    File.rm_rf!(dir)
+    File.mkdir_p!(dir)
+
+    File.cd!(dir, fn ->
+      write_mixfile(extra_deps)
 
       mix_cmd_with_status_check([
         "do",
@@ -145,6 +147,24 @@ defmodule Phoenix.Sync.MixProject do
         "--warnings-as-errors" | args
       ])
     end)
+  end
+
+  defp write_mixfile(extra_deps) do
+    deps = [{:phoenix_sync, path: "../.."} | extra_deps]
+
+    File.write!("mix.exs", """
+    defmodule DepsOnPhoenixSync.MixProject do
+      use Mix.Project
+
+      def project do
+        [
+          app: :deps_on_phoenix_sync,
+          version: "0.0.1",
+          deps: #{inspect(deps)}
+        ]
+      end
+    end
+    """)
   end
 
   defp test_apps(args) do

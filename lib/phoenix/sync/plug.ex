@@ -146,8 +146,6 @@ defmodule Phoenix.Sync.Plug do
   alias Electric.Client.ShapeDefinition
   alias Phoenix.Sync.Gateway
 
-  require Ecto.Query
-
   @valid_ops [:==, :!=, :>, :<, :>=, :<=]
 
   @type table_column :: atom()
@@ -174,7 +172,7 @@ defmodule Phoenix.Sync.Plug do
         %ShapeDefinition{} = shape ->
           %{shape: shape}
 
-        %Ecto.Query{} = query ->
+        query when is_struct(query, Ecto.Query) ->
           %{shape: Electric.Client.shape!(query)}
 
         schema when is_atom(schema) ->
@@ -357,16 +355,24 @@ defmodule Phoenix.Sync.Plug do
     Plug.Conn.assign(conn, :shape, shape)
   end
 
-  for op <- @valid_ops do
-    where =
-      {op, [],
-       [
-         {:field, [], [Macro.var(:q, nil), {:^, [], [Macro.var(:column, nil)]}]},
-         {:^, [], [Macro.var(:value, nil)]}
-       ]}
+  if Code.ensure_loaded?(Ecto.Query) do
+    for op <- @valid_ops do
+      where =
+        {op, [],
+         [
+           {:field, [], [Macro.var(:q, nil), {:^, [], [Macro.var(:column, nil)]}]},
+           {:^, [], [Macro.var(:value, nil)]}
+         ]}
 
-    defp add_filter(query, var!(column), unquote(op), var!(value)) do
-      Ecto.Query.where(query, [q], unquote(where))
+      defp add_filter(query, var!(column), unquote(op), var!(value)) do
+        require Ecto.Query
+        Ecto.Query.where(query, [q], unquote(where))
+      end
+    end
+  else
+    defp add_filter(_query, _, _, _) do
+      raise ArgumentError,
+        message: "Ecto.Query is required for dynamic shapes, please add it to your dependencies."
     end
   end
 
