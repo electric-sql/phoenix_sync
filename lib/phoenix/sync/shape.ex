@@ -150,7 +150,7 @@ defmodule Phoenix.Sync.Shape do
   @doc """
   See `start_link/1`.
   """
-  @spec start_link(String.t() | PredefinedShape.queryable(), stream_options()) ::
+  @spec start_link(String.t() | Phoenix.Sync.queryable(), stream_options()) ::
           GenServer.on_start()
   def start_link(queryable, opts) do
     start_link([queryable | opts])
