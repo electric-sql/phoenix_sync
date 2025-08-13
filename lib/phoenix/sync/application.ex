@@ -9,7 +9,12 @@ defmodule Phoenix.Sync.Application do
 
   @impl true
   def start(_type, _args) do
-    base_children = [Phoenix.Sync.ShapeRequestRegistry]
+    base_children = [Phoenix.Sync.Shape.Supervisor, Phoenix.Sync.ShapeRequestRegistry]
+
+    # Electric is noisy by default which isn't helpful when developing or in
+    # production so up its log level to info (unless otherwise configured using
+    # the `ELECTRIC_LOG_LEVEL` env var.
+    Logger.put_application_level(:electric, electric_log_level())
 
     children =
       case children() do
@@ -101,5 +106,17 @@ defmodule Phoenix.Sync.Application do
     end
 
     config
+  end
+
+  defp electric_log_level do
+    valid_levels = Enum.map(Logger.levels(), &to_string/1)
+    configured_level = System.get_env("ELECTRIC_LOG_LEVEL", "info")
+
+    if configured_level in valid_levels do
+      String.to_existing_atom(configured_level)
+    else
+      Logger.warning("Invalid ELECTRIC_LOG_LEVEL: #{configured_level}. Defaulting to :info.")
+      :info
+    end
   end
 end

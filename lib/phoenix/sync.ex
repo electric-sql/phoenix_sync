@@ -12,19 +12,14 @@ defmodule Phoenix.Sync do
   @shape_keys [:namespace, :where, :columns]
   @shape_params @shape_keys |> Enum.map(&to_string/1)
 
-  @type shape_options :: [
-          unquote(NimbleOptions.option_typespec(PredefinedShape.schema()))
+  @type queryable() :: Ecto.Queryable.t() | Ecto.Schema.t() | Ecto.Changeset.t()
+  @type shape_specification :: [
+          unquote(NimbleOptions.option_typespec(Phoenix.Sync.PredefinedShape.schema()))
         ]
-
-  if Code.ensure_loaded?(Ecto) do
-    @type shape_definition ::
-            String.t()
-            | Ecto.Queryable.t()
-            | shape_options()
-  else
-    @type shape_definition() :: shape_options()
-  end
-
+  @type shape_definition ::
+          String.t()
+          | queryable()
+          | shape_specification()
   @type param_override ::
           {:namespace, String.t()}
           | {:table, String.t()}
@@ -287,7 +282,7 @@ defmodule Phoenix.Sync do
   - `columns` - The columns included in the shape. E.g. `["id", "title", "completed"]`
   - `params` - The values associated with a parameterized where clause. E.g. `[true, 1, "alive"]`, `%{1 => true}`
   """
-  @spec interrupt(shape_definition() | (match_shape_params() -> boolean()), shape_options()) ::
+  @spec interrupt(shape_definition() | (match_shape_params() -> boolean()), shape_specification()) ::
           {:ok, non_neg_integer()}
   def interrupt(shape, shape_opts \\ []) do
     Phoenix.Sync.ShapeRequestRegistry.interrupt_matching(shape, shape_opts)
@@ -339,7 +334,7 @@ defmodule Phoenix.Sync do
 
   #{NimbleOptions.docs(PredefinedShape.schema())}
   """
-  @spec shape!(shape_definition(), shape_options()) :: PredefinedShape.t()
+  @spec shape!(shape_definition(), shape_specification()) :: PredefinedShape.t()
   def shape!(shape, shape_opts \\ []) do
     PredefinedShape.new!(shape, shape_opts)
   end

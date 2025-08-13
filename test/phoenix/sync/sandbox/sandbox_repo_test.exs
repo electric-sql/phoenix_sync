@@ -6,6 +6,8 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
       %{ownership_model: :owner}
     ]
 
+  use Support.RepoSetup, repo: Support.SandboxRepo
+
   @moduletag :sandbox
 
   @todos [
@@ -31,47 +33,6 @@ defmodule Phoenix.Sync.Sandbox.RepoTest do
   alias Support.Todo
 
   import Ecto.Query, only: [from: 2]
-
-  defp with_repo_table(ctx) do
-    case ctx do
-      %{table: {name, columns}} ->
-        sql =
-          """
-          CREATE TABLE #{Support.DbSetup.inspect_relation(name)} (
-          #{Enum.join(columns, ",\n")}
-          )
-          """
-
-        Repo.query!(sql, [])
-
-        :ok
-
-      _ ->
-        :ok
-    end
-
-    :ok
-  end
-
-  defp with_repo_data(ctx) do
-    case Map.get(ctx, :data, nil) do
-      {schema, columns, values} ->
-        Enum.each(values, fn row_values ->
-          todo =
-            struct(
-              schema,
-              Enum.zip(columns, row_values) |> Enum.map(fn {c, v} -> {String.to_atom(c), v} end)
-            )
-
-          Repo.insert(todo)
-        end)
-
-        :ok
-
-      nil ->
-        :ok
-    end
-  end
 
   setup(ctx) do
     Ecto.Adapters.SQL.Sandbox.mode(Support.SandboxRepo, :manual)

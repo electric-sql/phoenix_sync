@@ -119,16 +119,23 @@ defmodule Phoenix.Sync.Client do
   @spec stream(Phoenix.Sync.shape_definition(), Electric.Client.stream_options()) :: Enum.t()
   def stream(shape, stream_opts \\ [])
 
-  def stream(shape, stream_opts) do
-    stream(shape, stream_opts, nil)
+  def stream(table, stream_opts) when is_binary(table) and is_list(stream_opts) do
+    stream(Keyword.put(stream_opts, :table, table), [])
   end
 
-  @doc false
-  # used for testing. `config` replace the application configuration
-  def stream(shape, stream_opts, config) do
-    client = new!(config)
-    {shape, stream_opts} = resolve_shape(shape, stream_opts)
-    Electric.Client.stream(client, shape, stream_opts)
+  def stream(shape, []) when is_list(shape) do
+    {client, shape} = Keyword.pop_lazy(shape, :client, &new!/0)
+
+    {shape, shape_stream_opts} = resolve_shape(shape, [])
+
+    Electric.Client.stream(client, shape, shape_stream_opts)
+  end
+
+  def stream(shape, stream_opts) when not is_list(shape) and is_list(stream_opts) do
+    {client, stream_opts} = Keyword.pop_lazy(stream_opts, :client, &new!/0)
+    {shape, shape_stream_opts} = resolve_shape(shape, stream_opts)
+
+    Electric.Client.stream(client, shape, shape_stream_opts)
   end
 
   defp resolve_shape(shape, stream_opts) do
