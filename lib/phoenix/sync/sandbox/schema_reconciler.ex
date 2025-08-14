@@ -1,9 +1,11 @@
-defmodule Phoenix.Sync.Sandbox.SchemaReconciler do
-  @moduledoc false
+if Phoenix.Sync.sandbox_enabled?() do
+  defmodule Phoenix.Sync.Sandbox.SchemaReconciler do
+    @moduledoc false
 
-  use GenServer
+    use GenServer
 
-  def start_link(_args), do: :ignore
-  def init(_arg), do: :ignore
-  def reconcile_now(_name_or_pid), do: :ok
+    def start_link(_args), do: :ignore
+    def init(_arg), do: :ignore
+    def reconcile_now(_name_or_pid), do: :ok
+  end
 end

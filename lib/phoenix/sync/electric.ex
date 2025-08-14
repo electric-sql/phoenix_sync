@@ -150,7 +150,12 @@ defmodule Phoenix.Sync.Electric do
         {:ok, []}
 
       :sandbox ->
-        {:ok, [Phoenix.Sync.Sandbox]}
+        if Phoenix.Sync.sandbox_enabled?() do
+          {:ok, [Phoenix.Sync.Sandbox]}
+        else
+          {:error,
+           "Sandbox mode is only available if `:ecto_sql` and `:electric` are listed as dependencies"}
+        end
 
       mode when mode in @valid_modes ->
         embedded_children(env, mode, electric_opts)
@@ -289,7 +294,7 @@ defmodule Phoenix.Sync.Electric do
       |> Keyword.fetch!(:api)
     end
 
-    if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
+    if Phoenix.Sync.sandbox_enabled?() do
       defp plug_opts(_env, :sandbox, _electric_opts) do
         %Phoenix.Sync.Sandbox.APIAdapter{}
       end
@@ -537,7 +542,7 @@ defmodule Phoenix.Sync.Electric do
     # to a real instance -- I think that's reasonable. The overhead of a real
     # electric consuming a real replication stream is way too high for a simple
     # consumer of streams
-    if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
+    if Phoenix.Sync.sandbox_enabled?() do
       defp configure_client(_opts, :sandbox) do
         Phoenix.Sync.Sandbox.client()
       end

@@ -338,4 +338,9 @@ defmodule Phoenix.Sync do
   def shape!(shape, shape_opts \\ []) do
     PredefinedShape.new!(shape, shape_opts)
   end
+
+  @doc false
+  def sandbox_enabled? do
+    Code.ensure_loaded?(Electric) && Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox)
+  end
 end

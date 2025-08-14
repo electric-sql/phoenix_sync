@@ -1,4 +1,4 @@
-if Code.ensure_loaded?(Ecto.Adapters.Postgres) do
+if Phoenix.Sync.sandbox_enabled?() do
   defmodule Phoenix.Sync.Sandbox.Postgres.Adapter do
     @moduledoc false
 
