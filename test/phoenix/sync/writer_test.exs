@@ -135,7 +135,7 @@ defmodule Phoenix.Sync.WriterTest do
   end
 
   defp is_txid(txid) do
-    is_binary(txid) && match?({_, ""}, Integer.parse(txid))
+    is_integer(txid)
   end
 
   # new creates without applying (so doesn't need a repo)
