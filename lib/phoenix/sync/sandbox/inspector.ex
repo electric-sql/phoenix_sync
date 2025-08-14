@@ -1,4 +1,4 @@
-if Code.ensure_loaded?(Ecto.Adapters.SQL.Sandbox) do
+if Phoenix.Sync.sandbox_enabled?() do
   defmodule Phoenix.Sync.Sandbox.Inspector do
     @moduledoc false
 
