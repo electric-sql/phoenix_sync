@@ -296,7 +296,7 @@ defmodule Phoenix.Sync.Electric do
 
     if Phoenix.Sync.sandbox_enabled?() do
       defp plug_opts(_env, :sandbox, _electric_opts) do
-        %Phoenix.Sync.Sandbox.APIAdapter{}
+        Phoenix.Sync.Sandbox.APIAdapter.new()
       end
     else
       defp plug_opts(_env, :sandbox, _electric_opts) do
