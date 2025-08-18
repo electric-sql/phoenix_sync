@@ -13,6 +13,8 @@ if Phoenix.Sync.sandbox_enabled?() do
     alias Electric.Replication.LogOffset
     alias Electric.Replication.ShapeLogCollector
 
+    @json if(Code.ensure_loaded?(JSON), do: JSON, else: Jason)
+
     def child_spec(opts) do
       {:ok, stack_id} = Keyword.fetch(opts, :stack_id)
 
@@ -164,11 +166,11 @@ if Phoenix.Sync.sandbox_enabled?() do
       type.to_iso8601(datetime)
     end
 
-    defp dump(map, _type) when is_map(map), do: JSON.encode!(map)
+    defp dump(map, _type) when is_map(map), do: @json.encode!(map)
 
     defp dump(list, type) when is_list(list) do
       if encode_list_json?(type) do
-        JSON.encode!(list)
+        @json.encode!(list)
       else
         encode_array(list, type)
       end

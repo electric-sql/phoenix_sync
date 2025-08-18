@@ -44,7 +44,7 @@ defmodule Phoenix.Sync.MixProject do
       {:ecto_sql, "~> 3.10", optional: true},
       {:electric, "~> 1.1.2", optional: true},
       {:electric_client, "~> 0.7"}
-    ] ++ deps_for_env(Mix.env())
+    ] ++ deps_for_env(Mix.env()) ++ json_deps()
   end
 
   defp deps_for_env(:test) do
@@ -66,6 +66,16 @@ defmodule Phoenix.Sync.MixProject do
 
   defp deps_for_env(_) do
     []
+  end
+
+  defp json_deps do
+    if Code.ensure_loaded?(JSON) do
+      # elixir >= 1.18
+      []
+    else
+      # elixir <= 1.17
+      [{:jason, "~> 1.0"}]
+    end
   end
 
   defp aliases do
