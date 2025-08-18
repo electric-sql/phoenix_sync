@@ -209,8 +209,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       if Phoenix.LiveView.connected?(socket) do
         client =
           Keyword.get_lazy(electric_opts, :client, fn ->
-            get_in(socket.private[:connect_info].private[:electric_client]) ||
-              Phoenix.Sync.client!()
+            case socket.private[:connect_info] do
+              %{private: %{electric_client: client}} -> client
+              _ -> Phoenix.Sync.client!()
+            end
           end)
 
         Phoenix.LiveView.stream(
