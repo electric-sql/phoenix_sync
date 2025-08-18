@@ -2,7 +2,7 @@ defmodule Phoenix.Sync.MixProject do
   use Mix.Project
 
   # Remember to update the README when you change the version
-  @version "0.5.0"
+  @version "0.5.1"
 
   def project do
     [

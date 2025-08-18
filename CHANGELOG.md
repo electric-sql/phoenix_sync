@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2025-08-18
+
 ### Changed
 
-- Changed type of returned txid to binary to prevent JSON serialization issues ([#71](https://github.com/electric-sql/phoenix_sync/pull/71))
+- Update `electric` to `~> 1.1` including new [faster storage engine](https://electric-sql.com/blog/2025/08/13/electricsql-v1.1-released).
+- Update `electric_client` to `~> 0.7.0` which includes `txid` headers in sync messages.
+
+### Fixed
+
+- Use 32-bit txid to ensure consistency with Electric sync messages ([#71](https://github.com/electric-sql/phoenix_sync/pull/71))
+- Only enable sandbox if both `Ecto.SQL` and `Electric` are installed ([#86](https://github.com/electric-sql/phoenix_sync/pull/86))
+- Fix liveview startup [#87](https://github.com/electric-sql/phoenix_sync/issues/87) ([#88](https://github.com/electric-sql/phoenix_sync/pull/88))
+- Fix occasional compilation error when `Electric` installed ([#89](https://github.com/electric-sql/phoenix_sync/pull/89))
 
 ## [0.5.0] - 2025-08-13
 
