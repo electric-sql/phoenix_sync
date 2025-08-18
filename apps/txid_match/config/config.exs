@@ -1,12 +1,5 @@
 import Config
 
-# connection_opts = [
-#   username: "postgres",
-#   password: "password",
-#   hostname: "localhost",
-#   database: "txid_sync",
-#   port: 55555
-# ]
 
 connection_opts = [
   username: "garry",
