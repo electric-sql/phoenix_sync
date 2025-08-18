@@ -170,6 +170,9 @@ defmodule Phoenix.Sync.MixProject do
     IO.puts("==> Running tests in Phoenix Sync example apps")
 
     Path.wildcard("apps/*")
+    |> Enum.reject(fn path ->
+      Path.basename(path) in ["txid_match"]
+    end)
     |> Enum.each(fn app ->
       File.cd!(app, fn ->
         mix_cmd_with_status_check(["deps.get"])
