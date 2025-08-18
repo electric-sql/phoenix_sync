@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only enable sandbox if both `Ecto.SQL` and `Electric` are installed ([#86](https://github.com/electric-sql/phoenix_sync/pull/86))
 - Fix liveview startup [#87](https://github.com/electric-sql/phoenix_sync/issues/87) ([#88](https://github.com/electric-sql/phoenix_sync/pull/88))
 - Fix occasional compilation error when `Electric` installed ([#89](https://github.com/electric-sql/phoenix_sync/pull/89))
+- Include `jason` dependency if Elixir doesn't have built in JSON support ([#90](https://github.com/electric-sql/phoenix_sync/pull/90))
 
 ## [0.5.0] - 2025-08-13
 
