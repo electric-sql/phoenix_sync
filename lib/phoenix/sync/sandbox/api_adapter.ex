@@ -6,6 +6,8 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     alias Phoenix.Sync.Adapter.PlugApi
 
+    def new, do: %__MODULE__{}
+
     defimpl Phoenix.Sync.Adapter.PlugApi do
       def predefined_shape(adapter, shape) do
         {:ok, %{adapter | shape: shape}}
