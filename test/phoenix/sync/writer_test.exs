@@ -134,6 +134,10 @@ defmodule Phoenix.Sync.WriterTest do
     end
   end
 
+  defp is_txid(txid) do
+    is_integer(txid)
+  end
+
   # new creates without applying (so doesn't need a repo)
   # apply creates and applies i.e. new() |> Repo.transaction()
   describe "allow/2" do
@@ -291,7 +295,7 @@ defmodule Phoenix.Sync.WriterTest do
       assert %Ecto.Multi{} = multi = Writer.to_multi(writer)
       assert {:ok, txid, _values} = Writer.transaction(multi, Repo)
 
-      assert is_integer(txid)
+      assert is_txid(txid)
 
       # validate that the callbacks are being called
 
@@ -892,7 +896,7 @@ defmodule Phoenix.Sync.WriterTest do
 
       assert {:ok, txid} = Writer.txid(changes)
 
-      assert is_integer(txid)
+      assert is_txid(txid)
 
       assert txid == Writer.txid!(changes)
     end
@@ -962,7 +966,7 @@ defmodule Phoenix.Sync.WriterTest do
                  format: Writer.Format.TanstackDB
                )
 
-      assert is_integer(txid)
+      assert is_txid(txid)
       assert_receive {:insert, ["public", "todos_local"], %{}, %{"id" => "98"}}
       assert_receive {:insert, ["public", "todos_local"], %{}, %{"id" => "99"}}
       assert_receive {:delete, ["public", "todos_local"], %{"id" => "2"}, %{}}
@@ -1003,7 +1007,7 @@ defmodule Phoenix.Sync.WriterTest do
                %Support.Todo{id: 100, title: _, completed: false}
              ] = Repo.all(from(t in Support.Todo, order_by: t.id))
 
-      assert is_integer(txid)
+      assert is_txid(txid)
     end
 
     test ":error tuples rollback the transaction" do

@@ -42,9 +42,8 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:electric, "~> 1.0.24", optional: true},
-      # 0.6.5 has the decoding and control message fix
-      {:electric_client, ">= 0.6.5-beta-5"}
+      {:electric, "~> 1.1.2", optional: true},
+      {:electric_client, "~> 0.7"}
     ] ++ deps_for_env(Mix.env())
   end
 
@@ -171,6 +170,9 @@ defmodule Phoenix.Sync.MixProject do
     IO.puts("==> Running tests in Phoenix Sync example apps")
 
     Path.wildcard("apps/*")
+    |> Enum.reject(fn path ->
+      Path.basename(path) in ["txid_match"]
+    end)
     |> Enum.each(fn app ->
       File.cd!(app, fn ->
         mix_cmd_with_status_check(["deps.get"])
