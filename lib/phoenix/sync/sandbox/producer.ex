@@ -66,7 +66,7 @@ if Phoenix.Sync.sandbox_enabled?() do
     end
 
     def handle_cast({:truncate, relation}, state) do
-      changes = [%TruncatedRelation{relation: relation}]
+      changes = [%TruncatedRelation{relation: relation, log_offset: log_offset(state.txid, 0)}]
 
       :ok =
         state.txid
