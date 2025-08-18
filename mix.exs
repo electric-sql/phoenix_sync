@@ -43,7 +43,8 @@ defmodule Phoenix.Sync.MixProject do
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
       {:electric, "~> 1.1.2", optional: true},
-      {:electric_client, "~> 0.7"}
+      {:electric_client, "~> 0.7"},
+      {:igniter, "~> 0.6", optional: true}
     ] ++ deps_for_env(Mix.env()) ++ json_deps()
   end
 
