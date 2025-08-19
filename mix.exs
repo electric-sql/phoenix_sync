@@ -3,6 +3,7 @@ defmodule Phoenix.Sync.MixProject do
 
   # Remember to update the README when you change the version
   @version "0.5.1"
+  @electric_version "~> 1.1.2"
 
   def project do
     [
@@ -35,6 +36,8 @@ defmodule Phoenix.Sync.MixProject do
     [preferred_envs: ["test.all": :test, "test.apps": :test]]
   end
 
+  def electric_version, do: @electric_version
+
   defp deps do
     [
       {:nimble_options, "~> 1.1"},
@@ -42,7 +45,7 @@ defmodule Phoenix.Sync.MixProject do
       {:plug, "~> 1.0"},
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
-      {:electric, "~> 1.1.2", optional: true},
+      {:electric, @electric_version, optional: true},
       {:electric_client, "~> 0.7"},
       {:igniter, "~> 0.6", optional: true}
     ] ++ deps_for_env(Mix.env()) ++ json_deps()

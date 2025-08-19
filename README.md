@@ -203,11 +203,44 @@ See the `Phoenix.Sync.Writer` module docs for more information.
 `Phoenix.Sync` can be used in two modes:
 
 1. `:embedded` where Electric is included as an application dependency and Phoenix.Sync consumes data internally using Elixir APIs
-2. `:http` where Electric does _not_ need to be included as an application dependency and Phoenix.Sync consumes data from an external Electric service using it's [HTTP API](https://electric-sql.com/docs/api/http)
 
-### Embedded mode
+   In `:embedded` mode, Electric does not expose an HTTP API (internally or externally). Messages are streamed internally between Electric and Phoenix.Sync using Elixir function APIs. The only HTTP API for sync is that exposed via your Phoenix Router using the `sync/2` macro and `sync_render/3` function.
 
-In `:embedded` mode, Electric must be included an application dependency but does not expose an HTTP API (internally or externally). Messages are streamed internally between Electric and Phoenix.Sync using Elixir function APIs. The only HTTP API for sync is that exposed via your Phoenix Router using the `sync/2` macro and `sync_render/3` function.
+2. `:http` where Electric does _not_ need to be included as an application dependency and Phoenix.Sync consumes data from an external Electric service using it's [HTTP API](https://electric-sql.com/docs/api/http). As for `embedded` mode, the only HTTP API for sync is that exposed via `Phoenix.Sync.Router.sync/2` and `Phoenix.Sync.Controller.sync_render/3`.
+
+### Using Igniter
+
+`Phoenix.Sync` supports [`Igniter`](https://hexdocs.pm/igniter/readme.html) for automatic configuration of your application.
+
+Add Igniter to an existing Elixir project by adding it to your dependencies in mix.exs:
+
+```elixir
+{:igniter, "~> 0.6", only: [:dev, :test]}
+```
+
+Then use it to install `Phoenix.Sync` in `embedded` mode:
+
+```elixir
+mix igniter.install phoenix_sync --sync-mode embedded
+```
+
+This will install `Phoenix.Sync` into your application and also set up your `Ecto.Repo` with the [sandbox test adapter](`Phoenix.Sync.Sandbox`).
+
+If you don't want the sandbox support then pass `--no-sync-sandbox`:
+
+```elixir
+mix igniter.install phoenix_sync --sync-mode embedded --no-sync-sandbox
+```
+
+For `http` mode:
+
+```elixir
+mix igniter.install phoenix_sync --sync-mode http --sync-url "https://api.electric-sql.cloud"
+```
+
+### Manual installation
+
+#### Embedded mode
 
 Example config:
 
@@ -234,9 +267,7 @@ children = [
 ]
 ```
 
-### HTTP
-
-In `:http` mode, Electric does not need to be included as an application dependency. Instead, Phoenix.Sync consumes data from an external Electric service over HTTP.
+#### HTTP mode
 
 ```elixir
 # mix.exs

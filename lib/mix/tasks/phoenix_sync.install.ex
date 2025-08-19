@@ -8,7 +8,7 @@ defmodule Mix.Tasks.PhoenixSync.Install.Docs do
 
   @spec example() :: String.t()
   def example do
-    "mix phoenix_sync.install --mode embedded --repo MyApp.Repo"
+    "mix phoenix_sync.install --sync-mode embedded"
   end
 
   @spec long_doc() :: String.t()
@@ -16,9 +16,13 @@ defmodule Mix.Tasks.PhoenixSync.Install.Docs do
     """
     #{short_doc()}
 
-    Longer explanation of your task
+    Usually invoked using `igniter.install`:
 
-    ## Example
+    ```sh
+    mix igniter.install phoenix_sync --sync-mode embedded
+    ```
+
+    But can be invoked directly if `:phoenix_sync` is already a dependency:
 
     ```sh
     #{example()}
@@ -26,9 +30,18 @@ defmodule Mix.Tasks.PhoenixSync.Install.Docs do
 
     ## Options
 
-    * `--mode`- How to connect to Electric, either `embedded` or `http`. In `embedded` mode `:electric` will be added as a dependency and started automatically and you may have to include the `--repo` option (see below). For `http` mode you'll need to specify the `--url` to the Electric server.
-    * `--repo`- Which `Ecto.Repo` module to connect to in `embedded` mode. The installer should be able to find the right repo automatically, but if it can't, you can specify it here.
-    * `--url` - The URL of the Electric server, only needed for `--mode http`.
+    * `--sync-mode` - How to connect to Electric, either `embedded` or `http`.
+
+      - `embedded` - `:electric` will be added as a dependency and will connect to the database your repo is configured for.
+      - `http` - You'll need to specify the `--sync-url` to the remote Electric server.
+
+    ### Options for `embedded` mode
+
+    * `--no-sync-sandbox` - Disable the test sandbox
+
+    ### Options for `http` mode
+
+    * `--sync-url` (required) - The URL of the Electric server, required for `http` mode.
     """
   end
 end
@@ -41,63 +54,34 @@ if Code.ensure_loaded?(Igniter) do
 
     use Igniter.Mix.Task
 
+    require Igniter.Code.Function
+
     @impl Igniter.Mix.Task
-    def info(argv, composing_task) do
-      {opts, _positional, _other} = OptionParser.parse(argv, strict: [mode: :string])
-
-      adds_deps =
-        case Keyword.fetch(opts, :mode) do
-          {:ok, "embedded"} ->
-            [{:electric, required_electric_version()}]
-
-          {:ok, "http"} ->
-            []
-
-          {:ok, _other} ->
-            # errors will come later
-            []
-        end
-
+    def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
-        # Groups allow for overlapping arguments for tasks by the same author
-        # See the generators guide for more.
         group: :phoenix_sync,
-        # *other* dependencies to add
-        # i.e `{:foo, "~> 2.0"}`
-        adds_deps: adds_deps,
-        # *other* dependencies to add and call their associated installers, if they exist
-        # i.e `{:foo, "~> 2.0"}`
+        adds_deps: [],
         installs: [],
-        # An example invocation
         example: __MODULE__.Docs.example(),
-        # A list of environments that this should be installed in.
         only: nil,
-        # a list of positional arguments, i.e `[:file]`
         positional: [],
-        # Other tasks your task composes using `Igniter.compose_task`, passing in the CLI argv
-        # This ensures your option schema includes options from nested tasks
         composes: [],
-        # `OptionParser` schema
         schema: [
-          mode: :string,
-          repo: :string,
-          url: :string,
-          sandbox: :boolean
+          sync_mode: :string,
+          sync_url: :string,
+          sync_sandbox: :boolean
         ],
-        # Default values for the options in the `schema`
         defaults: [],
-        # CLI aliases
         aliases: [],
-        # A list of options in the schema that are required
-        required: [:mode]
+        required: [:sync_mode]
       }
     end
 
-    @valid_modes ~w(embedded http)
+    @valid_modes ~w[embedded http]
 
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      {:ok, mode} = Keyword.fetch(igniter.args.options, :mode)
+      {:ok, mode} = Keyword.fetch(igniter.args.options, :sync_mode)
 
       if mode not in @valid_modes do
         Igniter.add_issue(
@@ -110,7 +94,7 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp add_dependencies(igniter, "http") do
-      case Keyword.fetch(igniter.args.options, :url) do
+      case Keyword.fetch(igniter.args.options, :sync_url) do
         {:ok, url} ->
           igniter
           |> base_configuration(:http)
@@ -120,23 +104,97 @@ if Code.ensure_loaded?(Igniter) do
             [:url],
             url
           )
+          |> Igniter.Project.Config.configure_new(
+            "config.exs",
+            :phoenix_sync,
+            [:credentials],
+            secret: "MY_SECRET",
+            source_id: "00000000-0000-0000-0000-000000000000"
+          )
+          |> configure_endpoint()
 
         :error ->
-          Igniter.add_issue(igniter, "`--url` is required for :http mode")
+          Igniter.add_issue(igniter, "`--sync-url` is required for :http mode")
       end
     end
 
     defp add_dependencies(igniter, "embedded") do
-      # we should maybe confirm all this stuff before doing it
-
       igniter
+      |> Igniter.Project.Deps.add_dep({:electric, required_electric_version()}, error?: true)
       |> base_configuration(:embedded)
       |> find_repo()
       |> configure_repo()
+      |> configure_endpoint()
+    end
 
-      # update the repo source with the sandbox adapter
-      # check if this is phoenix or plain plug
-      # add the plug_opts
+    defp configure_endpoint(igniter) do
+      application = Igniter.Project.Application.app_module(igniter)
+
+      case Igniter.Libs.Phoenix.select_endpoint(igniter) do
+        {igniter, nil} ->
+          configure_plug_app(igniter, application)
+
+        {igniter, endpoint} ->
+          configure_phoenix_endpoint(igniter, application, endpoint)
+      end
+    end
+
+    defp configure_plug_app(igniter, application) do
+      # find plug module in application children and add config there
+      set_plug_opts(igniter, application, [Plug.Cowboy, Bandit], fn zipper ->
+        with {:ok, zipper} <- Igniter.Code.Tuple.tuple_elem(zipper, 1) do
+          Igniter.Code.Keyword.set_keyword_key(
+            zipper,
+            :plug,
+            nil,
+            fn zipper ->
+              if Igniter.Code.Tuple.tuple?(zipper) do
+                with {:ok, zipper} <- Igniter.Code.Tuple.tuple_elem(zipper, 1) do
+                  Igniter.Code.Keyword.set_keyword_key(
+                    zipper,
+                    :phoenix_sync,
+                    quote(do: Phoenix.Sync.plug_opts())
+                  )
+                end
+              else
+                with {:ok, plug} <- Igniter.Code.Common.expand_literal(zipper) do
+                  {:ok,
+                   zipper
+                   |> Sourceror.Zipper.search_pattern("#{inspect(plug)}")
+                   |> Igniter.Code.Common.replace_code(
+                     "{#{inspect(plug)}, phoenix_sync: Phoenix.Sync.plug_opts()}"
+                   )}
+                end
+              end
+            end
+          )
+        end
+      end)
+    end
+
+    defp configure_phoenix_endpoint(igniter, application, endpoint) do
+      set_plug_opts(igniter, application, [endpoint], fn zipper ->
+        # gets called with a zipper on the endpoint module in the list of children
+
+        if Igniter.Code.Tuple.tuple?(zipper) do
+          with {:ok, zipper} <- Igniter.Code.Tuple.tuple_elem(zipper, 1) do
+            Igniter.Code.Keyword.set_keyword_key(
+              zipper,
+              :phoenix_sync,
+              quote(do: Phoenix.Sync.plug_opts())
+            )
+          end
+        else
+          # the search pattern call results in replacing the module name with
+          # the configuration whilst preserving the preceding comments
+          {:ok,
+           zipper
+           |> Sourceror.Zipper.search_pattern("#{inspect(endpoint)}")
+           |> Igniter.Code.Common.replace_code(
+             "{#{inspect(endpoint)}, phoenix_sync: Phoenix.Sync.plug_opts()}"
+           )}
+        end
+      end)
     end
 
     defp configure_repo(%{issues: [_ | _] = _issues} = igniter) do
@@ -144,34 +202,72 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp configure_repo(igniter) do
-      enable_sandbox? = Keyword.get(igniter.args.options, :sandbox, true)
+      case igniter.assigns do
+        %{repo: repo} when is_atom(repo) ->
+          igniter =
+            igniter
+            |> Igniter.Project.Config.configure_new("config.exs", :phoenix_sync, [:repo], repo)
+            |> Igniter.Project.Config.configure_new("test.exs", :phoenix_sync, [:mode], :sandbox)
+            |> Igniter.Project.Config.configure_new(
+              "test.exs",
+              :phoenix_sync,
+              [:env],
+              {:code, quote(do: config_env())}
+            )
 
-      igniter =
-        igniter
-        |> Igniter.Project.Config.configure_new(
-          "config.exs",
-          :phoenix_sync,
-          [:repo],
-          igniter.assigns.repo
-        )
+          enable_sandbox? = Keyword.get(igniter.args.options, :sync_sandbox, true)
 
-      if enable_sandbox? do
-        igniter
-        |> Igniter.Project.Module.find_and_update_module!(
-          igniter.assigns.repo |> dbg,
-          fn zipper ->
-            with {:ok, zipper} <-
-                   Igniter.Code.Module.move_to_use(zipper, Ecto.Repo) |> dbg,
-                 zipper <-
-                   Igniter.Code.Common.add_code(zipper, "use Phoenix.Sync.Sandbox.Postgres",
-                     placement: :before
-                   ) do
-              {:ok, zipper}
-            end
+          if enable_sandbox? do
+            igniter
+            |> Igniter.Project.Module.find_and_update_module!(
+              repo,
+              fn zipper ->
+                with {:ok, zipper} <-
+                       Igniter.Code.Function.move_to_function_call(zipper, :use, [2]),
+                     {:ok, zipper} <-
+                       Igniter.Code.Function.update_nth_argument(zipper, 1, fn zipper ->
+                         adapter = quote(do: Phoenix.Sync.Sandbox.Postgres.adapter())
+
+                         Igniter.Code.Keyword.set_keyword_key(
+                           zipper,
+                           :adapter,
+                           adapter,
+                           fn z -> {:ok, Igniter.Code.Common.replace_code(z, adapter)} end
+                         )
+                       end),
+                     {:ok, zipper} <- Igniter.Code.Module.move_to_use(zipper, Ecto.Repo),
+                     zipper <-
+                       Igniter.Code.Common.add_code(zipper, "use Phoenix.Sync.Sandbox.Postgres",
+                         placement: :before
+                       ) do
+                  {:ok, zipper}
+                end
+              end
+            )
+          else
+            igniter
           end
-        )
-      else
-        igniter
+
+        _ ->
+          igniter
+          |> Igniter.add_notice("No Ecto.Repo found, adding example `connection_opts` to config")
+          |> Igniter.Project.Config.configure_new(
+            "config.exs",
+            :phoenix_sync,
+            [:connection_opts],
+            {:code,
+             Sourceror.parse_string!("""
+             # add your real database connection details
+             [
+               username: "your_username",
+               password: "your_password",
+               hostname: "localhost",
+               database: "your_database",
+               port: 5432,
+               sslmode: :disable
+             ]
+             """)}
+          )
       end
     end
 
@@ -199,17 +295,91 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp find_repo(igniter) do
-      app_name = Igniter.Project.Application.app_name(igniter) |> dbg
-
-      case Application.fetch_env(app_name, :ecto_repos) do
-        {:ok, [repo | _]} ->
-          Igniter.assign(igniter, :repo, repo)
-
-        :error ->
-          Igniter.add_issue(
+      case Igniter.Libs.Ecto.select_repo(igniter) do
+        {igniter, nil} ->
+          Igniter.add_notice(
             igniter,
-            "No Ecto.Repo found in application environment, please specify one using `--repo` option"
+            """
+            No Ecto.Repo found in application environment.
+
+            To use `embedded` mode you must add `connection_opts` to your config, e.g.
+
+            config :phoenix_sync,
+              env: config_env(),
+              mode: :embedded,
+              connection_opts: [
+                username: "your_username",
+                password: "your_password",
+                hostname: "localhost",
+                database: "your_database",
+                port: 5432
+              ]
+            """
           )
+
+        {igniter, repo} ->
+          Igniter.assign(igniter, :repo, repo)
+      end
+    end
+
+    defp set_plug_opts(igniter, application, modify_modules, updater)
+         when is_list(modify_modules) do
+      Igniter.Project.Module.find_and_update_module!(igniter, application, fn zipper ->
+        with {:ok, zipper} <- Igniter.Code.Function.move_to_def(zipper, :start, 2),
+             {:ok, zipper} <-
+               Igniter.Code.Function.move_to_function_call_in_current_scope(
+                 zipper,
+                 :=,
+                 [2],
+                 fn call ->
+                   Igniter.Code.Function.argument_matches_pattern?(
+                     call,
+                     0,
+                     {:children, _, context} when is_atom(context)
+                   ) &&
+                     Igniter.Code.Function.argument_matches_pattern?(call, 1, v when is_list(v))
+                 end
+               ),
+             {:ok, zipper} <- Igniter.Code.Function.move_to_nth_argument(zipper, 1) do
+          case Igniter.Code.List.move_to_list_item(zipper, fn item ->
+                 case extract_child_module(item) do
+                   {:ok, child_module} ->
+                     Enum.any?(modify_modules, fn modify_module ->
+                       Igniter.Code.Common.nodes_equal?(child_module, modify_module)
+                     end)
+
+                   :error ->
+                     false
+                 end
+               end) do
+            {:ok, zipper} ->
+              updater.(zipper)
+
+            :error ->
+              {:warning,
+               """
+               Could not find a suitable `children = [...]` assignment in the `start` function of the `#{inspect(application)}` module.
+               Please add `phoenix_sync: Phoenix.Sync.plug_opts()` to your Phoenix endpoint or Plug module configuration
+               """}
+          end
+        else
+          _ ->
+            {:warning,
+             """
+             Could not find a `children = [...]` assignment in the `start` function of the `#{inspect(application)}` module.
+             Please add `phoenix_sync: Phoenix.Sync.plug_opts()` to your Phoenix endpoint or Plug module configuration
+             """}
+        end
+      end)
+    end
+
+    defp extract_child_module(zipper) do
+      if Igniter.Code.Tuple.tuple?(zipper) do
+        with {:ok, elem} <- Igniter.Code.Tuple.tuple_elem(zipper, 0) do
+          {:ok, Igniter.Code.Common.expand_alias(elem)}
+        end
+      else
+        {:ok, Igniter.Code.Common.expand_alias(zipper)}
       end
     end
   end
