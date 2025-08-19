@@ -497,6 +497,39 @@ defmodule Mix.Tasks.PhoenixSync.InstallTest do
     end
 
     @tag files: %{
+           "lib/test_plug/application.ex" => """
+           defmodule TestPlug.Application do
+             use Application
+
+             alias TestPlug.Router
+
+             def start(_type, _args) do
+               children = [
+                 {Plug.Cowboy, scheme: :http, plug: {Router, my_config: [here: true]}, options: [port: 4040]}
+               ]
+
+               opts = [strategy: :one_for_one, name: TestPlug.Supervisor]
+               Supervisor.start_link(children, opts)
+             end
+           end
+           """
+         }
+    test "supports aliased plug modules", ctx do
+      ctx.igniter
+      |> assert_has_patch(
+        "lib/test_plug/application.ex",
+        """
+        - |      {Plug.Cowboy, scheme: :http, plug: {Router, my_config: [here: true]}, options: [port: 4040]}
+        + |      {Plug.Cowboy,
+        + |       scheme: :http,
+        + |       plug: {Router, [my_config: [here: true], phoenix_sync: Phoenix.Sync.plug_opts()]},
+        + |       options: [port: 4040]}
+
+        """
+      )
+    end
+
+    @tag files: %{
            "lib/test_plug/application.ex" =>
              plug_application.("{Bandit, scheme: :http, plug: TestPlug.Router, port: 4040}")
          }
