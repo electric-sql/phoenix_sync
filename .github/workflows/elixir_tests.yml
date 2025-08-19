@@ -71,6 +71,10 @@ jobs:
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
 
+      # needed for the igniter tests
+      - name: Install phx.new task
+        run: mix archive.install hex phx_new --force
+
       - name: Compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
 
