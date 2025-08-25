@@ -273,7 +273,8 @@ if Code.ensure_loaded?(Igniter) do
                hostname: "localhost",
                database: "your_database",
                port: 5432,
-               sslmode: :disable
+               # sslmode can be: :disable, :allow, :prefer or :require
+               sslmode: :prefer
              ]
              """)}
           )
