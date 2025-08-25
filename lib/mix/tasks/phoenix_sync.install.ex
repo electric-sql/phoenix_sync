@@ -121,6 +121,13 @@ if Code.ensure_loaded?(Igniter) do
     defp add_dependencies(igniter, "embedded") do
       igniter
       |> Igniter.Project.Deps.add_dep({:electric, required_electric_version()}, error?: true)
+      |> then(fn igniter ->
+        if igniter.assigns[:test_mode?] do
+          igniter
+        else
+          Igniter.apply_and_fetch_dependencies(igniter)
+        end
+      end)
       |> base_configuration(:embedded)
       |> find_repo()
       |> configure_repo()
@@ -222,7 +229,9 @@ if Code.ensure_loaded?(Igniter) do
             |> Igniter.Project.Module.find_and_update_module!(
               repo,
               fn zipper ->
-                with {:ok, zipper} <-
+                with :error <-
+                       Igniter.Code.Module.move_to_use(zipper, Phoenix.Sync.Sandbox.Postgres),
+                     {:ok, zipper} <-
                        Igniter.Code.Function.move_to_function_call(zipper, :use, [2]),
                      {:ok, zipper} <-
                        Igniter.Code.Function.update_nth_argument(zipper, 1, fn zipper ->

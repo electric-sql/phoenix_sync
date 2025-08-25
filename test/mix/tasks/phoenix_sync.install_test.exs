@@ -5,8 +5,15 @@ defmodule Mix.Tasks.PhoenixSync.InstallTest do
 
   defp run_install_task(igniter, ctx) do
     install_args = Map.fetch!(ctx, :install_args)
+    files = Map.get(ctx, :files, %{})
 
+    # put the files after the base install -- needed otherwise the phx install
+    # task overwrites any sources we define here that conflict
     igniter
+    |> Map.update!(:assigns, fn assigns ->
+      Map.update!(assigns, :test_files, &Map.merge(&1, Map.new(files)))
+    end)
+    |> apply_igniter!()
     |> Igniter.compose_task("phoenix_sync.install", install_args)
   end
 
@@ -14,9 +21,7 @@ defmodule Mix.Tasks.PhoenixSync.InstallTest do
     @describetag install_args: ["--sync-mode", "embedded"]
 
     setup(ctx) do
-      files = Map.get(ctx, :files, %{})
-
-      [igniter: run_install_task(phx_test_project(files: files), ctx)]
+      [igniter: run_install_task(phx_test_project(), ctx)]
     end
 
     test "adds electric dependency", ctx do
@@ -72,7 +77,7 @@ defmodule Mix.Tasks.PhoenixSync.InstallTest do
         "lib/test/application.ex",
         # the final patch is my source update above plus the effect of the install
         """
-        - |      TestWeb.Endpoint
+        - |      {TestWeb.Endpoint, config: [here: true]}
         + |      {TestWeb.Endpoint, config: [here: true], phoenix_sync: Phoenix.Sync.plug_opts()}
         """
       )
@@ -94,6 +99,22 @@ defmodule Mix.Tasks.PhoenixSync.InstallTest do
         + |    adapter: Phoenix.Sync.Sandbox.Postgres.adapter()
         """
       )
+    end
+
+    @tag files: %{
+           "lib/test/repo.ex" => """
+           defmodule Test.Repo do
+             use Phoenix.Sync.Sandbox.Postgres
+
+             use Ecto.Repo,
+               otp_app: :test,
+               adapter: Phoenix.Sync.Sandbox.Postgres.adapter()
+           end
+           """
+         }
+    test "doesn't add the sandbox adapter if its already present", ctx do
+      ctx.igniter
+      |> assert_unchanged("lib/test/repo.ex")
     end
 
     @tag install_args: ["--sync-mode", "embedded", "--no-sync-sandbox"]
