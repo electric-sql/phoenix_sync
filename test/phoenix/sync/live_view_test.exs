@@ -228,7 +228,7 @@ defmodule Phoenix.Sync.LiveViewTest do
     defp add_message_keys(txn) do
       Enum.map(txn, fn
         %{"value" => %{"id" => id}} = msg ->
-          Map.put(msg, "key", ~s|"public"."users"/"| <> id <> "\"")
+          Map.put(msg, "key", ~s|"public"."users"/"#{id}"|)
 
         msg ->
           msg
