@@ -68,6 +68,10 @@ jobs:
             ${{ runner.os }}-build-${{ env.MIX_ENV }}-
             ${{ runner.os }}-build-
 
+      # needed for the igniter tests
+      - name: Install phx.new task
+        run: mix archive.install hex phx_new --force
+
       - name: Install dependencies
         run: mix deps.get && mix deps.compile
 
