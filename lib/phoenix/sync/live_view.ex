@@ -205,7 +205,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             Phoenix.Sync.LiveView.sync_stream(
               socket,
               :admins,
-              table: "users,
+              table: "users",
               where: "admin = true"
             )
           {:ok, socket}
@@ -264,30 +264,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # since we don't have control over the `mount` callback, but want to use
-    # `stream_configure` correctly which means that the stream should only be
-    # configured once, we do our own tracking of configured streams in the
-    # socket assigns
     defp configure_live_stream(socket, name, query) do
-      case socket.assigns do
-        %{__sync_stream_config__: %{^name => true}} ->
-          socket
+      if PredefinedShape.is_queryable?(query) do
+        # if the shape is an Ecto.Struct then we can just fallback to the default
+        # dom_id function (which is `value.id`)
+        socket
+      else
+        # since we don't have control over the `mount` callback, but want to use
+        # `stream_configure` correctly which means that the stream should only be
+        # configured once, we do our own tracking of configured streams in the
+        # socket assigns
+        case socket.assigns do
+          %{__sync_stream_config__: %{^name => true}} ->
+            socket
 
-        assigns ->
-          stream_opts =
-            if PredefinedShape.is_queryable?(query),
-              do: [],
-              else: [dom_id: &Map.fetch!(&1, :__sync_key__)]
+          assigns ->
+            assigns =
+              Map.update(
+                assigns,
+                :__sync_stream_config__,
+                %{name => true},
+                &Map.put(&1, name, true)
+              )
 
-          assigns =
-            Map.update(
-              assigns,
-              :__sync_stream_config__,
-              %{name => true},
-              &Map.put(&1, name, true)
+            Phoenix.LiveView.stream_configure(%{socket | assigns: assigns}, name,
+              dom_id: &Map.fetch!(&1, :__sync_key__)
             )
-
-          Phoenix.LiveView.stream_configure(%{socket | assigns: assigns}, name, stream_opts)
+        end
       end
     end
 
@@ -375,7 +378,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp sanitise_key(key) do
-      key |> String.replace("\"", "") |> String.replace(" ", "_")
+      key |> String.replace("\"", "") |> String.replace(" ", "%20")
     end
 
     defp live_stream_message(
