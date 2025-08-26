@@ -245,3 +245,44 @@ defmodule Phoenix.Sync.LiveViewTest.StreamSandbox do
     {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end
 end
+
+defmodule Phoenix.Sync.LiveViewTest.StreamLiveKeyword do
+  use Phoenix.LiveView
+
+  def run(lv, func) do
+    GenServer.call(lv.pid, {:run, func})
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div id="users" phx-update="stream">
+      <div :for={{id, user} <- @streams.users} id={id}>
+        <%= user["name"] %>
+      </div>
+    </div>
+    """
+  end
+
+  def mount(_params, _session, socket) do
+    client =
+      get_in(socket.private.connect_info.private, [:electric_client]) ||
+        raise "missing client configuration"
+
+    parent =
+      get_in(socket.private.connect_info.private, [:test_pid]) ||
+        raise "missing parent pid configuration"
+
+    {:ok,
+     socket
+     |> assign(:test_pid, parent)
+     |> Phoenix.Sync.LiveView.sync_stream(:users, [table: "users", where: "name != ''"],
+       client: client
+     )}
+  end
+
+  def handle_info({:sync, event}, socket) do
+    # send messsage to test pid, just for sync
+    send(socket.assigns.test_pid, {:sync, event})
+    {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
+  end
+end

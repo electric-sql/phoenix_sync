@@ -24,6 +24,7 @@ defmodule Phoenix.Sync.LiveViewTest.Router do
     live "/stream", StreamLive
     live "/stream/with-component", StreamLiveWithComponent
     live "/stream/sandbox", StreamSandbox
+    live "/stream/keyword", StreamLiveKeyword
   end
 
   scope "/" do
