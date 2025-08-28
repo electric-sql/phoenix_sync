@@ -146,5 +146,80 @@ defmodule Phoenix.Sync.PredefinedShapeTest do
       assert {%{__struct__: ShapeDefinition}, [live: false, errors: :stream]} =
                PredefinedShape.to_stream_params(ps)
     end
+
+    @tag :transform
+    test "transform function is accepted as mfa" do
+      ps =
+        PredefinedShape.new!(
+          Cow,
+          namespace: "test",
+          where: "completed = $1",
+          params: [true],
+          replica: :full,
+          columns: ["id", "title"],
+          transform: {__MODULE__, :map_cow_dupe, []},
+          storage: %{compaction: :disabled}
+        )
+
+      assert fun = PredefinedShape.transform_fun(ps)
+      assert is_function(fun, 1)
+
+      assert [:msg, :msg] = fun.(:msg)
+    end
+
+    @tag :transform
+    test "transform function is accepted as a capture" do
+      ps =
+        PredefinedShape.new!(
+          Cow,
+          namespace: "test",
+          where: "completed = $1",
+          params: [true],
+          replica: :full,
+          columns: ["id", "title"],
+          transform: &map_cow/1,
+          storage: %{compaction: :disabled}
+        )
+
+      assert fun = PredefinedShape.transform_fun(ps)
+      assert is_function(fun, 1)
+
+      assert [:msg] = fun.(:msg)
+    end
+
+    @tag :transform
+    test "transform function is wrapped to return a list" do
+      ps =
+        PredefinedShape.new!(
+          Cow,
+          namespace: "test",
+          where: "completed = $1",
+          params: [true],
+          replica: :full,
+          columns: ["id", "title"],
+          transform: {__MODULE__, :map_cow, []},
+          storage: %{compaction: :disabled}
+        )
+
+      assert fun = PredefinedShape.transform_fun(ps)
+      assert is_function(fun, 1)
+
+      assert [:msg] = fun.(:msg)
+    end
+
+    @tag :transform
+    test "shape with no transform fun" do
+      ps = PredefinedShape.new!(table: "cows")
+
+      assert nil == PredefinedShape.transform_fun(ps)
+    end
+
+    @tag :transform
+    test "transform_fun accepts and returns nil" do
+      assert nil == PredefinedShape.transform_fun(nil)
+    end
   end
+
+  def map_cow(msg), do: msg
+  def map_cow_dupe(msg), do: [msg, msg]
 end

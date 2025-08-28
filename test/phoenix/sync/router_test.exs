@@ -67,11 +67,31 @@ defmodule Phoenix.Sync.RouterTest do
       sync "/query-config2", Support.Todo, replica: :full, storage: %{compaction: :disabled}
 
       sync "/typo", Support.Todoo
+
+      # TODO: see if there's a way to pass captures through
+      # sync "/map/query-capture", Support.Todo, transform: &Phoenix.Sync.RouterTest.map_todo/1
+      # sync "/map/keyword-capture", table: "todos", transform: &Phoenix.Sync.RouterTest.map_todo/1
+
+      sync "/map/query-mfa", Support.Todo,
+        transform: {Phoenix.Sync.RouterTest, :map_todo, ["query-mfa"]}
+
+      sync "/map/keyword-mfa",
+        table: "todos",
+        transform: {Phoenix.Sync.RouterTest, :map_todo, ["keyword-mfa"]}
     end
 
     scope "/namespaced-sync", WebNamespace do
       sync "/todos", Support.Todo
     end
+  end
+
+  def map_todo(
+        %{"headers" => %{"operation" => op}} = msg,
+        route \\ "capture"
+      ) do
+    Map.update!(msg, "value", fn value ->
+      Map.put(value, "merged", "#{route}-#{op}-#{value["id"]}-#{value["title"]}")
+    end)
   end
 
   defmodule Endpoint do
@@ -427,6 +447,60 @@ defmodule Phoenix.Sync.RouterTest do
                      |> Phoenix.ConnTest.get("/sync/typo", %{offset: "-1"})
                    end
     end
+
+    @tag table: {
+           "todos",
+           [
+             "id int8 not null primary key generated always as identity",
+             "title text",
+             "completed boolean default false"
+           ]
+         }
+    @tag data: {
+           "todos",
+           ["title", "completed"],
+           [["one", false], ["two", false]]
+         }
+
+    @tag transform: true
+    test "mapping values" do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/sync/map/query-mfa", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "query-mfa-insert-1-one", "title" => "one"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "query-mfa-insert-2-two", "title" => "two"}
+               }
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag transform: true
+    test "captures in transform are not supported in phoenix.router" do
+      assert_raise ArgumentError,
+                   ~r/Invalid transform function specification in sync shape definition\. When using Phoenix Router please use an MFA tuple \(`transform: \{Mod, :fun, \[arg1, \.\.\.\]\}`\)/,
+                   fn ->
+                     Code.compile_string("""
+                     defmodule InvalidCaptureRouter#{System.unique_integer([:positive, :monotonic])} do
+                       use Phoenix.Router
+
+                       import Phoenix.Sync.Router
+
+                       scope "/sync" do
+                         sync "/map/query-capture", Support.Todo, transform: &Phoenix.Sync.RouterTest.map_todo/1
+                       end
+                     end
+                     """)
+                   end
+    end
   end
 
   describe "Plug.Router - shape/2" do
@@ -477,6 +551,14 @@ defmodule Phoenix.Sync.RouterTest do
         storage: %{compaction: :disabled}
 
       sync "/shapes/query-module", Support.Todo, where: "completed = false"
+
+      sync "/shapes/map-module", Support.Todo,
+        where: "completed = false",
+        transform: {Phoenix.Sync.RouterTest, :map_todo, ["module-mfa"]}
+
+      sync "/shapes/map-capture", Support.Todo,
+        where: "completed = false",
+        transform: &Phoenix.Sync.RouterTest.map_todo/1
 
       forward "/namespace", to: MyScope
 
@@ -535,6 +617,76 @@ defmodule Phoenix.Sync.RouterTest do
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
                ] = Jason.decode!(resp.resp_body)
       end
+    end
+
+    @tag transform: true
+    test "response mapping", ctx do
+      resp =
+        conn(:get, "/shapes/map-module", %{"offset" => "-1"})
+        |> MyRouter.call(ctx.plug_opts)
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "module-mfa-insert-1-one", "title" => "one"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "module-mfa-insert-2-two", "title" => "two"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "module-mfa-insert-3-three", "title" => "three"}
+               }
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag transform: true
+    test "response mapping with capture", ctx do
+      resp =
+        conn(:get, "/shapes/map-capture", %{"offset" => "-1"})
+        |> MyRouter.call(ctx.plug_opts)
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "capture-insert-1-one", "title" => "one"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "capture-insert-2-two", "title" => "two"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"merged" => "capture-insert-3-three", "title" => "three"}
+               }
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag transform: true
+    test "only &module.fun/1 style captures are accepted" do
+      assert_raise ArgumentError,
+                   ~r/Invalid transform function specification in sync shape definition/,
+                   fn ->
+                     Code.compile_string("""
+                     defmodule InvalidCaptureRouter#{System.unique_integer([:positive, :monotonic])} do
+                       use Plug.Router, copy_opts_to_assign: :options
+                       use Phoenix.Sync.Router
+
+                       plug :match
+                       plug :dispatch
+
+                       sync "/shapes/todos", Support.Todo,
+                         transform: &#{inspect(__MODULE__)}.map_todo(&1, "invalid")
+                     end
+                     """)
+                   end
     end
 
     test "returns CORS headers", ctx do

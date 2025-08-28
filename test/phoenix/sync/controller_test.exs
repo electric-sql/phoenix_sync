@@ -43,6 +43,9 @@ defmodule Phoenix.Sync.ControllerTest do
       get "/complex", TodoController, :complex
       get "/interruptible", TodoController, :interruptible
       get "/interruptible_dynamic", TodoController, :interruptible_dynamic
+      get "/transform", TodoController, :transform
+      get "/transform-capture", TodoController, :transform_capture
+      get "/transform-interruptible", TodoController, :transform_interruptible
     end
   end
 
@@ -183,6 +186,81 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag transform: true
+    test "accepts a map function as a mfa", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/transform", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "one", "merged" => "mapping-insert-1-one"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "two", "merged" => "mapping-insert-2-two"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "three", "merged" => "mapping-insert-3-three"}
+               }
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag transform: true
+    test "accepts a map function as a capture", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/transform-capture", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "one", "merged" => "mapping-insert-1-one"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "two", "merged" => "mapping-insert-2-two"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "three", "merged" => "mapping-insert-3-three"}
+               }
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag transform: true
+    test "works for an interruptible shape", _ctx do
+      agent = start_supervised!({Agent, fn -> [false] end})
+
+      Process.register(agent, :interruptible_dynamic_agent)
+
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/transform-interruptible", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "one", "merged" => "mapping-insert-1-one"}
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"title" => "two", "merged" => "mapping-insert-2-two"}
+               }
              ] = Jason.decode!(resp.resp_body)
     end
   end
