@@ -110,7 +110,7 @@ if Phoenix.Sync.sandbox_enabled?() do
       shape_status_spec =
         {Electric.ShapeCache.ShapeStatus,
          %Electric.ShapeCache.ShapeStatus{
-           shape_meta_table: Electric.ShapeCache.get_shape_meta_table(stack_id: stack_id)
+           shape_meta_table: shape_meta_table(stack_id)
          }}
 
       children = [
@@ -146,6 +146,18 @@ if Phoenix.Sync.sandbox_enabled?() do
       ]
 
       Supervisor.init(children, strategy: :one_for_one)
+    end
+
+    Code.ensure_loaded(Electric.ShapeCache)
+
+    if function_exported?(Electric.ShapeCache, :get_shape_meta_table, 1) do
+      defp shape_meta_table(stack_id) do
+        Electric.ShapeCache.get_shape_meta_table(stack_id: stack_id)
+      end
+    else
+      defp shape_meta_table(stack_id) do
+        Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id)
+      end
     end
   end
 end
