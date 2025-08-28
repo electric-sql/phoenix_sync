@@ -13,7 +13,7 @@ if Phoenix.Sync.sandbox_enabled?() do
     alias Electric.Replication.LogOffset
     alias Electric.Replication.ShapeLogCollector
 
-    @json if(Code.ensure_loaded?(JSON), do: JSON, else: Jason)
+    @json Phoenix.Sync.json_library()
 
     def child_spec(opts) do
       {:ok, stack_id} = Keyword.fetch(opts, :stack_id)

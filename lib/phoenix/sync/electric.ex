@@ -589,6 +589,35 @@ defmodule Phoenix.Sync.Electric do
         |> Plug.Conn.send_resp(response.status, Enum.into(response.body, []))
     end
   end
+
+  @json Phoenix.Sync.json_library()
+
+  @doc false
+  def map_response_body(body, nil) do
+    body
+  end
+
+  def map_response_body(body, mapper) when is_binary(body) and is_function(mapper, 1) do
+    body
+    |> @json.decode!()
+    |> Phoenix.Sync.Electric.map_response_body(mapper)
+    |> then(fn item -> [@json.encode_to_iodata!(item)] end)
+  end
+
+  def map_response_body(msgs, mapper) when is_list(msgs) and is_function(mapper, 1) do
+    msgs
+    |> Enum.flat_map(fn
+      %{"key" => _key, "headers" => _, "value" => _} = msg ->
+        mapper.(msg)
+
+      control ->
+        [control]
+    end)
+  end
+
+  def map_response_body(msgs, _mapper) do
+    msgs
+  end
 end
 
 if Code.ensure_loaded?(Electric.Shapes.Api) do
@@ -596,9 +625,10 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
     alias Electric.Shapes
 
     alias Phoenix.Sync.PredefinedShape
+    alias Phoenix.Sync.Electric.ApiAdapter
 
     def predefined_shape(api, %PredefinedShape{} = shape) do
-      Shapes.Api.predefined_shape(api, PredefinedShape.to_api_params(shape))
+      ApiAdapter.new(api, shape)
     end
 
     def call(api, %{method: "GET"} = conn, params) do

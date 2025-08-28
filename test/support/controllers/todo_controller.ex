@@ -47,4 +47,31 @@ defmodule Phoenix.Sync.LiveViewTest.TodoController do
       )
     end)
   end
+
+  def transform(conn, params) do
+    sync_render(conn, params, Support.Todo, transform: {__MODULE__, :map_todo, ["mapping"]})
+  end
+
+  def transform_capture(conn, params) do
+    sync_render(conn, params, Support.Todo, transform: &map_todo(&1, "mapping"))
+  end
+
+  def transform_interruptible(conn, params) do
+    sync_render(conn, params, fn ->
+      shape_params = Agent.get(:interruptible_dynamic_agent, & &1)
+
+      Phoenix.Sync.shape!(
+        table: "todos",
+        where: "completed = $1",
+        params: shape_params,
+        transform: &map_todo(&1, "mapping")
+      )
+    end)
+  end
+
+  def map_todo(%{"headers" => %{"operation" => op}} = msg, route) do
+    Map.update!(msg, "value", fn value ->
+      Map.put(value, "merged", "#{route}-#{op}-#{value["id"]}-#{value["title"]}")
+    end)
+  end
 end
