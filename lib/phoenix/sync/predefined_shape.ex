@@ -157,6 +157,11 @@ defmodule Phoenix.Sync.PredefinedShape do
   end
 
   @doc false
+  def to_shape(%__MODULE__{} = predefined_shape) do
+    to_shape_definition(predefined_shape)
+  end
+
+  @doc false
   def to_stream_params(%__MODULE__{} = predefined_shape) do
     {to_shape_definition(predefined_shape), predefined_shape.stream_config}
   end

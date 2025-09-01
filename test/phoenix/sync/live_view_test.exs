@@ -34,7 +34,7 @@ defmodule Phoenix.Sync.LiveViewTest do
 
       Client.Mock.async_response(client,
         status: 200,
-        schema: %{id: %{type: "int8"}, name: %{type: "text"}},
+        schema: %{id: %{type: "uuid"}, name: %{type: "text"}},
         last_offset: Client.Offset.first(),
         shape_handle: "users-1",
         body: Client.Mock.transaction(users, operation: :insert)
@@ -121,7 +121,7 @@ defmodule Phoenix.Sync.LiveViewTest do
 
       Client.Mock.async_response(client,
         status: 200,
-        schema: %{id: %{type: "int8"}, name: %{type: "text"}},
+        schema: %{id: %{type: "uuid"}, name: %{type: "text"}},
         last_offset: Client.Offset.first(),
         shape_handle: "users-1",
         body: body
@@ -158,7 +158,7 @@ defmodule Phoenix.Sync.LiveViewTest do
 
       Client.Mock.async_response(client,
         status: 200,
-        schema: %{id: %{type: "int8"}, name: %{type: "text"}},
+        schema: %{id: %{type: "uuid"}, name: %{type: "text"}},
         last_offset: Client.Offset.first(),
         shape_handle: "users-1",
         body: Client.Mock.transaction(users, operation: :insert)
@@ -222,6 +222,70 @@ defmodule Phoenix.Sync.LiveViewTest do
       catch
         :exit, {{error, _stacktrace}, _} ->
           assert %Electric.Client.Error{message: %{"message" => "this is wrong"}} = error
+      end
+    end
+
+    defp add_message_keys(txn) do
+      Enum.map(txn, fn
+        %{"value" => %{"id" => id}} = msg ->
+          Map.put(msg, "key", ~s|"public"."users"/"#{id}"|)
+
+        msg ->
+          msg
+      end)
+    end
+
+    test "allows for keyword-based shapes", %{conn: conn} do
+      {:ok, client} = Client.Mock.new()
+
+      users = [
+        %{id: "6dfea52e-1096-4b62-aafd-838ddd49477d", name: "User 1"},
+        %{id: "9fc8f0a7-42e9-4473-9981-43a1904cd88a", name: "User 2"},
+        %{id: "4252d858-8764-4069-bb8c-e670f899b80a", name: "User 3"}
+      ]
+
+      Client.Mock.async_response(client,
+        status: 200,
+        schema: %{id: %{type: "uuid", pk_position: 0}, name: %{type: "text"}},
+        last_offset: Client.Offset.first(),
+        shape_handle: "users-1",
+        # TODO: update the mock client to add the key by default
+        body: Client.Mock.transaction(users, operation: :insert) |> add_message_keys()
+      )
+
+      conn =
+        conn
+        |> put_private(:electric_client, client)
+        |> put_private(:test_pid, self())
+
+      {:ok, lv, html} = live(conn, "/stream/keyword")
+
+      for %{name: name} <- users do
+        assert html =~ name
+      end
+
+      users2 = [
+        %{id: "53183977-bd54-4171-9697-51e13b0ff7ca", name: "User 4"},
+        %{id: "92d42f40-cf16-4d51-a663-171d9fa1a21a", name: "User 5"},
+        %{id: "04e15019-010e-4aa1-8eb0-33132099d05b", name: "User 6"}
+      ]
+
+      {:ok, _req} =
+        Client.Mock.response(client,
+          status: 200,
+          last_offset: Client.Offset.new(3, 2),
+          shape_handle: "users-1",
+          body: Client.Mock.transaction(users2, lsn: 3, operation: :insert) |> add_message_keys()
+        )
+
+      for _ <- users2 do
+        assert_receive {:sync, _}
+      end
+
+      html = render(lv)
+
+      for %{name: name} <- users ++ users2 do
+        assert html =~ name
       end
     end
   end

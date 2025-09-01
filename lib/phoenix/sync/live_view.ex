@@ -17,12 +17,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:noreply, sync_stream_update(socket, event)}
       end
     end
+
+    See `sync_stream/4` for more details.
     ```
     """
 
     use Phoenix.Component
 
     alias Electric.Client.Message
+    alias Phoenix.Sync.PredefinedShape
 
     require Record
 
@@ -190,6 +193,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
             {:ok, Phoenix.Sync.LiveView.sync_stream(socket, :users, User)}
           end
         end
+
+    ## Keyword-based Shapes
+
+    `Ecto` is not required to use `sync_stream/4`. [Keyword-based
+    shapes](../../../README.md#using-a-keyword-list) are possible but
+    work a little differently.
+
+        def mount(_params, _session, socket) do
+          socket =
+            Phoenix.Sync.LiveView.sync_stream(
+              socket,
+              :admins,
+              table: "users",
+              where: "admin = true"
+            )
+          {:ok, socket}
+        end
+
+    Without an underlying `Ecto.Schema` module to map the stream values, you
+    will receive simple map values with string keys (plus a special
+    `__sync_key__` value used for the live view
+    [`dom_id`](https://hexdocs.pm/phoenix_live_view/Phoenix.LiveView.html#stream_configure/3)
+    function.
+
+    So to use these in your template, you should be careful to use the
+    `value["key"]` syntax to retrieve values. Using a keyword-based shape, The
+    first example above becomes:
+
+          <div phx-update="stream">
+            <div :for={{id, item} <- @streams.items} id={id}>
+              <%= item["value"] %>
+            </div>
+          </div>
+
     """
     @spec sync_stream(
             socket :: Phoenix.LiveView.Socket.t(),
@@ -215,14 +252,45 @@ if Code.ensure_loaded?(Phoenix.Component) do
             end
           end)
 
-        Phoenix.LiveView.stream(
-          socket,
+        socket
+        |> configure_live_stream(name, query)
+        |> Phoenix.LiveView.stream(
           name,
           client_live_stream(client, name, query, component),
           stream_opts
         )
       else
         Phoenix.LiveView.stream(socket, name, [], stream_opts)
+      end
+    end
+
+    defp configure_live_stream(socket, name, query) do
+      if PredefinedShape.is_queryable?(query) do
+        # if the shape is an Ecto.Struct then we can just fallback to the default
+        # dom_id function (which is `value.id`)
+        socket
+      else
+        # since we don't have control over the `mount` callback, but want to use
+        # `stream_configure` correctly which means that the stream should only be
+        # configured once, we do our own tracking of configured streams in the
+        # socket assigns
+        case socket.assigns do
+          %{__sync_stream_config__: %{^name => true}} ->
+            socket
+
+          assigns ->
+            assigns =
+              Map.update(
+                assigns,
+                :__sync_stream_config__,
+                %{name => true},
+                &Map.put(&1, name, true)
+              )
+
+            Phoenix.LiveView.stream_configure(%{socket | assigns: assigns}, name,
+              dom_id: &Map.fetch!(&1, :__sync_key__)
+            )
+        end
       end
     end
 
@@ -277,13 +345,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp client_live_stream(client, name, query, component) do
       pid = self()
 
+      shape =
+        query
+        |> PredefinedShape.new!()
+        |> PredefinedShape.to_shape()
+
       client
-      |> Electric.Client.stream(query, live: false, replica: :full, errors: :stream)
+      |> Electric.Client.stream(shape, live: false, replica: :full, errors: :stream)
+      |> keyed_stream(query)
       |> Stream.transform(
         fn -> {[], nil} end,
         &live_stream_message/2,
-        &update_mode(&1, {client, name, query, pid, component})
+        &update_mode(&1, {client, name, query, shape, pid, component})
       )
+    end
+
+    # when the stream is based off an Ecto.Schema struct then the default id
+    # based dom-id function works. otherwise we can use the message key because
+    # we **know** that is unique for a shape
+    defp keyed_stream(base_stream, query) do
+      if PredefinedShape.is_queryable?(query) do
+        base_stream
+      else
+        Stream.map(base_stream, fn
+          %Message.ChangeMessage{key: key, value: value} = msg ->
+            %{msg | value: Map.put(value, :__sync_key__, sanitise_key(key))}
+
+          msg ->
+            msg
+        end)
+      end
+    end
+
+    defp sanitise_key(key) do
+      key |> String.replace("\"", "") |> String.replace(" ", "%20")
     end
 
     defp live_stream_message(
@@ -313,7 +408,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       raise error
     end
 
-    defp update_mode({updates, resume}, {client, name, query, pid, component}) do
+    defp update_mode({updates, resume}, {client, name, query, shape, pid, component}) do
       # need to send every update as a separate message.
 
       for event <- updates |> Enum.reverse() |> Enum.map(&wrap_msg(&1, name, component)),
@@ -323,7 +418,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       Task.start_link(fn ->
         client
-        |> Electric.Client.stream(query, resume: resume, replica: :full)
+        |> Electric.Client.stream(shape, resume: resume, replica: :full)
+        |> keyed_stream(query)
         |> Stream.each(&send_live_event(&1, pid, name, component))
         |> Stream.run()
       end)
