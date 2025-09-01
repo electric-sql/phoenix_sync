@@ -38,7 +38,7 @@ defmodule Phoenix.Sync.Electric do
   pass the key you configure here (in this case `:config`) to the
   `Phoenix.Sync.Electric` plug in it's `init_opts`.
 
-  In your application, build your Electric confguration using
+  In your application, build your Electric configuration using
   `Phoenix.Sync.plug_opts()` and pass the result to your router as
   `phoenix_sync`:
 
@@ -447,7 +447,7 @@ defmodule Phoenix.Sync.Electric do
   end
 
   # Returns a function to generate the config so that we can
-  # centralise the test for the existance of electric.
+  # centralise the test for the existence of electric.
   # Need this because the convert_repo_config/1 function needs Electric
   # installed too
   defp validate_database_config(_env, mode, opts) do

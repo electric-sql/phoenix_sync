@@ -101,7 +101,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       This event is useful to show the stream component after
       the initial sync. Because of the streaming nature of Electric Shapes, the
-      intitial sync can cause flickering as items are added, removed and updated.
+      initial sync can cause flickering as items are added, removed and updated.
 
       E.g.:
 

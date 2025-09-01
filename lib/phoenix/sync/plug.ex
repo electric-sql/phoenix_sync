@@ -6,7 +6,7 @@ defmodule Phoenix.Sync.Plug do
   Rather than configuring your [Electric Typescript
   client](https://electric-sql.com/docs/api/clients/typescript) directly, you
   instead configure a route in your application with a pre-configured
-  `Electric.Client.ShapeDefinition` and then retreive the URL and other
+  `Electric.Client.ShapeDefinition` and then retrieve the URL and other
   configuration for that shape from your client via a request to your Phoenix
   application.
 
