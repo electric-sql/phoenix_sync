@@ -86,7 +86,7 @@ if Code.ensure_loaded?(Igniter) do
       if mode not in @valid_modes do
         Igniter.add_issue(
           igniter,
-          "mode #{inspect(mode)} is invlid, valid modes are: #{@valid_modes |> Enum.join(", ")}"
+          "mode #{inspect(mode)} is invalid, valid modes are: #{@valid_modes |> Enum.join(", ")}"
         )
       else
         add_dependencies(igniter, mode)

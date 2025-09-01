@@ -42,7 +42,7 @@ defmodule Phoenix.Sync.LiveViewTest.StreamLive do
   end
 
   def handle_info({:sync, event}, socket) do
-    # send messsage to test pid, just for sync
+    # send message to test pid, just for sync
     send(socket.assigns.test_pid, {:sync, event})
     {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end
@@ -240,7 +240,7 @@ defmodule Phoenix.Sync.LiveViewTest.StreamSandbox do
   end
 
   def handle_info({:sync, event}, socket) do
-    # send messsage to test pid, just for sync
+    # send message to test pid, just for sync
     send(socket.assigns.test_pid, {:sync, event})
     {:noreply, Phoenix.Sync.LiveView.sync_stream_update(socket, event)}
   end

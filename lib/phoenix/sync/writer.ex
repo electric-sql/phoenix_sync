@@ -96,7 +96,7 @@ if Code.ensure_loaded?(Ecto) do
     Phoenix already ships with primitives like `Ecto.Multi` and `c:Ecto.Repo.transaction/2`.
     However, `#{inspect(__MODULE__)}` provides:
 
-    - a number of convienience functions that simplify ingesting mutation operations
+    - a number of convenience functions that simplify ingesting mutation operations
     - a high-level pipeline that dries up a lot of common boilerplate and allows you to re-use
       your existing `Plug` and `Ecto.Changeset` logic
 
@@ -113,7 +113,7 @@ if Code.ensure_loaded?(Ecto) do
           |> #{inspect(__MODULE__)}.allow(MyApp.OtherSchema)
           |> #{inspect(__MODULE__)}.apply(transaction, Repo, format: MyApp.MutationFormat)
 
-    Or, instead of `apply/4` you can use seperate calls to `ingest/3` and then `transaction/2`.
+    Or, instead of `apply/4` you can use separate calls to `ingest/3` and then `transaction/2`.
     This allows you to ingest multiple formats, for example:
 
         {:ok, txid} =
@@ -183,7 +183,7 @@ if Code.ensure_loaded?(Ecto) do
     when the transaction syncs through. At which point the client can discard its local
     optimistic state.
 
-    A convinient way of doing this is to parse the request data into a list of
+    A convenient way of doing this is to parse the request data into a list of
     `#{inspect(__MODULE__)}.Operation`s using a `#{inspect(__MODULE__)}.Format`.
     You can then apply the changes yourself by matching on the operation data:
 
@@ -1324,7 +1324,7 @@ if Code.ensure_loaded?(Ecto) do
         {:ok, txid} =
           Repo.transaction(fn ->
             Enum.each(txn.operations, fn operation ->
-              # do something wih the given operation
+              # do something with the given operation
               # raise if something is wrong...
             end)
             # return the transaction id
@@ -1921,7 +1921,7 @@ if Code.ensure_loaded?(Ecto) do
 
     `Ecto.Multi` requires that all operation names be unique within a
     transaction. This function gives you a simple way to generate a name for your
-    own operations that is guarateed not to conflict with any other.
+    own operations that is guaranteed not to conflict with any other.
 
     Example:
 

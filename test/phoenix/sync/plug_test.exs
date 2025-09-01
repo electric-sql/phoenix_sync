@@ -319,7 +319,7 @@ defmodule Phoenix.Sync.PlugTest do
              }
     end
 
-    test "works with Phoenix.Router.forward/3 and paramter based shapes" do
+    test "works with Phoenix.Router.forward/3 and parameter based shapes" do
       resp =
         Phoenix.ConnTest.build_conn()
         |> Phoenix.ConnTest.get("/shape/generic", %{

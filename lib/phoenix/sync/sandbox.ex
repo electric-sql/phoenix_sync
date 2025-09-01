@@ -105,7 +105,7 @@ if Phoenix.Sync.sandbox_enabled?() do
         end
 
     However processes started outside of the test process tree that need to be
-    [explictly granted access to the sandboxed
+    [explicitly granted access to the sandboxed
     connection](https://hexdocs.pm/ecto_sql/Ecto.Adapters.SQL.Sandbox.html#module-allowances)
     will also need to be explicitly registered to the current test's
     replication stream using `#{inspect(__MODULE__)}.allow/3`. This calls
@@ -272,7 +272,7 @@ if Phoenix.Sync.sandbox_enabled?() do
           # we link the sandbox to the current (test) process not the connection
           # owner because that's the ownership route that works. The owner
           # is a convenience to link the repo connection to a process who's lifetime
-          # is explictly managed rather than a mechanism for linking the test
+          # is explicitly managed rather than a mechanism for linking the test
           # to the sandbox txn.
           Sandbox.StackRegistry.register(test_pid, stack_id)
 

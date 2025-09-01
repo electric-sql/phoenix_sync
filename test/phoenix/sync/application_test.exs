@@ -181,7 +181,7 @@ defmodule Phoenix.Sync.ApplicationTest do
         mode: :embedded,
         env: :dev,
         repo: Support.ConfigTestRepo,
-        # don't overwrite this explict config
+        # don't overwrite this explicit config
         storage_dir: storage_dir
       ]
 
@@ -213,7 +213,7 @@ defmodule Phoenix.Sync.ApplicationTest do
              } = Map.new(opts)
     end
 
-    test "embedded mode with explict replication_connection_opts and query_connection_opts" do
+    test "embedded mode with explicit replication_connection_opts and query_connection_opts" do
       storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
 
       config = [
@@ -260,7 +260,7 @@ defmodule Phoenix.Sync.ApplicationTest do
              } = Map.new(opts)
     end
 
-    test "embedded mode with explict connection_opts" do
+    test "embedded mode with explicit connection_opts" do
       storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
 
       config = [

@@ -392,7 +392,7 @@ if Phoenix.Sync.sandbox_enabled?() do
         return_all = Enum.map(all_columns, &{:old, &1}) ++ Enum.map(all_columns, &{:new, &1})
 
         # https://stackoverflow.com/a/7927957
-        # return the old and new values from an update by aquiring an exclusive lock
+        # return the old and new values from an update by acquiring an exclusive lock
         # on the row and using a sub-query.
         # UPDATE table new
         #     SET value = $1
