@@ -331,7 +331,7 @@ defmodule Phoenix.Sync.LiveViewTest do
               <:script :let={configuration} phx-no-curly-interpolation>
                 root.render(React.createElement(MyApp, { client_config: <%= configuration %> }, null))
               </:script>
-            </Phoenix.Sync.LiveView.electric_client_configuration> 
+            </Phoenix.Sync.LiveView.electric_client_configuration>
           </div>
         """)
 
