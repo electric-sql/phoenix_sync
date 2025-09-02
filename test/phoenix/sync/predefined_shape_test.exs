@@ -10,7 +10,7 @@ defmodule Phoenix.Sync.PredefinedShapeTest do
     schema "cows" do
       field :name, :string
       field :age, :integer
-      field :breed, :string
+      field :breed, Ecto.Enum, values: [:holstein, :angus, :hereford, :jersey]
     end
 
     def changeset(data \\ %__MODULE__{}, params) do
@@ -19,9 +19,7 @@ defmodule Phoenix.Sync.PredefinedShapeTest do
       data
       |> cast(params, [:name, :age, :breed])
       |> validate_number(:age, greater_than: 0)
-      |> validate_required([:name])
-      |> update_change(:breed, &String.downcase/1)
-      |> validate_inclusion(:breed, ~w(holstein angus hereford jersey))
+      |> validate_required([:name, :breed])
     end
   end
 
@@ -185,6 +183,35 @@ defmodule Phoenix.Sync.PredefinedShapeTest do
       assert is_function(fun, 1)
 
       assert [:msg] = fun.(:msg)
+    end
+
+    @tag :transform
+    test "ecto schema modules are accepted as a transform argument" do
+      ps =
+        PredefinedShape.new!(
+          Cow,
+          namespace: "test",
+          where: "completed = $1",
+          params: [true],
+          replica: :full,
+          transform: Cow
+        )
+
+      assert fun = PredefinedShape.transform_fun(ps)
+      assert is_function(fun, 1)
+
+      assert [
+               %{
+                 "key" => "key",
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %Cow{name: "Daisy", age: 12, breed: :jersey}
+               }
+             ] =
+               fun.(%{
+                 "key" => "key",
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"name" => "Daisy", "age" => 12, "breed" => "jersey"}
+               })
     end
 
     @tag :transform

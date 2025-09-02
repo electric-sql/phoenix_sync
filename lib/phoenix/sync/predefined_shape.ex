@@ -12,7 +12,7 @@ defmodule Phoenix.Sync.PredefinedShape do
 
   @sync_schema_opts [
     transform: [
-      type: {:or, [:mfa, {:fun, 1}]},
+      type: {:or, [:mfa, {:fun, 1}, :atom]},
       doc: """
       A transform function to apply to each row.
 
@@ -22,7 +22,7 @@ defmodule Phoenix.Sync.PredefinedShape do
       See the documentation of `Phoenix.Sync.Router.sync/2` and
       `Phoenix.Sync.Controller.sync_render/4` for more details on constraints.
       """,
-      type_doc: ~s/`(map() -> [map()]) | mfa()`/
+      type_doc: ~s/`(map() -> [map()]) | mfa() | module()`/
     ]
   ]
 
@@ -219,6 +219,10 @@ defmodule Phoenix.Sync.PredefinedShape do
       {:{}, _, _} = transform_ast ->
         {transform, _binding} = Code.eval_quoted(transform_ast, [], caller)
         transform
+
+      {:__aliases__, _, _} = transform_ast ->
+        {transform, _binding} = Code.eval_quoted(transform_ast, [], caller)
+        transform
     end)
   end
 
@@ -302,15 +306,34 @@ defmodule Phoenix.Sync.PredefinedShape do
   def transform_fun(nil), do: nil
 
   def transform_fun(%__MODULE__{sync_config: sync_config}) do
-    case sync_config[:transform] do
-      {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
-        fn row -> List.wrap(apply(m, f, [row | a])) end
+    transform_fun(sync_config[:transform])
+  end
 
-      fun when is_function(fun, 1) ->
-        fn msg -> List.wrap(fun.(msg)) end
+  def transform_fun({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a) do
+    fn row -> List.wrap(apply(m, f, [row | a])) end
+  end
 
-      nil ->
-        nil
+  def transform_fun(fun) when is_function(fun, 1) do
+    fn msg -> List.wrap(fun.(msg)) end
+  end
+
+  def transform_fun(module) when is_atom(module) do
+    ecto_transform_fun(module)
+  end
+
+  if Code.ensure_loaded?(Ecto) do
+    defp ecto_transform_fun(module) when is_atom(module) do
+      ecto_transform = Electric.Client.EctoAdapter.for_schema(%{}, module)
+      &apply_ecto_transform(&1, ecto_transform)
+    end
+
+    defp apply_ecto_transform(%{"value" => value} = msg, transform_fun) do
+      [Map.put(msg, "value", transform_fun.(value))]
+    end
+  else
+    defp ecto_transform_fun(module) when is_atom(module) do
+      raise ArgumentError,
+        message: "Ecto not available: cannot generate transform function from #{inspect(module)}"
     end
   end
 end

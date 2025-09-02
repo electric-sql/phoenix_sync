@@ -46,6 +46,7 @@ defmodule Phoenix.Sync.ControllerTest do
       get "/transform", TodoController, :transform
       get "/transform-capture", TodoController, :transform_capture
       get "/transform-interruptible", TodoController, :transform_interruptible
+      get "/transform-ecto-schema", TodoController, :transform_organization
     end
   end
 
@@ -57,6 +58,40 @@ defmodule Phoenix.Sync.ControllerTest do
 
   Code.ensure_loaded!(Support.Todo)
   Code.ensure_loaded!(Support.Repo)
+
+  @organizations [
+    table: {
+      "organizations",
+      [
+        "id int8 not null primary key generated always as identity",
+        "name text",
+        "external_id uuid",
+        "address jsonb",
+        "inserted_at timestamp with time zone",
+        "updated_at timestamp with time zone"
+      ]
+    },
+    data: {
+      "organizations",
+      ["name", "external_id", "address", "inserted_at", "updated_at"],
+      [
+        [
+          "one",
+          Ecto.UUID.dump!("dfca7ea8-f0d0-47cf-984d-d170f6b989d3"),
+          %{id: "a8a2cd54-f892-449f-8a1b-1a4a88034bf3", street: "High Street", number: 12},
+          ~U[2025-01-01T12:34:14Z],
+          ~U[2025-01-01T12:34:14Z]
+        ],
+        [
+          "two",
+          Ecto.UUID.dump!("017fad69-0603-4dd5-811f-b4f83f45e7af"),
+          %{id: "82f22f21-8526-4976-84b2-093ab905394d", street: "Market Street", number: 3},
+          ~U[2025-01-02T12:34:14Z],
+          ~U[2025-01-02T12:34:14Z]
+        ]
+      ]
+    }
+  ]
 
   @moduletag table: {
                "todos",
@@ -260,6 +295,50 @@ defmodule Phoenix.Sync.ControllerTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "two", "merged" => "mapping-insert-2-two"}
+               }
+             ] = Jason.decode!(resp.resp_body)
+    end
+
+    @tag @organizations
+    @tag transform: true
+    test "allows for transforming via an ecto schema", _ctx do
+      resp =
+        Phoenix.ConnTest.build_conn()
+        |> Phoenix.ConnTest.get("/todos/transform-ecto-schema", %{offset: "-1"})
+
+      assert resp.status == 200
+      assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{
+                   "external_id" => "org_37fh5khq2bd47gcn2fypnomj2m",
+                   "name" => "one",
+                   "address" => %{
+                     "id" => "a8a2cd54-f892-449f-8a1b-1a4a88034bf3",
+                     "number" => 12,
+                     "street" => "High Street"
+                   },
+                   "id" => 1,
+                   "inserted_at" => "2025-01-01T12:34:14",
+                   "updated_at" => "2025-01-01T12:34:14"
+                 }
+               },
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{
+                   "external_id" => "org_af7222igang5lai7wt4d6rphv4",
+                   "name" => "two",
+                   "address" => %{
+                     "id" => "82f22f21-8526-4976-84b2-093ab905394d",
+                     "number" => 3,
+                     "street" => "Market Street"
+                   },
+                   "id" => 2,
+                   "inserted_at" => "2025-01-02T12:34:14",
+                   "updated_at" => "2025-01-02T12:34:14"
+                 }
                }
              ] = Jason.decode!(resp.resp_body)
     end

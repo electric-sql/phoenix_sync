@@ -573,7 +573,7 @@ defmodule Phoenix.Sync.Electric do
     end
   end
 
-  @json if(Code.ensure_loaded?(JSON), do: JSON, else: Jason)
+  @json if(Code.ensure_loaded?(Jason), do: Jason, else: JSON)
 
   @doc false
   def map_response_body(body, nil) do
