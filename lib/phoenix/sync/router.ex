@@ -23,7 +23,7 @@ defmodule Phoenix.Sync.Router do
 
   ## Plug Integration
 
-  Within your `Plug.Router` module, `use #{__MODULE__}` and then 
+  Within your `Plug.Router` module, `use #{__MODULE__}` and then
   add your `sync` routes:
 
       defmodule MyApp.Plug.Router do
