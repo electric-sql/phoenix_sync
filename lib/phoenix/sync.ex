@@ -332,7 +332,6 @@ defmodule Phoenix.Sync do
           params: [false]
         )
 
-
   ## Transforms
 
   Using the `transform` option it's possible to modify the sync messages before
@@ -389,11 +388,44 @@ defmodule Phoenix.Sync do
   conflicts. Any column values you add that aren't in the backing Postgres
   table will be passed through to the client as-is.
 
-
   When using the raw [`stream/2`](`Phoenix.Sync.Client.stream/2`) function to
   receive a sync stream directly, the `transform` option is unnecessary and
   hence ignored. You should use the functions available in `Enum` and `Stream`
   to perform any data transforms.
+
+  ### Transform via Ecto.Schema
+
+  If you have custom field types in your `Ecto.Schema` module you can set up a
+  transform that passes the raw data from the replication stream through the
+  `Ecto` load machinery to ensure that the sync stream values match the values
+  you would see when using `Ecto` to load data directly from the database.
+
+  To do this pass the `Ecto.Schema` module as the transform function:
+
+      Phoenix.Sync.shape!(
+        MyApp.Todos.Todo,
+        transform: MyApp.Todos.Todo
+      )
+
+  or in a route:
+
+      sync "todos", MyApp.Todos.Todo,
+        transform: MyApp.Todos.Todo
+
+  For this to work you need to implement `Jason.Encoder` for your schema module
+  (or `JSON.Encoder` if you're on Elixir >= 1.18 but if [`Jason`](https://hex.pm/packages/jason) is available
+  then it will be used), e.g.:
+
+      defmodule MyApp.Todos.Todo do
+        use Ecto.Schema
+
+        @derive {Jason.Encoder, except: [:__meta__]}
+
+        schema "todos" do
+          field :title, :string
+          field :completed, :boolean, default: false
+        end
+      end
 
   > #### Effect of `transform` on server load {: .warning}
   >

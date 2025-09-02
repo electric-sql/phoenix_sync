@@ -69,6 +69,10 @@ defmodule Phoenix.Sync.LiveViewTest.TodoController do
     end)
   end
 
+  def transform_organization(conn, params) do
+    sync_render(conn, params, Support.Organization, transform: Support.Organization)
+  end
+
   def map_todo(%{"headers" => %{"operation" => op}} = msg, route) do
     Map.update!(msg, "value", fn value ->
       Map.put(value, "merged", "#{route}-#{op}-#{value["id"]}-#{value["title"]}")
