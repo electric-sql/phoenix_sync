@@ -64,8 +64,14 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDbTest do
     - |      "assets.build": ["compile", "tailwind test", "esbuild test"],
     + |      "assets.setup": ["cmd --cd assets pnpm install --ignore-workspace"],
     + |      "assets.build": [
+    + |        "compile",
     + |        "cmd --cd assets pnpm vite build --config vite.config.js --mode development"
     + |      ],
+    |      "assets.deploy": [
+    - |        "tailwind test --minify",
+    - |        "esbuild test --minify",
+    + |        "cmd --cd assets pnpm vite build --config vite.config.js --mode production",
+
     """)
   end
 
