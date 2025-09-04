@@ -1,5 +1,7 @@
 if Code.ensure_loaded?(Electric.Shapes.Api) do
   defmodule Phoenix.Sync.Electric.ApiAdapter do
+    @moduledoc false
+
     defstruct [:api, :shape]
 
     alias Phoenix.Sync.PredefinedShape
