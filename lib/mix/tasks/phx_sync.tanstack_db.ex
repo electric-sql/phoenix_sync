@@ -64,7 +64,7 @@ if Code.ensure_loaded?(Igniter) do
         schema: [sync_pnpm: :boolean],
         # Default values for the options in the `schema`
         defaults: [
-          sync_pnpm: false
+          sync_pnpm: true
         ],
         # CLI aliases
         aliases: [],
@@ -112,7 +112,7 @@ if Code.ensure_loaded?(Igniter) do
       # but igniter ignores my path here and puts the final file in the location
       # defined by the module name conventions
       |> Igniter.create_new_file(
-        "lib/#{Macro.underscore(web_module)}/controllers/ingest_controller.ex" |> dbg,
+        "lib/#{Macro.underscore(web_module)}/controllers/ingest_controller.ex",
         """
         defmodule #{inspect(Module.concat([web_module, Controllers, IngestController]))} do
           use #{web_module}, :controller
@@ -182,8 +182,11 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp run_assets_setup(igniter) do
-      igniter
-      |> Igniter.add_task("assets.setup")
+      if igniter.assigns[:test_mode?] do
+        igniter
+      else
+        Igniter.add_task(igniter, "assets.setup")
+      end
     end
 
     defp write_layout(igniter) do
@@ -266,14 +269,14 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp configure_package_manager(igniter) do
-      if System.find_executable("pnpm") || Keyword.get(igniter.args.options, :sync_pnpm, false) do
+      if System.find_executable("pnpm") && Keyword.get(igniter.args.options, :sync_pnpm, true) do
         igniter
         |> Igniter.add_notice("Using pnpm as package manager")
         |> Igniter.assign(:package_manager, :pnpm)
       else
         if System.find_executable("npm") do
           igniter
-          |> Igniter.add_notice("Using pnpm as package manager")
+          |> Igniter.add_notice("Using npm as package manager")
           |> Igniter.assign(:package_manager, :npm)
         else
           igniter
@@ -288,7 +291,6 @@ if Code.ensure_loaded?(Igniter) do
         "assets/package.json",
         render_template(igniter, "assets/package.json"),
         fn src ->
-          # FIXME: merge dependencies and scripts
           Rewrite.Source.update(src, :content, fn _content ->
             render_template(igniter, "assets/package.json")
           end)
@@ -298,6 +300,7 @@ if Code.ensure_loaded?(Igniter) do
       |> create_new_file("assets/tsconfig.node.json")
       |> create_new_file("assets/tsconfig.app.json")
       |> create_new_file("assets/tsconfig.json")
+      |> create_or_replace_file("assets/tailwind.config.js")
       |> create_new_file("assets/js/db/auth.ts")
       |> create_new_file("assets/js/db/collections.ts")
       |> create_new_file("assets/js/db/mutations.ts")
@@ -308,6 +311,7 @@ if Code.ensure_loaded?(Igniter) do
       |> create_new_file("assets/js/api.ts")
       |> create_new_file("assets/js/app.tsx")
       |> create_or_replace_file("assets/css/app.css")
+      |> Igniter.rm("assets/js/app.js")
     end
 
     defp create_new_file(igniter, path) do
@@ -330,11 +334,22 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp render_template(igniter, path) when is_binary(path) do
+      template_contents(path, app_name: app_name(igniter) |> to_string())
+    end
+
+    @doc false
+    def template_contents(path, assigns) do
+      template_dir()
+      |> Path.join("#{path}.eex")
+      |> Path.expand(__DIR__)
+      |> EEx.eval_file(assigns: assigns)
+    end
+
+    @doc false
+    def template_dir do
       :phoenix_sync
       |> :code.priv_dir()
-      |> Path.join("igniter/phx_sync.tanstack_db/#{path}.eex")
-      |> Path.expand(__DIR__)
-      |> EEx.eval_file(assigns: [app_name: app_name(igniter) |> to_string()])
+      |> Path.join("igniter/phx_sync.tanstack_db")
     end
 
     defp js_runner(igniter) do
