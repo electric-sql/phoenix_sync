@@ -1,9 +1,9 @@
-defmodule Mix.Tasks.PhxSync.TanstackDbTest do
+defmodule Mix.Tasks.Phx.Sync.TanstackDbTest do
   use ExUnit.Case, async: true
 
   import Igniter.Test
 
-  import Mix.Tasks.PhxSync.TanstackDb, only: [template_dir: 0, template_contents: 2]
+  import Mix.Tasks.Phx.Sync.TanstackDb, only: [template_dir: 0, template_contents: 2]
 
   defp assert_renders_template(igniter, {template_path, render_path}) do
     igniter
@@ -40,7 +40,7 @@ defmodule Mix.Tasks.PhxSync.TanstackDbTest do
 
     igniter =
       phx_test_project()
-      |> Igniter.compose_task("phx_sync.tanstack_db", [])
+      |> Igniter.compose_task("phx.sync.tanstack_db", [])
 
     for template <- templates do
       assert_renders_template(igniter, template)
@@ -50,7 +50,7 @@ defmodule Mix.Tasks.PhxSync.TanstackDbTest do
   test "patches tasks" do
     igniter =
       phx_test_project()
-      |> Igniter.compose_task("phx_sync.tanstack_db", ["--sync-pnpm"])
+      |> Igniter.compose_task("phx.sync.tanstack_db", ["--sync-pnpm"])
 
     assert_has_patch(igniter, "mix.exs", """
     - |      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
@@ -70,7 +70,7 @@ defmodule Mix.Tasks.PhxSync.TanstackDbTest do
   test "configures watchers in dev" do
     igniter =
       phx_test_project()
-      |> Igniter.compose_task("phx_sync.tanstack_db", ["--sync-pnpm"])
+      |> Igniter.compose_task("phx.sync.tanstack_db", ["--sync-pnpm"])
 
     assert_has_patch(igniter, "config/dev.exs", """
     - |    esbuild: {Esbuild, :install_and_run, [:test, ~w(--sourcemap=inline --watch)]},
@@ -91,7 +91,7 @@ defmodule Mix.Tasks.PhxSync.TanstackDbTest do
   test "uses npm if told" do
     igniter =
       phx_test_project()
-      |> Igniter.compose_task("phx_sync.tanstack_db", ["--no-sync-pnpm"])
+      |> Igniter.compose_task("phx.sync.tanstack_db", ["--no-sync-pnpm"])
 
     assert_has_patch(igniter, "config/dev.exs", """
     - |    esbuild: {Esbuild, :install_and_run, [:test, ~w(--sourcemap=inline --watch)]},
@@ -112,7 +112,7 @@ defmodule Mix.Tasks.PhxSync.TanstackDbTest do
   test "removes app.js" do
     igniter =
       phx_test_project()
-      |> Igniter.compose_task("phx_sync.tanstack_db", ["--sync-pnpm"])
+      |> Igniter.compose_task("phx.sync.tanstack_db", ["--sync-pnpm"])
 
     assert_rms(igniter, ["assets/js/app.js"])
   end
