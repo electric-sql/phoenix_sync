@@ -1,4 +1,6 @@
 {
+  "name": "<%= @app_name %>",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build --mode development",
@@ -16,12 +18,10 @@
     "phoenix_html": "file:../deps/phoenix_html",
     "phoenix_live_view": "file:../deps/phoenix_live_view",
     "@electric-sql/client": "^1.0.9",
-    "@tanstack/db": "^0.1.11",
     "@tanstack/electric-db-collection": "^0.1.12",
     "@tanstack/react-db": "^0.1.11",
     "@tanstack/react-router": "^1.131.35",
     "@tanstack/react-router-devtools": "^1.131.35",
-    "axios": "^1.11.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "react-json-view-lite": "^2.4.2",
@@ -38,7 +38,7 @@
     "@typescript-eslint/eslint-plugin": "^7.2.0",
     "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react": "^4.4.1",
-    "eslint": "^9.34.0",
+    "eslint": "^8.56.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react-hooks": "^5.2.0",
