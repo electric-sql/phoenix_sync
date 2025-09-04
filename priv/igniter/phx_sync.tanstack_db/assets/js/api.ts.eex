@@ -9,7 +9,7 @@ type IngestPayload = {
   mutations: Omit<PendingMutation, "collection">[];
 };
 
-const authHeaders = (): { authorization: string } | {} => {
+const authHeaders = (): { authorization?: string } => {
   const auth = authCollection.get("current");
 
   return auth !== undefined ? { authorization: `Bearer ${auth.user_id}` } : {};
