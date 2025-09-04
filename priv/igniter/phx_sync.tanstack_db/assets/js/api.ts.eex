@@ -1,64 +1,67 @@
-import axios, { AxiosError } from 'axios'
-import type { PendingMutation } from '@tanstack/react-db'
+import type { PendingMutation } from "@tanstack/react-db";
 
-import { authCollection } from './db/collections'
-import type { User } from './db/schema'
+import { authCollection } from "./db/collections";
+import type { User } from "./db/schema";
 
-type SignInResult = Pick<User, 'id' | 'name'>
+type SignInResult = Pick<User, "id" | "name">;
 
 type IngestPayload = {
-  mutations: Omit<PendingMutation, 'collection'>[]
-}
+  mutations: Omit<PendingMutation, "collection">[];
+};
 
-const authHeaders = () => {
-  const auth = authCollection.get('current')
+const authHeaders = (): { authorization: string } | {} => {
+  const auth = authCollection.get("current");
 
-  return auth !== undefined ? { Authorization: `Bearer ${auth.user_id}` } : {}
-}
+  return auth !== undefined ? { authorization: `Bearer ${auth.user_id}` } : {};
+};
+
+const reqHeaders = () => {
+  return {
+    "content-type": "application/json",
+    accept: "application/json",
+    ...authHeaders(),
+  };
+};
 
 export async function signIn(
   username: string,
-  avatarUrl: string | undefined
+  avatarUrl: string | undefined,
 ): Promise<string | undefined> {
   const data = {
     avatar_url: avatarUrl !== undefined ? avatarUrl : null,
     username,
-  }
-  const headers = authHeaders()
+  };
+  const headers = reqHeaders();
 
-  try {
-    const response = await axios.post('/auth/sign-in', data, { headers })
-    const { id: user_id }: SignInResult = response.data
+  const response = await fetch("/auth/sign-in", {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers,
+  });
 
-    return user_id
-  } catch (err: unknown) {
-    if (err instanceof AxiosError) {
-      return
-    }
-
-    throw err
+  if (response.ok) {
+    const { id: user_id }: SignInResult = await response.json();
+    return user_id;
   }
 }
 
 export async function ingest(
-  payload: IngestPayload
+  payload: IngestPayload,
 ): Promise<number | undefined> {
-  const headers = authHeaders()
+  const headers = reqHeaders();
 
-  try {
-    const response = await axios.post('/ingest/mutations', payload, { headers })
+  const response = await fetch("/ingest/mutations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers,
+  });
 
-    // Phoenix sync should return txid as a number but older versions used a string.
-    // So handle either, making sure we treat it internally as a number.
-    const txid = response.data.txid as string | number
-    const txidInt = typeof txid === 'string' ? parseInt(txid, 10) : txid
+  if (response.ok) {
+    const data = await response.json();
+    const txid = data.txid as string | number;
+    const txidInt = typeof txid === "string" ? parseInt(txid, 10) : txid;
 
-    return txidInt
-  } catch (err: unknown) {
-    if (err instanceof AxiosError) {
-      return
-    }
-
-    throw err
+    return txidInt;
   }
 }
+
