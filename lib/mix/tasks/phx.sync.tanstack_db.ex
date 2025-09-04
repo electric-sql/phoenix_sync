@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.PhxSync.TanstackDb.Docs do
+defmodule Mix.Tasks.Phx.Sync.TanstackDb.Docs do
   @moduledoc false
 
   @spec short_doc() :: String.t()
@@ -32,7 +32,7 @@ defmodule Mix.Tasks.PhxSync.TanstackDb.Docs do
 end
 
 if Code.ensure_loaded?(Igniter) do
-  defmodule Mix.Tasks.PhxSync.TanstackDb do
+  defmodule Mix.Tasks.Phx.Sync.TanstackDb do
     import Igniter.Project.Application, only: [app_name: 1]
 
     @shortdoc "#{__MODULE__.Docs.short_doc()}"
@@ -349,7 +349,7 @@ if Code.ensure_loaded?(Igniter) do
     def template_dir do
       :phoenix_sync
       |> :code.priv_dir()
-      |> Path.join("igniter/phx_sync.tanstack_db")
+      |> Path.join("igniter/phx.sync.tanstack_db")
     end
 
     defp js_runner(igniter) do
@@ -364,7 +364,7 @@ if Code.ensure_loaded?(Igniter) do
     end
   end
 else
-  defmodule Mix.Tasks.PhxSync.TanstackDb do
+  defmodule Mix.Tasks.Phx.Sync.TanstackDb do
     @shortdoc "#{__MODULE__.Docs.short_doc()} | Install `igniter` to use"
 
     @moduledoc __MODULE__.Docs.long_doc()
