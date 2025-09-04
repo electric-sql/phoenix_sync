@@ -16,11 +16,10 @@ defmodule Phoenix.Sync.PredefinedShape do
       doc: """
       A transform function to apply to each row.
 
-      This can be either a MFA tuple (`{Module, :my_fun, [arg1, ...]}`) or a `&Mod.fun/1` capture
-      (depending on use).
+      This can be either a MFA tuple (`{MyModule, :my_fun, [arg1, ...]}`), a
+      `&MyModule.fun/1` capture or an `Ecto.Schema` module (depending on use).
 
-      See the documentation of `Phoenix.Sync.Router.sync/2` and
-      `Phoenix.Sync.Controller.sync_render/4` for more details on constraints.
+      See the documentation of `Phoenix.Sync.shape!/2` for more details.
       """,
       type_doc: ~s/`(map() -> [map()]) | mfa() | module()`/
     ]
