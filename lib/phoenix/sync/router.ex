@@ -23,7 +23,7 @@ defmodule Phoenix.Sync.Router do
 
   ## Plug Integration
 
-  Within your `Plug.Router` module, `use #{__MODULE__}` and then 
+  Within your `Plug.Router` module, `use #{__MODULE__}` and then
   add your `sync` routes:
 
       defmodule MyApp.Plug.Router do
@@ -42,6 +42,29 @@ defmodule Phoenix.Sync.Router do
   You **must** use the `copy_opts_to_assign` option in `Plug.Router` in order
   for the `sync` macro to get the configuration defined in your
   `application.ex` [`start/2`](`c:Application.start/2`) callback.
+
+  ## Transforms
+
+  You can add a `transform` function to your shapes as explained in
+  [`Phoenix.Sync.shape/2`](`Phoenix.Sync#shape!/2-transforms`) but, because `sync/2` and `sync/3` are
+  macros, you need to use the `{module, function, args}` form when declaring
+  the `transform` function.
+
+        defmodule MyApp.Router do
+          use Plug.Router, copy_opts_to_assign: :options
+
+          # ...
+
+          sync "/shapes/pending-todos", MyApp.Todos.Todo,
+            where: "completed = false",
+            transform: {MyApp.Router, :transform_todo, ["[PENDING]"]}
+
+          def transform_todo(msg, prefix) do
+            Map.update!(msg, "values", fn todo ->
+              Map.put(todo, "title", prefix <> " " <> todo["title"])
+            end)
+          end
+        end
   """
 
   import Phoenix.Sync.Plug.Utils
@@ -94,12 +117,12 @@ defmodule Phoenix.Sync.Router do
   more details on keyword-based shapes.
   """
   defmacro sync(path, opts) when is_list(opts) do
-    route(env!(__CALLER__), path, build_definition(__CALLER__, opts))
+    route(env!(__CALLER__), path, define_shape(opts, [], __CALLER__))
   end
 
   # e.g. shape "/path", Ecto.Query.from(t in MyTable)
   defmacro sync(path, queryable) when is_tuple(queryable) do
-    route(env!(__CALLER__), path, build_shape_from_query(queryable, __CALLER__, []))
+    route(env!(__CALLER__), path, define_shape(queryable, [], __CALLER__))
   end
 
   @doc """
@@ -112,82 +135,43 @@ defmodule Phoenix.Sync.Router do
   """
   # e.g. shape "/path", Ecto.Query.from(t in MyTable), replica: :full
   defmacro sync(path, queryable, opts) when is_tuple(queryable) and is_list(opts) do
-    route(env!(__CALLER__), path, build_shape_from_query(queryable, __CALLER__, opts))
+    route(
+      env!(__CALLER__),
+      path,
+      define_shape(queryable, opts, __CALLER__)
+    )
   end
 
   defp route(:plug, path, definition) do
-    quote do
-      Plug.Router.match(unquote(path),
+    quote bind_quoted: [path: path, shape: Macro.escape(definition)] do
+      Plug.Router.match(path,
         via: :get,
         to: Phoenix.Sync.Router.Shape,
         init_opts: %{
-          shape: unquote(Macro.escape(definition)),
-          plug_opts_assign: @plug_assign_opts
+          plug_opts_assign: @plug_assign_opts,
+          shape: shape
         }
       )
     end
   end
 
   defp route(:phoenix, path, definition) do
-    quote do
+    quote bind_quoted: [path: path, shape: Macro.escape(definition)] do
       Phoenix.Router.match(
         :get,
-        unquote(path),
+        path,
         Phoenix.Sync.Router.Shape,
-        %{shape: unquote(Macro.escape(definition))},
+        %{shape: shape},
         alias: false
       )
     end
   end
 
-  defp build_definition(caller, opts) when is_list(opts) do
-    case Keyword.fetch(opts, :query) do
-      {:ok, queryable} ->
-        build_shape_from_query(queryable, caller, opts)
-
-      :error ->
-        define_shape(caller, opts)
-    end
-  end
-
-  defp build_shape_from_query(queryable, caller, opts) do
-    case Macro.expand_literals(queryable, %{caller | function: {:sync, 4}}) do
-      schema when is_atom(schema) ->
-        {storage, _binding} = Code.eval_quoted(opts[:storage], [], caller)
-
-        Phoenix.Sync.PredefinedShape.new!(
-          schema,
-          Keyword.merge(opts, storage: storage)
-        )
-
-      query when is_tuple(query) ->
-        raise ArgumentError,
-          message:
-            "Router shape configuration only accepts a Ecto.Schema module as a query. For Ecto.Query support please use `Phoenix.Sync.Controller.sync_render/3`"
-    end
-  end
-
-  defp define_shape(caller, opts) do
-    relation = build_relation(opts)
-
-    {storage, _binding} = Code.eval_quoted(opts[:storage], [], caller)
-
-    Phoenix.Sync.PredefinedShape.new!(Keyword.merge(opts, relation), storage: storage)
-  end
-
-  defp build_relation(opts) do
-    case Keyword.fetch(opts, :table) do
-      {:ok, table} ->
-        [table: table]
-
-      :error ->
-        raise ArgumentError, message: "Cannot build shape: no :table specified."
-    end
-    |> add_namespace(opts)
-  end
-
-  defp add_namespace(table, opts) do
-    Keyword.merge(table, Keyword.take(opts, [:namespace]))
+  defp define_shape(shape, opts, caller) do
+    Phoenix.Sync.PredefinedShape.new_macro!(shape, opts, caller,
+      context: env!(caller),
+      function: {:sync, 3}
+    )
   end
 
   defmodule Shape do
