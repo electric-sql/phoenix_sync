@@ -21,6 +21,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
+    "paths": {
+      "*": ["../deps/*"]
+    },
   },
   "include": ["js"]
 }

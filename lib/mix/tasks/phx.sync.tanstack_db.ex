@@ -277,8 +277,7 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp configure_package_manager(igniter) do
-      if System.find_executable("pnpm") |> dbg &&
-           Keyword.get(igniter.args.options, :sync_pnpm, true) do
+      if System.find_executable("pnpm") && Keyword.get(igniter.args.options, :sync_pnpm, true) do
         igniter
         |> Igniter.add_notice("Using pnpm as package manager")
         |> Igniter.assign(:package_manager, :pnpm)
@@ -308,7 +307,7 @@ if Code.ensure_loaded?(Igniter) do
       |> create_new_file("assets/vite.config.ts")
       |> create_new_file("assets/tsconfig.node.json")
       |> create_new_file("assets/tsconfig.app.json")
-      |> create_new_file("assets/tsconfig.json")
+      |> create_or_replace_file("assets/tsconfig.json")
       |> create_or_replace_file("assets/tailwind.config.js")
       |> create_new_file("assets/js/db/auth.ts")
       |> create_new_file("assets/js/db/collections.ts")
