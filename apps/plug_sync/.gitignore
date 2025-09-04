@@ -21,3 +21,5 @@ plug_sync-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+/persistent/
