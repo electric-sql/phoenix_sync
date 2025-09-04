@@ -108,4 +108,12 @@ defmodule Mix.Tasks.PhxSync.TanstackDbTest do
     + |    ]
     """)
   end
+
+  test "removes app.js" do
+    igniter =
+      phx_test_project()
+      |> Igniter.compose_task("phx_sync.tanstack_db", ["--sync-pnpm"])
+
+    assert_rms(igniter, ["assets/js/app.js"])
+  end
 end
