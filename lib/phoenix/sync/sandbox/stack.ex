@@ -81,13 +81,21 @@ if Phoenix.Sync.sandbox_enabled?() do
 
       registry = :"#{__MODULE__}.Registry-#{stack_id}"
 
+      storage = {
+        Electric.ShapeCache.InMemoryStorage,
+        %{stack_id: stack_id, table_base_name: :"#{stack_id}"}
+      }
+
       [
         purge_all_shapes?: false,
         stack_id: stack_id,
-        storage: {
-          Electric.ShapeCache.InMemoryStorage,
-          %{stack_id: stack_id, table_base_name: :"#{stack_id}"}
-        },
+        storage: storage,
+        shape_status:
+          {Electric.ShapeCache.ShapeStatus,
+           Electric.ShapeCache.ShapeStatus.opts(
+             shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id),
+             storage: storage
+           )},
         inspector: inspector,
         publication_manager: publication_manager_spec,
         chunk_bytes_threshold: 10_485_760,
@@ -101,17 +109,15 @@ if Phoenix.Sync.sandbox_enabled?() do
     end
 
     def init({stack_id, repo, owner}) do
-      # shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
-
       config = config(stack_id, repo, owner)
       shape_cache_spec = {Electric.ShapeCache, config}
       persistent_kv = Electric.PersistentKV.Memory.new!()
 
-      shape_status_spec =
-        {Electric.ShapeCache.ShapeStatus,
-         %Electric.ShapeCache.ShapeStatus{
-           shape_meta_table: shape_meta_table(stack_id)
-         }}
+      shape_status_owner_spec =
+        {Electric.ShapeCache.ShapeStatusOwner,
+         [stack_id: stack_id, shape_status: config[:shape_status]]}
+
+      consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
       children = [
         {Registry, keys: :duplicate, name: config[:registry]},
@@ -120,7 +126,7 @@ if Phoenix.Sync.sandbox_enabled?() do
         {Electric.Shapes.Monitor,
          stack_id: stack_id,
          storage: config[:storage],
-         shape_status: shape_status_spec,
+         shape_status: config[:shape_status],
          publication_manager: config[:publication_manager]},
         # TODO: start an electric stack, decoupled from the db connection
         #       with in memory storage, a mock publication_manager and inspector
@@ -128,8 +134,10 @@ if Phoenix.Sync.sandbox_enabled?() do
           {
             Electric.Replication.Supervisor,
             stack_id: stack_id,
+            shape_status_owner: shape_status_owner_spec,
             shape_cache: shape_cache_spec,
             publication_manager: config[:publication_manager],
+            consumer_supervisor: consumer_supervisor_spec,
             log_collector: {
               Electric.Replication.ShapeLogCollector,
               stack_id: stack_id, inspector: config[:inspector], persistent_kv: persistent_kv
@@ -146,18 +154,6 @@ if Phoenix.Sync.sandbox_enabled?() do
       ]
 
       Supervisor.init(children, strategy: :one_for_one)
-    end
-
-    Code.ensure_loaded(Electric.ShapeCache)
-
-    if function_exported?(Electric.ShapeCache, :get_shape_meta_table, 1) do
-      defp shape_meta_table(stack_id) do
-        Electric.ShapeCache.get_shape_meta_table(stack_id: stack_id)
-      end
-    else
-      defp shape_meta_table(stack_id) do
-        Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id)
-      end
     end
   end
 end
