@@ -75,10 +75,6 @@ if Code.ensure_loaded?(Igniter) do
 
     @impl Igniter.Mix.Task
     def igniter(igniter) do
-      # controller endpoints
-      # - ingest
-      # - auth
-      #
       igniter
       |> configure_package_manager()
       |> install_assets()
