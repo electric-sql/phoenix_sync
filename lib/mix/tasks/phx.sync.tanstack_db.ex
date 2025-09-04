@@ -3,12 +3,12 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDb.Docs do
 
   @spec short_doc() :: String.t()
   def short_doc do
-    "A short description of your task"
+    "Convert a Phoenix application to a Tanstack DB based frontend"
   end
 
   @spec example() :: String.t()
   def example do
-    "mix phx_sync.tanstack_db"
+    "mix phx.sync.tanstack_db"
   end
 
   @spec long_doc() :: String.t()
@@ -16,17 +16,39 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDb.Docs do
     """
     #{short_doc()}
 
-    Longer explanation of your task
+    This is a very invasive task that does the following:
+
+    - Removes `esbuild` with `vite` and removes the Elixir integration with
+      tailwindcss
+
+    - Adds a `package.json` with the required dependencies for `@tanstack/db`,
+      `@tanstack/router`, `react` and `tailwind`
+
+    - Drops in some example routes, schemas, collections and mutation code
+
+    - Replaces the default `root.html.heex` layout to one suitable for a
+      react-based SPA
+
+    For this reason we recommend only running this on a fresh Phoenix project
+    (with `Phoenix.Sync` installed).
 
     ## Example
 
     ```sh
+    # install igniter.new
+    mix archive.install hex igniter_new
+
+    # create a new phoenix application and install phoenix_sync in `embedded` mode
+    mix igniter.new my_app --install phoehix_sync --with phx.new --sync-mode embedded
+
+    # setup my_app to use tanstack db
     #{example()}
     ```
 
     ## Options
 
-    * `--example-option` or `-e` - Docs for your option
+    * `--sync-pnpm` - Use `pnpm` as package manager if available (default)
+    * `--no-sync-pnpm` - Use `npm` as package manager even if `pnpm` is installed
     """
   end
 end
@@ -44,31 +66,17 @@ if Code.ensure_loaded?(Igniter) do
     @impl Igniter.Mix.Task
     def info(_argv, _composing_task) do
       %Igniter.Mix.Task.Info{
-        # Groups allow for overlapping arguments for tasks by the same author
-        # See the generators guide for more.
         group: :phoenix_sync,
-        # *other* dependencies to add
-        # i.e `{:foo, "~> 2.0"}`
         adds_deps: [],
-        # *other* dependencies to add and call their associated installers, if they exist
-        # i.e `{:foo, "~> 2.0"}`
         installs: [],
-        # An example invocation
         example: __MODULE__.Docs.example(),
-        # a list of positional arguments, i.e `[:file]`
         positional: [],
-        # Other tasks your task composes using `Igniter.compose_task`, passing in the CLI argv
-        # This ensures your option schema includes options from nested tasks
         composes: [],
-        # `OptionParser` schema
         schema: [sync_pnpm: :boolean],
-        # Default values for the options in the `schema`
         defaults: [
           sync_pnpm: true
         ],
-        # CLI aliases
         aliases: [],
-        # A list of options in the schema that are required
         required: []
       }
     end
