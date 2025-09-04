@@ -223,7 +223,10 @@ if Code.ensure_loaded?(Igniter) do
       )
       |> set_alias(
         "assets.build",
-        "cmd --cd assets #{js_runner(igniter)} vite build --config vite.config.js --mode development"
+        [
+          "compile",
+          "cmd --cd assets #{js_runner(igniter)} vite build --config vite.config.js --mode development"
+        ]
       )
       |> set_alias(
         "assets.deploy",
