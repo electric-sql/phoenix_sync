@@ -572,6 +572,23 @@ defmodule Phoenix.Sync.Electric do
       )
     end
   end
+
+  @doc false
+  def api_predefined_shape(conn, api, shape, response_fun) when is_function(response_fun, 2) do
+    case Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, shape) do
+      {:ok, shape_api} ->
+        # response_fun should return conn
+        response_fun.(conn, shape_api)
+
+      # Only the embedded api will ever return an error from predefined_shape/2
+      # when the stack isn't ready (or the params are invalid, e.g. bad table).
+      # The client adapter just configures the client with the shape
+      # parameters, which can't error.
+      {:error, response} ->
+        conn
+        |> Plug.Conn.send_resp(response.status, Enum.into(response.body, []))
+    end
+  end
 end
 
 if Code.ensure_loaded?(Electric.Shapes.Api) do

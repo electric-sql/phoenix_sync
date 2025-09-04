@@ -231,57 +231,57 @@ defmodule Phoenix.Sync.Controller do
   end
 
   defp sync_render_call(conn, api, params, predefined_shape) do
-    {:ok, shape_api} = Phoenix.Sync.Adapter.PlugApi.predefined_shape(api, predefined_shape)
-
-    Phoenix.Sync.Adapter.PlugApi.call(shape_api, CORS.call(conn), params)
+    Phoenix.Sync.Electric.api_predefined_shape(conn, api, predefined_shape, fn conn, shape_api ->
+      Phoenix.Sync.Adapter.PlugApi.call(shape_api, CORS.call(conn), params)
+    end)
   end
 
   defp interruptible_call(conn, api, params, shape_fun) do
     predefined_shape = call_shape_fun(shape_fun)
 
-    {:ok, shape_api} = Adapter.PlugApi.predefined_shape(api, predefined_shape)
+    Phoenix.Sync.Electric.api_predefined_shape(conn, api, predefined_shape, fn conn, shape_api ->
+      {:ok, key} = ShapeRequestRegistry.register_shape(predefined_shape)
 
-    {:ok, key} = ShapeRequestRegistry.register_shape(predefined_shape)
+      try do
+        parent = self()
+        start_time = now()
 
-    try do
-      parent = self()
-      start_time = now()
+        {:ok, pid} =
+          Task.start_link(fn ->
+            send(parent, {:response, self(), Adapter.PlugApi.call(shape_api, conn, params)})
+          end)
 
-      {:ok, pid} =
-        Task.start_link(fn ->
-          send(parent, {:response, self(), Adapter.PlugApi.call(shape_api, conn, params)})
-        end)
+        ref = Process.monitor(pid)
 
-      ref = Process.monitor(pid)
+        receive do
+          {:interrupt_shape, ^key, :server_interrupt} ->
+            Process.demonitor(ref, [:flush])
+            Process.unlink(pid)
+            Process.exit(pid, :kill)
+            # immediately retry the same request -- if the shape_fun returns a
+            # different shape the client will receive a must-refetch response but
+            # if the shape is the same then the request will continue with no
+            # interruption.
+            #
+            # if possible adjust the long poll timeout to account for the time
+            # already spent before the interrupt.
 
-      receive do
-        {:interrupt_shape, ^key, :server_interrupt} ->
-          Process.demonitor(ref, [:flush])
-          Process.unlink(pid)
-          Process.exit(pid, :kill)
-          # immediately retry the same request -- if the shape_fun returns a
-          # different shape the client will receive a must-refetch response but
-          # if the shape is the same then the request will continue with no
-          # interruption.
-          #
-          # if possible adjust the long poll timeout to account for the time
-          # already spent before the interrupt.
+            api = reduce_long_poll_timeout(api, start_time)
 
-          api = reduce_long_poll_timeout(api, start_time)
+            interruptible_call(conn, api, params, shape_fun)
 
-          interruptible_call(conn, api, params, shape_fun)
+          {:response, ^pid, conn} ->
+            Process.demonitor(ref, [:flush])
 
-        {:response, ^pid, conn} ->
-          Process.demonitor(ref, [:flush])
+            conn
 
-          conn
-
-        {:DOWN, ^ref, :process, _pid, reason} ->
-          Plug.Conn.send_resp(conn, 500, inspect(reason))
+          {:DOWN, ^ref, :process, _pid, reason} ->
+            Plug.Conn.send_resp(conn, 500, inspect(reason))
+        end
+      after
+        ShapeRequestRegistry.unregister_shape(key)
       end
-    after
-      ShapeRequestRegistry.unregister_shape(key)
-    end
+    end)
   end
 
   defp interruptible_call?(params) do
