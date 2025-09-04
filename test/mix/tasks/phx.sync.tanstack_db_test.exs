@@ -42,6 +42,8 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDbTest do
       phx_test_project()
       |> Igniter.compose_task("phx.sync.tanstack_db", [])
 
+    assert [] == igniter.warnings
+
     for template <- templates do
       assert_renders_template(igniter, template)
     end
