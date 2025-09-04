@@ -277,7 +277,8 @@ if Code.ensure_loaded?(Igniter) do
     end
 
     defp configure_package_manager(igniter) do
-      if System.find_executable("pnpm") && Keyword.get(igniter.args.options, :sync_pnpm, true) do
+      if System.find_executable("pnpm") |> dbg &&
+           Keyword.get(igniter.args.options, :sync_pnpm, true) do
         igniter
         |> Igniter.add_notice("Using pnpm as package manager")
         |> Igniter.assign(:package_manager, :pnpm)
