@@ -55,13 +55,13 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDbTest do
       |> Igniter.compose_task("phx.sync.tanstack_db", ["--sync-pnpm"])
 
     assert_has_patch(igniter, "mix.exs", """
-    - |      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
-    - |      {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},
+    - |      {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
+    - |      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
     """)
 
     assert_has_patch(igniter, "mix.exs", """
     - |      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-    - |      "assets.build": ["tailwind test", "esbuild test"],
+    - |      "assets.build": ["compile", "tailwind test", "esbuild test"],
     + |      "assets.setup": ["cmd --cd assets pnpm install --ignore-workspace"],
     + |      "assets.build": [
     + |        "cmd --cd assets pnpm vite build --config vite.config.js --mode development"

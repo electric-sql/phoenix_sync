@@ -19,6 +19,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
+    "paths": {
+      "*": ["../deps/*"]
+    },
   },
   "include": ["vite.config.ts"]
 }
