@@ -51,6 +51,8 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     defp live?(live), do: live == "true"
 
     defp fetch_upstream(sync_client, conn, request) do
+      request = put_request_headers(request, conn)
+
       response =
         case Client.Fetch.request(sync_client.client, request) do
           %Client.Fetch.Response{} = response -> response
@@ -58,11 +60,18 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         end
 
       conn
-      |> put_headers(response.headers)
+      |> put_conn_headers(response.headers)
       |> Plug.Conn.send_resp(response.status, response.body)
     end
 
-    defp put_headers(conn, headers) do
+    defp put_request_headers(request, conn) do
+      conn.req_headers
+      |> Enum.into(%{})
+      |> Map.merge(request.headers)
+      |> then(&Map.put(request, :headers, &1))
+    end
+
+    defp put_conn_headers(conn, headers) do
       headers
       |> Map.delete("transfer-encoding")
       |> Enum.reduce(conn, fn {header, values}, conn ->
