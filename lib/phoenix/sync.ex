@@ -348,16 +348,19 @@ defmodule Phoenix.Sync do
   transform the messages to a limited extent as required by the application.
 
   The `transform` process is effectively a `Stream.flat_map/2` operation over
-  the sync messages, so if you want to perform some kind of additional
-  filtering operation to remove messages, e.g. based on some authorization logic,
-  then you can simply return an empty list:
+  the sync messages, so if you want to use pattern matching to perform some
+  kind of additional filtering operation to remove messages, e.g. based on some
+  authorization logic, then you can simply return an empty list:
 
         # don't send delete messages to the client
         def transform(%{"headers" => %{"operation" => "delete"}}), do: []
         def transform(message), do: [message]
 
-  Be aware that removing messages from the stream will break consistency with
-  the state of the database, so should be done with care.
+  Removing messages from the stream can be useful for cases where you want to
+  perform additional runtime filtering for authorization reasons that you're
+  not able to do at the database level. Be aware that this can impact
+  consistency of the client state so is an advanced feature that should be used
+  with care.
 
   The messages passed to the transform function are of the form:
 
