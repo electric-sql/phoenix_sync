@@ -13,8 +13,7 @@ defmodule PlugSync.Router do
 
   def map_item(item) do
     [
-      Map.update!(item, "value", &Map.update!(&1, "name", fn name -> "#{name} mapped 1" end)),
-      Map.update!(item, "value", &Map.update!(&1, "name", fn name -> "#{name} mapped 2" end))
+      Map.update!(item, "value", &Map.update!(&1, "name", fn name -> "#{name} mapped #{&1["id"]}" end)),
     ]
   end
 end
