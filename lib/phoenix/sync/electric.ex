@@ -597,6 +597,11 @@ defmodule Phoenix.Sync.Electric do
     body
   end
 
+  # empty body is a valid response but not valid JSON
+  def map_response_body("", _mapper) do
+    ""
+  end
+
   def map_response_body(body, mapper) when is_binary(body) and is_function(mapper, 1) do
     body
     |> @json.decode!()

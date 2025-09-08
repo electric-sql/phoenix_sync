@@ -58,7 +58,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         end
 
       body =
-        if response.status in 200..299 do
+        if response.status == 200 do
           Phoenix.Sync.Electric.map_response_body(
             response.body,
             PredefinedShape.transform_fun(shape)
