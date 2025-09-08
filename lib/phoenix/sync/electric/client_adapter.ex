@@ -58,10 +58,14 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         end
 
       body =
-        Phoenix.Sync.Electric.map_response_body(
-          response.body,
-          PredefinedShape.transform_fun(shape)
-        )
+        if response.status in 200..299 do
+          Phoenix.Sync.Electric.map_response_body(
+            response.body,
+            PredefinedShape.transform_fun(shape)
+          )
+        else
+          response.body
+        end
 
       conn
       |> put_headers(response.headers)

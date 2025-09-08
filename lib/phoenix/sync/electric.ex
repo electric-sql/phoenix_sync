@@ -600,7 +600,7 @@ defmodule Phoenix.Sync.Electric do
   def map_response_body(body, mapper) when is_binary(body) and is_function(mapper, 1) do
     body
     |> @json.decode!()
-    |> Phoenix.Sync.Electric.map_response_body(mapper)
+    |> map_response_body(mapper)
     |> then(fn item -> [@json.encode_to_iodata!(item)] end)
   end
 

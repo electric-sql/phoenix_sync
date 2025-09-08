@@ -55,11 +55,10 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       end
 
       defp apply_transform(stream, transform_fun) do
-        Stream.flat_map(stream, fn chunk ->
-          chunk
-          |> IO.iodata_to_binary()
-          |> Phoenix.Sync.Electric.map_response_body(transform_fun)
-        end)
+        stream
+        |> Enum.to_list()
+        |> IO.iodata_to_binary()
+        |> Phoenix.Sync.Electric.map_response_body(transform_fun)
       end
     end
   end
