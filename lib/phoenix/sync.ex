@@ -11,6 +11,7 @@ defmodule Phoenix.Sync do
 
   @shape_keys [:namespace, :where, :columns]
   @shape_params @shape_keys |> Enum.map(&to_string/1)
+  @json if(Code.ensure_loaded?(Jason), do: Jason, else: JSON)
 
   @type queryable() :: Ecto.Queryable.t() | Ecto.Schema.t() | Ecto.Changeset.t()
   @type shape_specification :: [
@@ -86,6 +87,9 @@ defmodule Phoenix.Sync do
   defdelegate plug_opts(config), to: Phoenix.Sync.Application
 
   defdelegate client!(), to: Phoenix.Sync.Client, as: :new!
+
+  @doc false
+  def json_library, do: @json
 
   _ = """
   Use request query parameters to create a `Electric.Client.ShapeDefinition`.
@@ -327,6 +331,119 @@ defmodule Phoenix.Sync do
           where: "completed = $1",
           params: [false]
         )
+
+  ## Transforms
+
+  Using the `transform` option it's possible to modify the sync messages before
+  they are sent to the clients via the [`sync`](`Phoenix.Sync.Router.sync/3`)
+  router macro or [`sync_render`](`Phoenix.Sync.Controller.sync_render/4`)
+  within your controllers.
+
+        Phoenix.Sync.shape!(
+          table: "todos",
+          transform: &MyApp.Todos.transform/1
+        )
+
+  The transform function is passed the change messages in raw form and can
+  transform the messages to a limited extent as required by the application.
+
+  The `transform` process is effectively a `Stream.flat_map/2` operation over
+  the sync messages, so if you want to use pattern matching to perform some
+  kind of additional filtering operation to remove messages, e.g. based on some
+  authorization logic, then you can simply return an empty list:
+
+        # don't send delete messages to the client
+        def transform(%{"headers" => %{"operation" => "delete"}}), do: []
+        def transform(message), do: [message]
+
+  Removing messages from the stream can be useful for cases where you want to
+  perform additional runtime filtering for authorization reasons that you're
+  not able to do at the database level. Be aware that this can impact
+  consistency of the client state so is an advanced feature that should be used
+  with care.
+
+  The messages passed to the transform function are of the form:
+
+        %{
+          "key" => key,
+          "headers" => %{"operation" => operation, ...},
+          "value" => %{"column_name" => column_value, ...}
+        }
+
+  - `key` is a unique identifier for the row formed of the namespaced table
+    name plus the values of the row's primary key(s). **DO NOT MODIFY THIS
+    VALUE**.
+
+  - `headers` is a map of metadata about the change. The `operation` key will
+    have one of the values `"insert"`, `"update"` or `"delete"`. You should leave
+    this as-is unless you have a very good reason to modify it.
+
+  - `value` is the actual row data. Unless the shape is defined with `replica:
+    :full` only `insert` operations will contain the full row data. `update`
+    operations will only contain the columns that have changed and `delete`
+    operations will only contain the primary key columns.
+
+  You can modify the values of the `value` map, as required by you application,
+  but you should only modify values in a way that's compatible with the
+  column's datatype. E.g. don't concat a integer column with a string (unless
+  the resulting string will parse as an integer...). It is also unwise to
+  modify the primary key values of any row unless you can be sure not to cause
+  conflicts. Any column values you add that aren't in the backing Postgres
+  table will be passed through to the client as-is.
+
+  When using the raw [`stream/2`](`Phoenix.Sync.Client.stream/2`) function to
+  receive a sync stream directly, the `transform` option is unnecessary and
+  hence ignored. You should use the functions available in `Enum` and `Stream`
+  to perform any data transforms.
+
+  ### Transform via Ecto.Schema
+
+  If you have custom field types in your `Ecto.Schema` module you can set up a
+  transform that passes the raw data from the replication stream through the
+  `Ecto` load machinery to ensure that the sync stream values match the values
+  you would see when using `Ecto` to load data directly from the database.
+
+  To do this pass the `Ecto.Schema` module as the transform function:
+
+      Phoenix.Sync.shape!(
+        MyApp.Todos.Todo,
+        transform: MyApp.Todos.Todo
+      )
+
+  or in a route:
+
+      sync "todos", MyApp.Todos.Todo,
+        transform: MyApp.Todos.Todo
+
+  For this to work you need to implement `Jason.Encoder` for your schema module
+  (or `JSON.Encoder` if you're on Elixir >= 1.18 but if [`Jason`](https://hex.pm/packages/jason) is available
+  then it will be used), e.g.:
+
+      defmodule MyApp.Todos.Todo do
+        use Ecto.Schema
+
+        @derive {Jason.Encoder, except: [:__meta__]}
+
+        schema "todos" do
+          field :title, :string
+          field :completed, :boolean, default: false
+        end
+      end
+
+  > #### Effect of `transform` on server load {: .warning}
+  >
+  > Normally `Phoenix.Sync` simply passes the raw encoded JSON message stream
+  > from the backend server straight to the clients, which puts very little load
+  > on the application server.
+  >
+  > The `transform` mechanism requires intercepting, decoding, mutating and
+  > re-encoding every message from the backend server before they are sent to the
+  > client. This could be costly for busy shapes or lots of connected clients.
+
+  ### Limitations
+
+  See the documentation of `Phoenix.Sync.Router.sync/3` for additional
+  constraints on transform functions when defined within a route.
 
   ## Options
 

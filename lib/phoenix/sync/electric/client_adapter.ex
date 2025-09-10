@@ -21,7 +21,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     # this is the server-defined shape route, so we want to only pass on the
     # per-request/stream position params leaving the shape-definition params
     # from the configured client.
-    def call(%{shape_definition: %PredefinedShape{}} = sync_client, conn, params) do
+    def call(%{shape_definition: %PredefinedShape{} = shape} = sync_client, conn, params) do
       request =
         Client.request(
           sync_client.client,
@@ -32,7 +32,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           next_cursor: params["cursor"]
         )
 
-      fetch_upstream(sync_client, conn, request)
+      fetch_upstream(sync_client, conn, request, shape)
     end
 
     # this version is the pure client-defined shape version
@@ -44,7 +44,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           params: params
         )
 
-      fetch_upstream(sync_client, conn, request)
+      fetch_upstream(sync_client, conn, request, nil)
     end
 
     defp normalise_method(method), do: method |> String.downcase() |> String.to_atom()
@@ -57,6 +57,16 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         case Client.Fetch.request(sync_client.client, request) do
           %Client.Fetch.Response{} = response -> response
           {:error, %Client.Fetch.Response{} = response} -> response
+        end
+
+      body =
+        if response.status == 200 do
+          Phoenix.Sync.Electric.map_response_body(
+            response.body,
+            PredefinedShape.transform_fun(shape)
+          )
+        else
+          response.body
         end
 
       conn

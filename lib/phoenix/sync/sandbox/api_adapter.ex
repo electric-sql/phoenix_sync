@@ -20,9 +20,10 @@ if Phoenix.Sync.sandbox_enabled?() do
 
       def call(%{shape: shape} = _adapter, conn, params) do
         shape_api = lookup_api!()
-        {:ok, shape_api} = PlugApi.predefined_shape(shape_api, shape)
 
-        PlugApi.call(shape_api, conn, params)
+        Phoenix.Sync.Electric.api_predefined_shape(conn, shape_api, shape, fn conn, shape_api ->
+          PlugApi.call(shape_api, conn, params)
+        end)
       end
 
       defp lookup_api!() do
