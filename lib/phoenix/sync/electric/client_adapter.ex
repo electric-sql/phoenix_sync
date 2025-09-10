@@ -50,7 +50,9 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     defp normalise_method(method), do: method |> String.downcase() |> String.to_atom()
     defp live?(live), do: live == "true"
 
-    defp fetch_upstream(sync_client, conn, request, shape) do
+    defp fetch_upstream(sync_client, conn, request) do
+      request = put_req_headers(request, conn.req_headers)
+
       response =
         case Client.Fetch.request(sync_client.client, request) do
           %Client.Fetch.Response{} = response -> response
@@ -68,11 +70,21 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         end
 
       conn
-      |> put_headers(response.headers)
-      |> Plug.Conn.send_resp(response.status, body)
+      |> put_resp_headers(response.headers)
+      |> Plug.Conn.send_resp(response.status, response.body)
     end
 
-    defp put_headers(conn, headers) do
+    defp put_req_headers(request, headers) do
+      Enum.reduce(headers, request.headers, fn {header, value}, acc ->
+        Map.update(acc, header, value, fn
+          existing when is_binary(existing) -> [existing, value]
+          existing when is_list(existing) -> existing ++ [value]
+        end)
+      end)
+      |> then(&Map.put(request, :headers, &1))
+    end
+
+    defp put_resp_headers(conn, headers) do
       headers
       |> Map.delete("transfer-encoding")
       |> Enum.reduce(conn, fn {header, values}, conn ->
