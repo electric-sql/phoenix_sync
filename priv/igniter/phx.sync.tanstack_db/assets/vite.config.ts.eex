@@ -16,7 +16,7 @@ export default defineConfig(({ command, mode }) => {
       minify: isProd,
       sourcemap: !isProd,
       rollupOptions: {
-        input: 'js/app.tsx',
+        input: './js/app.tsx',
         output: {
           assetFileNames: 'assets/[name][extname]',
           chunkFileNames: 'assets/chunk/[name].js',
