@@ -1,14 +1,14 @@
-defmodule Mix.Tasks.Phx.Sync.TanstackDb.Docs do
+defmodule Mix.Tasks.Phx.Sync.TanstackDb.Setup.Docs do
   @moduledoc false
 
   @spec short_doc() :: String.t()
   def short_doc do
-    "Convert a Phoenix application to a Tanstack DB based frontend"
+    "Convert a Phoenix application to use a Vite + Tanstack DB based frontend"
   end
 
   @spec example() :: String.t()
   def example do
-    "mix phx.sync.tanstack_db"
+    "mix phx.sync.tanstack_db.setup"
   end
 
   @spec long_doc() :: String.t()
@@ -39,7 +39,7 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDb.Docs do
     mix archive.install hex igniter_new
 
     # create a new phoenix application and install phoenix_sync in `embedded` mode
-    mix igniter.new my_app --install phoehix_sync --with phx.new --sync-mode embedded
+    mix igniter.new my_app --install phoenix_sync --with phx.new --sync-mode embedded
 
     # setup my_app to use tanstack db
     #{example()}
@@ -54,7 +54,7 @@ defmodule Mix.Tasks.Phx.Sync.TanstackDb.Docs do
 end
 
 if Code.ensure_loaded?(Igniter) do
-  defmodule Mix.Tasks.Phx.Sync.TanstackDb do
+  defmodule Mix.Tasks.Phx.Sync.TanstackDb.Setup do
     import Igniter.Project.Application, only: [app_name: 1]
 
     @shortdoc "#{__MODULE__.Docs.short_doc()}"
@@ -312,13 +312,12 @@ if Code.ensure_loaded?(Igniter) do
       |> create_new_file("assets/tsconfig.app.json")
       |> create_or_replace_file("assets/tsconfig.json")
       |> create_or_replace_file("assets/tailwind.config.js")
-      |> create_new_file("assets/js/db/auth.ts")
       |> create_new_file("assets/js/db/collections.ts")
-      |> create_new_file("assets/js/db/mutations.ts")
       |> create_new_file("assets/js/db/schema.ts")
       |> create_new_file("assets/js/routes/__root.tsx")
       |> create_new_file("assets/js/routes/index.tsx")
       |> create_new_file("assets/js/routes/about.tsx")
+      |> create_new_file("assets/js/components/todos.tsx")
       |> create_new_file("assets/js/api.ts")
       |> create_new_file("assets/js/app.tsx")
       |> create_or_replace_file("assets/css/app.css")
@@ -375,7 +374,7 @@ if Code.ensure_loaded?(Igniter) do
     end
   end
 else
-  defmodule Mix.Tasks.Phx.Sync.TanstackDb do
+  defmodule Mix.Tasks.Phx.Sync.TanstackDb.Setup do
     @shortdoc "#{__MODULE__.Docs.short_doc()} | Install `igniter` to use"
 
     @moduledoc __MODULE__.Docs.long_doc()

@@ -1,7 +1,5 @@
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
-import { useAuth } from '../db/auth'
-import { authCollection } from '../db/collections'
 
 const RootLayout = () => (
   <>
@@ -22,8 +20,5 @@ const RootLayout = () => (
 
 export const Route = createRootRoute({
   component: RootLayout,
-  loader: async () => {
-    await authCollection.preload()
-  },
 })
 

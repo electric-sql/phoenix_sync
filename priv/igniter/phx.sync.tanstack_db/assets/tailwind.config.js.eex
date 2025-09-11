@@ -1,3 +1,3 @@
 module.exports = {
-  content: ["./js/**/*.js", "../lib/**/*.*ex"],
+  content: ["./js/**/*.{js,jsx,ts,tsx}", "../lib/**/*.*ex"],
 };
