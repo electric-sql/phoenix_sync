@@ -13,6 +13,16 @@ import { todoSchema } from './schema'
 import type { Todo } from './schema'
 
 
+// This is a local-only collection that is not synced to the server and
+// immediately applies updates:
+//
+// https://tanstack.com/db/latest/docs/reference/functions/localonlycollectionoptions
+//
+// To sync your front-end with your database via Electric you should use
+// an `electricCollection` as documented here:
+//
+// https://tanstack.com/db/latest/docs/collections/electric-collection
+//
 export const todoCollection = createCollection<Todo>(
   localOnlyCollectionOptions({
     getKey: (todo: Todo) => todo.id,
