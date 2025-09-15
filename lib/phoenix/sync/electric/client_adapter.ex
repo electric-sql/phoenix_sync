@@ -51,6 +51,8 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     defp live?(live), do: live == "true"
 
     defp fetch_upstream(sync_client, conn, request, shape) do
+      request = put_req_headers(request, conn.req_headers)
+
       response =
         case Client.Fetch.request(sync_client.client, request) do
           %Client.Fetch.Response{} = response -> response
@@ -68,18 +70,33 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
         end
 
       conn
-      |> put_headers(response.headers)
+      |> put_resp_headers(response.headers)
       |> Plug.Conn.send_resp(response.status, body)
     end
 
-    defp put_headers(conn, headers) do
-      headers
-      |> Map.delete("transfer-encoding")
-      |> Enum.reduce(conn, fn {header, values}, conn ->
-        Enum.reduce(values, conn, fn value, conn ->
-          Plug.Conn.put_resp_header(conn, header, value)
+    defp put_req_headers(request, headers) do
+      merged_headers =
+        Enum.reduce(headers, request.headers, fn {header, value}, acc ->
+          Map.update(acc, header, [value], fn existing -> [value | List.wrap(existing)] end)
         end)
-      end)
+        |> expand_headers()
+
+      %{request | headers: merged_headers}
+    end
+
+    defp put_resp_headers(conn, headers) do
+      resp_headers =
+        headers
+        |> Map.delete("transfer-encoding")
+        |> expand_headers()
+
+      Plug.Conn.merge_resp_headers(conn, resp_headers)
+    end
+
+    # turn headers into a list which is more compatible than a map
+    # representation as it preserves multiple values for a header.
+    defp expand_headers(headers) when is_map(headers) do
+      Enum.flat_map(headers, fn {k, v} -> Enum.map(List.wrap(v), &{k, &1}) end)
     end
   end
 end
