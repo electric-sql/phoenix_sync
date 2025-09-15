@@ -1,0 +1,9 @@
+import * as z from 'zod/v4'
+
+export const todoSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  completed: z.boolean(),
+})
+
+export type Todo = z.infer<typeof todoSchema>

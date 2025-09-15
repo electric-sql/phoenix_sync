@@ -1,0 +1,39 @@
+import { useLiveQuery, eq } from "@tanstack/react-db";
+import { todoCollection } from "../db/collections";
+
+export function Todos() {
+  const { data: todos } = useLiveQuery((query) =>
+    query.from({ todo: todoCollection }),
+  );
+
+  const toggleTodo = (todo) =>
+    todoCollection.update(todo.id, (draft) => {
+      draft.completed = !todo.completed;
+    });
+
+  return (
+    <ul className="flex flex-col list-none space-y-4">
+      {todos.map((todo) => (
+        <li
+          key={todo.id}
+          className="flex flex-row space-x-2 items-center leading-5"
+        >
+          <input
+            className="block flex-initial rounded-2xl outline-none focus:outline-none"
+            type="checkbox"
+            checked={todo.completed}
+            onChange={() => toggleTodo(todo)}
+            id={`todo-${todo.id}`}
+          />
+          <label
+            className={`block flex-1 ${todo.completed ? "line-through" : ""}`}
+            for={`todo-${todo.id}`}
+          >
+            {todo.title}
+          </label>
+        </li>
+      ))}
+    </ul>
+  );
+}
+

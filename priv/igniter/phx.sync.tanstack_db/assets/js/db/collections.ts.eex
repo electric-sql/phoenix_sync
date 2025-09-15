@@ -1,0 +1,40 @@
+import {createCollection, localOnlyCollectionOptions,} from '@tanstack/react-db'
+import { ingestMutations } from './mutations'
+
+import type { Value } from '@electric-sql/client'
+import type { ElectricCollectionUtils } from '@tanstack/electric-db-collection'
+import type {
+  InsertMutationFn,
+  UpdateMutationFn,
+  DeleteMutationFn,
+} from '@tanstack/react-db'
+
+import { todoSchema } from './schema'
+import type { Todo } from './schema'
+
+
+// This is a local-only collection that is not synced to the server and
+// immediately applies updates:
+//
+// https://tanstack.com/db/latest/docs/reference/functions/localonlycollectionoptions
+//
+// To sync your front-end with your database via Electric you should use
+// an `electricCollection` as documented here:
+//
+// https://tanstack.com/db/latest/docs/collections/electric-collection
+//
+export const todoCollection = createCollection<Todo>(
+  localOnlyCollectionOptions({
+    getKey: (todo: Todo) => todo.id,
+    schema: todoSchema,
+    initialData: [
+      { id: 1, title: 'Install Phoenix', completed: true },
+      { id: 2, title: 'Run mix phx.sync.tanstack_db.setup', completed: true },
+      { id: 3, title: 'Run the app', completed: true },
+      { id: 4, title: 'Build a to-do app', completed: true },
+      { id: 5, title: 'Convert to an Electric collection backed by Phoenix.Sync', completed: false },
+    ],
+  })
+)
+
+
