@@ -121,7 +121,7 @@ defmodule Phoenix.Sync.MixProject do
         "Source code" => "https://github.com/electric-sql/phoenix_sync"
       },
       licenses: ["Apache-2.0"],
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE)
+      files: ~w(lib priv .formatter.exs mix.exs README.md LICENSE)
     ]
   end
 
