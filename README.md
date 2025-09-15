@@ -249,7 +249,7 @@ Example config:
 defp deps do
   [
     {:electric, "~> 1.0"},
-    {:phoenix_sync, "~> 0.5"}
+    {:phoenix_sync, "~> 0.6"}
   ]
 end
 
@@ -273,7 +273,7 @@ children = [
 # mix.exs
 defp deps do
   [
-    {:phoenix_sync, "~> 0.5"}
+    {:phoenix_sync, "~> 0.6"}
   ]
 end
 
@@ -304,7 +304,7 @@ It is also possible to include Electric as an application dependency and configu
 defp deps do
   [
     {:electric, "~> 1.0"},
-    {:phoenix_sync, "~> 0.5"}
+    {:phoenix_sync, "~> 0.6"}
   ]
 end
 
@@ -343,7 +343,7 @@ With Electric only included and compiled as a dependency in `:dev` and `:test`.
 defp deps do
   [
     {:electric, "~> 1.0", only: [:dev, :test]},
-    {:phoenix_sync, "~> 0.5"}
+    {:phoenix_sync, "~> 0.6"}
   ]
 end
 
