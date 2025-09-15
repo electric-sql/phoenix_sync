@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-09-15
+
+### Added
+
+- Add new [`phoenix_sync.install`](https://hexdocs.pm/phoenix_sync/Mix.Tasks.PhoenixSync.Install.html) task to simplify installation and configuration via [igniter](https://hexdocs.pm/igniter/readme.html) [#93](https://github.com/electric-sql/phoenix_sync/pull/93)
+- Allow for transforming the sync stream returned by `Phoenix.Sync.Router.sync/3` using a `transform` function [#99](https://github.com/electric-sql/phoenix_sync/pull/99)
+- Add new [`phx.sync.tanstack_db.setup`](https://hexdocs.pm/phoenix_sync/Mix.Tasks.Phx.Sync.TanstackDb.Setup.html) task to convert a new Phoenix app to use Tanstack DB and Vite [igniter](https://hexdocs.pm/igniter/readme.html) [#102](https://github.com/electric-sql/phoenix_sync/pull/102)
+
+### Changed
+
+- Bump `electric` to version `1.1.9` [#103](https://github.com/electric-sql/phoenix_sync/pull/103)
+
+### Fixed
+
+- Remove `Ecto` requirement from `Phoenix.Sync.LiveView.sync_stream/4` by allowing keyword-based shape definitions [#95](https://github.com/electric-sql/phoenix_sync/pull/95)
+- Ensure Electric stack is ready before calling the embedded API [#104](https://github.com/electric-sql/phoenix_sync/pull/104)
+- Forward HTTP request headers onto sync backend [#107](https://github.com/electric-sql/phoenix_sync/pull/107)
+
 ## [0.5.1] - 2025-08-18
 
 ### Changed
