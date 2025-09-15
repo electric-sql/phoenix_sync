@@ -384,7 +384,7 @@ else
     @impl Mix.Task
     def run(_argv) do
       Mix.shell().error("""
-      The task 'phx_sync.tanstack_db' requires igniter. Please install igniter and try again.
+      The task 'phx.sync.tanstack_db.setup' requires igniter. Please install igniter and try again.
 
       For more information, see: https://hexdocs.pm/igniter/readme.html#installation
       """)
