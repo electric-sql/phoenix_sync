@@ -84,12 +84,16 @@ defmodule Phoenix.Sync.Controller do
                         )
 
       def sync_render(conn, shape_fun) when is_function(shape_fun, 0) do
+        conn = Plug.Conn.fetch_query_params(conn)
+
         conn
         |> Phoenix.Sync.Controller.configure_plug_conn!(@plug_assign_opts)
         |> Phoenix.Sync.Controller.sync_render(conn.params, shape_fun)
       end
 
       def sync_render(conn, shape, shape_opts \\ []) do
+        conn = Plug.Conn.fetch_query_params(conn)
+
         conn
         |> Phoenix.Sync.Controller.configure_plug_conn!(@plug_assign_opts)
         |> Phoenix.Sync.Controller.sync_render(conn.params, shape, shape_opts)
