@@ -50,6 +50,34 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
         Phoenix.Sync.Adapter.PlugApi.call(api, conn, params)
       end
 
+      # only works if method is GET...
+      def response(%ApiAdapter{api: api, shape: shape}, %{method: "GET"} = conn, params) do
+        if transform_fun = PredefinedShape.transform_fun(shape) do
+          case Shapes.Api.validate(api, params) do
+            {:ok, request} ->
+              response = Shapes.Api.serve_shape_log(request)
+              response = Map.update!(response, :body, &apply_transform(&1, transform_fun))
+              {request, response}
+
+            {:error, response} ->
+              {nil, response}
+          end
+        else
+          Phoenix.Sync.Adapter.PlugApi.response(api, conn, params)
+          |> then(fn {request, response} ->
+            {request, Phoenix.Sync.Electric.consume_response_stream(response)}
+          end)
+        end
+      end
+
+      def send_response(%ApiAdapter{}, conn, {request, response}) do
+        conn
+        |> content_type()
+        |> Plug.Conn.assign(:request, request)
+        |> Plug.Conn.assign(:response, response)
+        |> Shapes.Api.Response.send(response)
+      end
+
       defp content_type(conn) do
         Plug.Conn.put_resp_content_type(conn, "application/json")
       end

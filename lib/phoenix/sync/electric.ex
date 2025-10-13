@@ -623,9 +623,25 @@ defmodule Phoenix.Sync.Electric do
   def map_response_body(msgs, _mapper) do
     msgs
   end
+
+  if @electric_available? do
+    @doc false
+    # for the embedded api we need to make sure that the response stream is consumed
+    # in the same process that made the request, in order for cleanups to happen
+    # so we have to enumerate the body stream immediately before passing the response
+    # to any other process...
+    def consume_response_stream(%Electric.Shapes.Api.Response{} = response) do
+      Map.update!(response, :body, &do_consume_stream(&1))
+    end
+
+    defp do_consume_stream(body) do
+      Enum.to_list(body)
+    end
+  end
 end
 
-if Code.ensure_loaded?(Electric.Shapes.Api) do
+if Code.ensure_loaded?(Electric.Shapes.Api) &&
+     Code.ensure_loaded?(Phoenix.Sync.Electric.ApiAdapter) do
   defimpl Phoenix.Sync.Adapter.PlugApi, for: Electric.Shapes.Api do
     alias Electric.Shapes
 
@@ -670,6 +686,27 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
 
     def call(_api, %{method: "OPTIONS"} = conn, _params) do
       Shapes.Api.options(conn)
+    end
+
+    def response(api, _conn, params) do
+      case Shapes.Api.validate(api, params) do
+        {:ok, request} ->
+          {
+            request,
+            Shapes.Api.serve_shape_log(request) |> Phoenix.Sync.Electric.consume_response_stream()
+          }
+
+        {:error, response} ->
+          {nil, response}
+      end
+    end
+
+    def send_response(%ApiAdapter{}, conn, {request, response}) do
+      conn
+      |> content_type()
+      |> Plug.Conn.assign(:request, request)
+      |> Plug.Conn.assign(:response, response)
+      |> Shapes.Api.Response.send(response)
     end
 
     defp content_type(conn) do

@@ -18,11 +18,29 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
        }}
     end
 
+    def call(sync_client, conn, params) do
+      {request, shape} = request(sync_client, conn, params)
+
+      fetch_upstream(sync_client, conn, request, shape)
+    end
+
+    def response(sync_client, %{method: "GET"} = conn, params) do
+      {request, shape} = request(sync_client, conn, params)
+
+      make_request(sync_client, conn, request, shape)
+    end
+
+    def send_response(_sync_client, conn, response) do
+      conn
+      |> put_resp_headers(response.headers)
+      |> Plug.Conn.send_resp(response.status, response.body)
+    end
+
     # this is the server-defined shape route, so we want to only pass on the
     # per-request/stream position params leaving the shape-definition params
     # from the configured client.
-    def call(%{shape_definition: %PredefinedShape{} = shape} = sync_client, conn, params) do
-      request =
+    defp request(%{shape_definition: %PredefinedShape{} = shape} = sync_client, _conn, params) do
+      {
         Client.request(
           sync_client.client,
           method: :get,
@@ -30,27 +48,33 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           shape_handle: params["handle"],
           live: live?(params["live"]),
           next_cursor: params["cursor"]
-        )
-
-      fetch_upstream(sync_client, conn, request, shape)
+        ),
+        shape
+      }
     end
 
     # this version is the pure client-defined shape version
-    def call(sync_client, %{method: method} = conn, params) do
-      request =
+    defp request(sync_client, %{method: method} = _conn, params) do
+      {
         Client.request(
           sync_client.client,
           method: normalise_method(method),
           params: params
-        )
-
-      fetch_upstream(sync_client, conn, request, nil)
+        ),
+        nil
+      }
     end
 
     defp normalise_method(method), do: method |> String.downcase() |> String.to_atom()
     defp live?(live), do: live == "true"
 
     defp fetch_upstream(sync_client, conn, request, shape) do
+      response = make_request(sync_client, conn, request, shape)
+
+      send_response(sync_client, conn, response)
+    end
+
+    defp make_request(sync_client, conn, request, shape) do
       request = put_req_headers(request, conn.req_headers)
 
       response =
@@ -69,9 +93,7 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           response.body
         end
 
-      conn
-      |> put_resp_headers(response.headers)
-      |> Plug.Conn.send_resp(response.status, body)
+      %{response | body: body}
     end
 
     defp put_req_headers(request, headers) do

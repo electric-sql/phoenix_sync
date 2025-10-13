@@ -252,7 +252,7 @@ defmodule Phoenix.Sync.Controller do
 
         {:ok, pid} =
           Task.start_link(fn ->
-            send(parent, {:response, self(), Adapter.PlugApi.call(shape_api, conn, params)})
+            send(parent, {:response, self(), Adapter.PlugApi.response(shape_api, conn, params)})
           end)
 
         ref = Process.monitor(pid)
@@ -274,10 +274,10 @@ defmodule Phoenix.Sync.Controller do
 
             interruptible_call(conn, api, params, shape_fun)
 
-          {:response, ^pid, conn} ->
+          {:response, ^pid, response} ->
             Process.demonitor(ref, [:flush])
 
-            conn
+            Adapter.PlugApi.send_response(shape_api, conn, response)
 
           {:DOWN, ^ref, :process, _pid, reason} ->
             Plug.Conn.send_resp(conn, 500, inspect(reason))

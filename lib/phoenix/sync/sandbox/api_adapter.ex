@@ -26,6 +26,24 @@ if Phoenix.Sync.sandbox_enabled?() do
         end)
       end
 
+      def response(%{shape: nil} = _adapter, conn, params) do
+        shape_api = lookup_api!()
+        PlugApi.response(shape_api, conn, params)
+      end
+
+      def response(%{shape: shape} = _adapter, conn, params) do
+        shape_api = lookup_api!()
+
+        Phoenix.Sync.Electric.api_predefined_shape(conn, shape_api, shape, fn conn, shape_api ->
+          PlugApi.response(shape_api, conn, params)
+        end)
+      end
+
+      def send_response(_adapter, conn, response) do
+        shape_api = lookup_api!()
+        PlugApi.send_response(shape_api, conn, response)
+      end
+
       defp lookup_api!() do
         Phoenix.Sync.Sandbox.retrieve_api!()
       end
