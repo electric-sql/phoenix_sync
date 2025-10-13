@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2025-10-13
+
+### Fixed
+
+- Correctly send response within the request process for interruptible shapes ([#111](https://github.com/electric-sql/phoenix_sync/pull/111))
+- Pin electric to only supported versions ([#111](https://github.com/electric-sql/phoenix_sync/pull/111))
+- Correctly fetch query params within the Plug adapter ([#111](https://github.com/electric-sql/phoenix_sync/pull/111))
+
 ## [0.6.0] - 2025-09-15
 
 ### Added
