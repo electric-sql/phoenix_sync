@@ -82,13 +82,16 @@ if Phoenix.Sync.sandbox_enabled?() do
       %Transaction{
         xid: txid,
         lsn: Electric.Postgres.Lsn.from_integer(txid),
-        last_log_offset: Enum.at(changes, -1) |> Map.fetch!(:log_offset),
+        last_log_offset: last_log_offset(txid, changes),
         changes: changes,
         num_changes: length(changes),
         commit_timestamp: DateTime.utc_now(),
         affected_relations: Enum.into(changes, MapSet.new(), & &1.relation)
       }
     end
+
+    defp last_log_offset(txid,[]),do: log_offset(txid, 0)
+    defp last_log_offset(_txid,changes),do: Enum.at(changes, -1) |> Map.fetch!(:log_offset)
 
     defp msg_from_change({{:insert, schema_meta, values}, i}, lsn, txid) do
       {
@@ -165,6 +168,8 @@ if Phoenix.Sync.sandbox_enabled?() do
          when type in [NaiveDateTime, DateTime, Time, Date] do
       type.to_iso8601(datetime)
     end
+
+    defp dump(%Postgrex.Range{} = range, _type), do: range
 
     defp dump(map, _type) when is_map(map), do: @json.encode!(map)
 
