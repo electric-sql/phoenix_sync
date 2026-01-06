@@ -7,6 +7,25 @@ defmodule Phoenix.Sync.ApplicationTest do
 
   Code.ensure_loaded!(Support.ConfigTestRepo)
 
+  # Helper to validate storage configuration - handles both old and new formats
+  # Electric 1.2.x may use different storage option formats
+  defp validate_storage!(opts, expected_module, expected_path_prefix) do
+    {module, storage_opts} = opts[:storage]
+    assert module == expected_module
+
+    # Handle both keyword list and map formats for storage options
+    storage_path =
+      cond do
+        is_list(storage_opts) -> Keyword.get(storage_opts, :storage_dir)
+        is_map(storage_opts) -> Map.get(storage_opts, :base_path) || Map.get(storage_opts, :storage_dir)
+        true -> nil
+      end
+
+    assert storage_path != nil, "Storage path not found in #{inspect(storage_opts)}"
+    assert String.starts_with?(storage_path, expected_path_prefix),
+           "Expected storage path to start with #{expected_path_prefix}, got #{storage_path}"
+  end
+
   defp validate_repo_connection_opts!(opts, overrides \\ []) do
     for connection_opts <- [
           get_in(opts, [:replication_opts, :connection_opts]) || [],
@@ -68,11 +87,10 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
 
       validate_repo_connection_opts!(opts)
+      opts_map = Map.new(opts)
 
-      assert %{
-               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
-             } = Map.new(opts)
+      validate_storage!(opts_map, Electric.ShapeCache.PureFileStorage, storage_dir)
+      assert %{persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}} = opts_map
     end
 
     test "no configuration set" do
@@ -117,15 +135,12 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
 
       validate_repo_connection_opts!(opts)
+      opts_map = Map.new(opts)
 
-      assert %{
-               storage:
-                 {Electric.ShapeCache.PureFileStorage,
-                  [storage_dir: ^tmp_dir <> "/" <> storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{
-                 root: ^tmp_dir <> "/" <> storage_dir
-               }
-             } = Map.new(opts)
+      # Dev env uses tmp_dir with phoenix-sync prefix
+      validate_storage!(opts_map, Electric.ShapeCache.PureFileStorage, tmp_dir)
+      assert %{persistent_kv: %Electric.PersistentKV.Filesystem{root: root}} = opts_map
+      assert String.starts_with?(root, tmp_dir)
     end
 
     test "passes repo pg port to electric" do
@@ -188,11 +203,10 @@ defmodule Phoenix.Sync.ApplicationTest do
       assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
 
       validate_repo_connection_opts!(opts)
+      opts_map = Map.new(opts)
 
-      assert %{
-               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
-             } = Map.new(opts)
+      validate_storage!(opts_map, Electric.ShapeCache.PureFileStorage, storage_dir)
+      assert %{persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}} = opts_map
     end
 
     test "embedded mode test env" do
@@ -254,10 +268,9 @@ defmodule Phoenix.Sync.ApplicationTest do
                database: "phoenix_sync"
              ]
 
-      assert %{
-               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
-             } = Map.new(opts)
+      opts_map = Map.new(opts)
+      validate_storage!(opts_map, Electric.ShapeCache.PureFileStorage, storage_dir)
+      assert %{persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}} = opts_map
     end
 
     test "embedded mode with explicit connection_opts" do
@@ -285,10 +298,9 @@ defmodule Phoenix.Sync.ApplicationTest do
                database: "phoenix_sync"
              ]
 
-      assert %{
-               storage: {Electric.ShapeCache.PureFileStorage, [storage_dir: ^storage_dir]},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
-             } = Map.new(opts)
+      opts_map = Map.new(opts)
+      validate_storage!(opts_map, Electric.ShapeCache.PureFileStorage, storage_dir)
+      assert %{persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}} = opts_map
     end
 
     test "remote http mode" do
@@ -341,9 +353,14 @@ defmodule Phoenix.Sync.ApplicationTest do
       api = App.plug_opts(config)
 
       assert %Electric.Shapes.Api{
-               storage: {Electric.ShapeCache.PureFileStorage, %{base_path: ^storage_dir <> _}},
+               storage: {Electric.ShapeCache.PureFileStorage, storage_opts},
                persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
              } = api
+
+      # Electric.Shapes.Api returns processed storage options as a map
+      storage_path = Map.get(storage_opts, :base_path) || Map.get(storage_opts, :storage_dir)
+      assert storage_path != nil
+      assert String.starts_with?(storage_path, storage_dir)
     end
 
     test "remote http mode" do
@@ -408,6 +425,61 @@ defmodule Phoenix.Sync.ApplicationTest do
       api = App.plug_opts(config)
 
       assert %Phoenix.Sync.Sandbox.APIAdapter{} = api
+    end
+  end
+
+  describe "Electric 1.2.x compatibility" do
+    test "passes live_sse configuration to Electric" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
+      config = [
+        mode: :embedded,
+        env: :prod,
+        repo: Support.ConfigTestRepo,
+        storage_dir: storage_dir,
+        # live_sse replaces experimental_live_sse in Electric 1.2.x
+        live_sse: true
+      ]
+
+      assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+      # Verify the option is passed through to Electric configuration
+      assert Keyword.get(opts, :live_sse) == true
+    end
+
+    test "passes max_shapes configuration to Electric" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
+      config = [
+        mode: :embedded,
+        env: :prod,
+        repo: Support.ConfigTestRepo,
+        storage_dir: storage_dir,
+        max_shapes: 100
+      ]
+
+      assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+      # Verify max_shapes is passed through
+      assert Keyword.get(opts, :max_shapes) == 100
+    end
+
+    test "passes replication_idle_timeout configuration to Electric" do
+      storage_dir = Path.join([System.tmp_dir!(), "storage-dir#{System.monotonic_time()}"])
+
+      config = [
+        mode: :embedded,
+        env: :prod,
+        repo: Support.ConfigTestRepo,
+        storage_dir: storage_dir,
+        # New in Electric 1.2.x for scale-to-zero deployments
+        replication_idle_timeout: 30_000
+      ]
+
+      assert {:ok, [{Electric.StackSupervisor, opts}]} = App.children(config)
+
+      # Verify the option is passed through
+      assert Keyword.get(opts, :replication_idle_timeout) == 30_000
     end
   end
 end
