@@ -6,6 +6,6 @@ config :plug_sync, PlugSync.Repo,
   username: "postgres",
   password: "password",
   hostname: "localhost",
-  database: "plug_sync_test",
+  database: "phoenix_sync",
   port: 55555,
   pool: Ecto.Adapters.SQL.Sandbox
