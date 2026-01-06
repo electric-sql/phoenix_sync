@@ -16,12 +16,18 @@ defmodule Phoenix.Sync.ApplicationTest do
     # Handle both keyword list and map formats for storage options
     storage_path =
       cond do
-        is_list(storage_opts) -> Keyword.get(storage_opts, :storage_dir)
-        is_map(storage_opts) -> Map.get(storage_opts, :base_path) || Map.get(storage_opts, :storage_dir)
-        true -> nil
+        is_list(storage_opts) ->
+          Keyword.get(storage_opts, :storage_dir)
+
+        is_map(storage_opts) ->
+          Map.get(storage_opts, :base_path) || Map.get(storage_opts, :storage_dir)
+
+        true ->
+          nil
       end
 
     assert storage_path != nil, "Storage path not found in #{inspect(storage_opts)}"
+
     assert String.starts_with?(storage_path, expected_path_prefix),
            "Expected storage path to start with #{expected_path_prefix}, got #{storage_path}"
   end
