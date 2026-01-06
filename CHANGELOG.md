@@ -14,11 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Updated `electric` dependency to `~> 1.2.4` (dropping support for Electric 1.1.x)
 - **Breaking**: Updated `electric_client` dependency to `~> 0.8.0`
 - Removed `http_api_num_acceptors` workaround (fixed upstream in Electric via [#2863](https://github.com/electric-sql/electric/pull/2863))
+- Updated `Electric.StatusMonitor.mark_connection_pool_ready/2` calls to `/3` (Electric 1.2.x API change)
+- Updated storage configuration to use keyword list format (Electric 1.2.x requirement)
 
 ### Added
 
-- Added tests for Electric 1.2.x configuration options (`live_sse`, `max_shapes`, `replication_idle_timeout`)
+- Implemented `Inspector.load_supported_features/1` callback (new in Electric 1.2.x)
+- Implemented `PublicationManager.wait_for_restore/1` callback (new in Electric 1.2.x)
 - Updated storage configuration tests to handle both keyword list and map formats for better forward compatibility
+
+### Known Issues
+
+- **Sandbox mode** (`mode: :sandbox`) is not yet compatible with Electric 1.2.x due to internal architecture changes (`Electric.Replication.Supervisor` was removed). Sandbox mode will be updated in a future release.
 
 ### Migration Guide
 

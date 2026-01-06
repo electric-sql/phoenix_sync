@@ -34,6 +34,12 @@ if Phoenix.Sync.sandbox_enabled?() do
     @impl Electric.Postgres.Inspector
     def list_relations_with_stale_cache(_), do: {:ok, []}
 
+    @impl Electric.Postgres.Inspector
+    def load_supported_features(_stack_id) do
+      # Return empty map for sandbox - no special Postgres features needed
+      {:ok, %{}}
+    end
+
     def start_link(args) do
       GenServer.start_link(__MODULE__, args, name: name(args[:stack_id]))
     end

@@ -259,7 +259,9 @@ if Phoenix.Sync.sandbox_enabled?() do
           # mark the stack as ready
           Electric.StatusMonitor.mark_pg_lock_acquired(stack_id, owner)
           Electric.StatusMonitor.mark_replication_client_ready(stack_id, owner)
-          Electric.StatusMonitor.mark_connection_pool_ready(stack_id, owner)
+          # Electric 1.2.x requires pool type (:admin or :snapshot) as second argument
+          Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :admin, owner)
+          Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, owner)
 
           api_config = Sandbox.Stack.config(stack_id, repo)
           api = Electric.Application.api(api_config)

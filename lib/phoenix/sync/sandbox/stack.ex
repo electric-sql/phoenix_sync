@@ -81,21 +81,17 @@ if Phoenix.Sync.sandbox_enabled?() do
 
       registry = :"#{__MODULE__}.Registry-#{stack_id}"
 
+      # Electric 1.2.x expects storage options as keyword list, not map
       storage = {
         Electric.ShapeCache.InMemoryStorage,
-        %{stack_id: stack_id, table_base_name: :"#{stack_id}"}
+        [stack_id: stack_id, table_base_name: :"#{stack_id}"]
       }
 
       [
         purge_all_shapes?: false,
         stack_id: stack_id,
         storage: storage,
-        shape_status:
-          {Electric.ShapeCache.ShapeStatus,
-           Electric.ShapeCache.ShapeStatus.opts(
-             shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id),
-             storage: storage
-           )},
+        # ShapeStatus.opts/1 was removed in Electric 1.2.x - use stack_id reference instead
         inspector: inspector,
         publication_manager: publication_manager_spec,
         chunk_bytes_threshold: 10_485_760,
@@ -110,12 +106,13 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     def init({stack_id, repo, owner}) do
       config = config(stack_id, repo, owner)
-      shape_cache_spec = {Electric.ShapeCache, config}
+      # Electric 1.2.x: ShapeCache only needs stack_id
+      shape_cache_spec = {Electric.ShapeCache, [stack_id: stack_id]}
       persistent_kv = Electric.PersistentKV.Memory.new!()
 
+      # Electric 1.2.x: ShapeStatusOwner no longer takes shape_status config
       shape_status_owner_spec =
-        {Electric.ShapeCache.ShapeStatusOwner,
-         [stack_id: stack_id, shape_status: config[:shape_status]]}
+        {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]}
 
       consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
@@ -123,11 +120,7 @@ if Phoenix.Sync.sandbox_enabled?() do
         {Registry, keys: :duplicate, name: config[:registry]},
         {Electric.ProcessRegistry, stack_id: stack_id},
         {Electric.StatusMonitor, stack_id},
-        {Electric.Shapes.Monitor,
-         stack_id: stack_id,
-         storage: config[:storage],
-         shape_status: config[:shape_status],
-         publication_manager: config[:publication_manager]},
+        # Electric 1.2.x: Electric.Shapes.Monitor removed, supervision handled differently
         # TODO: start an electric stack, decoupled from the db connection
         #       with in memory storage, a mock publication_manager and inspector
         Supervisor.child_spec(

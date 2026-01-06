@@ -67,11 +67,11 @@ defmodule Support.ElectricHelpers do
       pid: ExUnit.Callbacks.start_supervised!(Electric.PersistentKV.Memory, restart: :temporary)
     }
 
+    # Electric 1.2.x: Pass storage as tuple with keyword list, not processed via shared_opts
+    # StackSupervisor.shared_storage_opts/1 expects keyword list format
     storage =
-      Electric.ShapeCache.Storage.shared_opts(
-        {Electric.ShapeCache.InMemoryStorage,
-         stack_id: stack_id, table_base_name: :"in_memory_storage_#{stack_id}"}
-      )
+      {Electric.ShapeCache.InMemoryStorage,
+       [stack_id: stack_id, table_base_name: :"in_memory_storage_#{stack_id}"]}
 
     publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 
