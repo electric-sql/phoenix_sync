@@ -1,6 +1,17 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Phoenix.Sync.LiveView do
     @moduledoc """
+    > #### Deprecated {: .warning}
+    >
+    > LiveView streams support (`sync_stream/4`) is deprecated and will be removed
+    > in a future version. This feature is incompatible with planned future changes
+    > to the Electric sync architecture.
+    >
+    > For real-time data synchronization in LiveView, consider using:
+    > - `Phoenix.Sync.Shape` for maintaining in-memory shape state
+    > - Direct Electric client integration with `Phoenix.PubSub`
+    > - Client-side sync with TanStack DB
+
     Swap out `Phoenix.LiveView.stream/3` for `Phoenix.Sync.LiveView.sync_stream/4` to
     automatically keep a LiveView up-to-date with the state of your Postgres database:
 
@@ -228,6 +239,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </div>
 
     """
+    @doc since: "0.5.0", deprecated: "Use Phoenix.Sync.Shape or client-side sync instead"
     @spec sync_stream(
             socket :: Phoenix.LiveView.Socket.t(),
             name :: atom() | String.t(),
@@ -302,7 +314,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
     The `opts` are passed to the `Phoenix.LiveView.stream_insert/4` call.
+
+    > #### Deprecated {: .warning}
+    >
+    > This function is deprecated along with `sync_stream/4`.
     """
+    @doc since: "0.5.0", deprecated: "Use Phoenix.Sync.Shape or client-side sync instead"
     @spec sync_stream_update(Phoenix.LiveView.Socket.t(), event(), Keyword.t()) ::
             Phoenix.LiveView.Socket.t()
     def sync_stream_update(socket, event, opts \\ [])

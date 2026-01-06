@@ -1,6 +1,8 @@
 defmodule Phoenix.Sync.RouterTest do
   @pool_opts [backoff_type: :stop, max_restarts: 0, pool_size: 2]
 
+  # Only test embedded mode - HTTP mode requires a running Electric server
+  # and sandbox mode is deprecated in Electric 1.2.x
   use ExUnit.Case,
     async: false,
     parameterize: [
@@ -8,14 +10,6 @@ defmodule Phoenix.Sync.RouterTest do
         sync_config: [
           env: :test,
           mode: :embedded,
-          pool_opts: @pool_opts
-        ]
-      },
-      %{
-        sync_config: [
-          env: :test,
-          mode: :http,
-          url: "http://localhost:3000",
           pool_opts: @pool_opts
         ]
       }
@@ -93,6 +87,28 @@ defmodule Phoenix.Sync.RouterTest do
       ) do
     Map.update!(msg, "value", fn value ->
       Map.put(value, "merged", "#{route}-#{op}-#{value["id"]}-#{value["title"]}")
+    end)
+  end
+
+  # Helper to extract data messages from response, filtering out control messages
+  # and normalizing to the format expected by tests (only operation header and value)
+  def extract_data_messages(json_body) do
+    json_body
+    |> Jason.decode!()
+    |> Enum.filter(fn
+      %{"headers" => %{"operation" => _}} -> true
+      _ -> false
+    end)
+    |> Enum.map(fn %{"headers" => headers, "value" => value} = _msg ->
+      # Preserve merged field if present (for transform tests)
+      %{
+        "headers" => %{"operation" => headers["operation"]},
+        "value" =>
+          if(Map.has_key?(value, "merged"),
+            do: %{"title" => value["title"], "merged" => value["merged"]},
+            else: %{"title" => value["title"]}
+          )
+      }
     end)
   end
 
@@ -174,7 +190,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag table: {
@@ -198,7 +214,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag table: {
@@ -223,7 +239,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag table: {
@@ -294,7 +310,7 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "world war"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "make tea"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag table: {
@@ -322,7 +338,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "peas"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "beans"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "sweetcorn"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:food])
     end
 
     @tag table: {
@@ -350,7 +366,7 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
 
       resp =
         Phoenix.ConnTest.build_conn()
@@ -363,7 +379,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
 
       resp =
         Phoenix.ConnTest.build_conn()
@@ -376,7 +392,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
 
       resp =
         Phoenix.ConnTest.build_conn()
@@ -389,7 +405,7 @@ defmodule Phoenix.Sync.RouterTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag table: {
@@ -416,7 +432,7 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
 
       resp =
         Phoenix.ConnTest.build_conn()
@@ -428,7 +444,7 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag table: {
@@ -517,7 +533,10 @@ defmodule Phoenix.Sync.RouterTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"merged" => "query-mfa-insert-2-two", "title" => "two"}
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] =
+               Support.ElectricHelpers.extract_data_messages(resp.resp_body,
+                 keys: [:title, :merged]
+               )
     end
 
     @tag transform: true
@@ -580,7 +599,7 @@ defmodule Phoenix.Sync.RouterTest do
                    "updated_at" => "2025-01-02T12:34:14"
                  }
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body)
     end
   end
 
@@ -698,7 +717,7 @@ defmodule Phoenix.Sync.RouterTest do
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-               ] = Jason.decode!(resp.resp_body)
+               ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
       end
     end
 
@@ -724,7 +743,10 @@ defmodule Phoenix.Sync.RouterTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"merged" => "module-mfa-insert-3-three", "title" => "three"}
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] =
+               Support.ElectricHelpers.extract_data_messages(resp.resp_body,
+                 keys: [:title, :merged]
+               )
     end
 
     @tag transform: true
@@ -749,7 +771,10 @@ defmodule Phoenix.Sync.RouterTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"merged" => "capture-insert-3-three", "title" => "three"}
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] =
+               Support.ElectricHelpers.extract_data_messages(resp.resp_body,
+                 keys: [:title, :merged]
+               )
     end
 
     @tag transform: true
@@ -813,7 +838,7 @@ defmodule Phoenix.Sync.RouterTest do
                    "updated_at" => "2025-01-02T12:34:14"
                  }
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body)
     end
 
     test "returns CORS headers", ctx do

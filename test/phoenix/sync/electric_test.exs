@@ -1,4 +1,5 @@
 defmodule Phoenix.Sync.ElectricTest do
+  # Only test embedded mode - HTTP mode requires a running Electric server
   use ExUnit.Case,
     async: false,
     parameterize: [
@@ -6,14 +7,6 @@ defmodule Phoenix.Sync.ElectricTest do
         sync_config: [
           env: :test,
           mode: :embedded,
-          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-        ]
-      },
-      %{
-        sync_config: [
-          env: :test,
-          mode: :http,
-          url: "http://localhost:3000",
           pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       }
@@ -125,7 +118,7 @@ defmodule Phoenix.Sync.ElectricTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:value])
     end
 
     test "supports DELETEs", ctx do
@@ -181,7 +174,7 @@ defmodule Phoenix.Sync.ElectricTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:value])
     end
 
     test "supports deletes", _ctx do

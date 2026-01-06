@@ -1,6 +1,9 @@
 defmodule Mix.Tasks.PhoenixSync.InstallTest do
   use ExUnit.Case, async: true
 
+  # Tag for igniter tests - require phx_new archive to be installed
+  @moduletag :igniter
+
   import Igniter.Test
 
   defp run_install_task(igniter, ctx) do

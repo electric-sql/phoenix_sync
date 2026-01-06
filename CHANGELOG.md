@@ -17,15 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated `Electric.StatusMonitor.mark_connection_pool_ready/2` calls to `/3` (Electric 1.2.x API change)
 - Updated storage configuration to use keyword list format (Electric 1.2.x requirement)
 
+### Deprecated
+
+- **Sandbox mode** (`mode: :sandbox`) is deprecated and will be removed in a future version. Electric 1.2.x introduced architectural changes that make sandbox mode incompatible with the new internal structure. Use embedded mode with a test database instead.
+- **LiveView streams** (`Phoenix.Sync.LiveView.sync_stream/4` and `sync_stream_update/3`) are deprecated and will be removed in a future version. Use `Phoenix.Sync.Shape` or client-side sync with TanStack DB instead.
+
 ### Added
 
 - Implemented `Inspector.load_supported_features/1` callback (new in Electric 1.2.x)
 - Implemented `PublicationManager.wait_for_restore/1` callback (new in Electric 1.2.x)
 - Updated storage configuration tests to handle both keyword list and map formats for better forward compatibility
-
-### Known Issues
-
-- **Sandbox mode** (`mode: :sandbox`) is not yet compatible with Electric 1.2.x due to internal architecture changes (`Electric.Replication.Supervisor` was removed). Sandbox mode will be updated in a future release.
 
 ### Migration Guide
 
@@ -33,11 +34,15 @@ If upgrading from Phoenix.Sync 0.6.1 or earlier:
 
 1. **Electric 1.2.x Required**: This version requires Electric 1.2.4 or later. Electric 1.1.x is no longer supported.
 
-2. **Deprecated Configuration Options**:
+2. **Deprecated Features**:
+   - **Sandbox mode**: No longer compatible with Electric 1.2.x. Migrate to embedded mode with test database.
+   - **LiveView streams**: `sync_stream/4` and `sync_stream_update/3` will be removed in a future version. Migrate to `Phoenix.Sync.Shape` or client-side sync.
+
+3. **Deprecated Configuration Options**:
    - `experimental_live_sse` has been replaced by `live_sse` in Electric 1.2.x
    - The `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` environment variable has been retired; use the `max_shapes` configuration option instead
 
-3. **New Configuration Options** (Electric 1.2.x):
+4. **New Configuration Options** (Electric 1.2.x):
    - `live_sse`: Enable server-sent events for real-time updates (replaces `experimental_live_sse`)
    - `replication_idle_timeout`: Automatically close database connections during idle replication streams (useful for scale-to-zero deployments)
 

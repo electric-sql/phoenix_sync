@@ -1,6 +1,9 @@
 defmodule Mix.Tasks.Phx.Sync.TanstackDb.SetupTest do
   use ExUnit.Case, async: true
 
+  # Tag for igniter tests - require phx_new archive to be installed
+  @moduletag :igniter
+
   import Igniter.Test
 
   import Mix.Tasks.Phx.Sync.TanstackDb.Setup, only: [template_dir: 0, template_contents: 2]

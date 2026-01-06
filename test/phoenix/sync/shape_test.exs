@@ -2,6 +2,9 @@ defmodule Support.ShapeTest do
   use ExUnit.Case, async: true
   use Support.RepoSetup, repo: Support.SandboxRepo
 
+  # This test requires sandbox mode which is deprecated in Electric 1.2.x
+  @moduletag :sandbox
+
   alias Phoenix.Sync.Shape
 
   Code.ensure_loaded!(Support.SandboxRepo)

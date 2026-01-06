@@ -36,8 +36,8 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     @impl Electric.Postgres.Inspector
     def load_supported_features(_stack_id) do
-      # Return empty map for sandbox - no special Postgres features needed
-      {:ok, %{}}
+      # Electric 1.2.x requires supports_generated_column_replication feature flag
+      {:ok, %{supports_generated_column_replication: false}}
     end
 
     def start_link(args) do
