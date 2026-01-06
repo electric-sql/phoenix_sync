@@ -33,4 +33,5 @@ config :phoenix_live_view,
 
 config :phoenix_sync,
   env: config_env(),
-  mode: :sandbox
+  mode: :embedded,
+  repo: PhoenixSyncExample.Repo

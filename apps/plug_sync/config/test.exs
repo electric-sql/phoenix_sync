@@ -1,6 +1,6 @@
 import Config
 
-config :phoenix_sync, mode: :sandbox, env: config_env()
+config :phoenix_sync, mode: :embedded, env: config_env(), repo: PlugSync.Repo
 
 config :plug_sync, PlugSync.Repo,
   username: "postgres",
