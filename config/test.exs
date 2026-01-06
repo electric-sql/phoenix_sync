@@ -17,7 +17,7 @@ db_config = [
   password: "password",
   hostname: "localhost",
   database: "phoenix_sync",
-  port: 54321
+  port: 55555
 ]
 
 # configure the support repo with random options so we can validate them in Phoenix.Sync.ConfigTest

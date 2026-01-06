@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mix deps.get:*)",
+      "Bash(mix test)",
+      "Bash(MIX_ENV=test mix deps.get:*)",
+      "Bash(mix start_dev:*)",
+      "Bash(docker compose:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(mix test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: Update Electric 1.2.x API compatibility\n\n- Update StatusMonitor.mark_connection_pool_ready/2 to /3 \\(new pool type arg\\)\n- Remove ShapeStatus.opts/1 calls \\(function removed in Electric 1.2.x\\)\n- Fix storage format to use keyword lists instead of maps\n- Implement Inspector.load_supported_features/1 callback\n- Implement PublicationManager.wait_for_restore/1 callback\n- Update test helpers for Electric 1.2.x storage format\n- Change default Postgres port from 55555 to 54321\n- Update application tests for Electric 1.2.x compatibility\n\nNote: Sandbox mode is not yet compatible with Electric 1.2.x due to\nElectric.Replication.Supervisor being removed. This will be addressed\nin a future release.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(gh pr create --title \"Update to Electric 1.2.x and electric_client 0.8.0\" --body \"$\\(cat <<''EOF''\n## Summary\n\nUpdates Phoenix.Sync to work with Electric 1.2.x and electric_client 0.8.0.\n\n### Changes\n\n- **Breaking**: Updated `electric` dependency to `~> 1.2.4` \\(dropping support for Electric 1.1.x\\)\n- **Breaking**: Updated `electric_client` dependency to `~> 0.8.0`\n- Removed `http_api_num_acceptors` workaround \\(fixed upstream in Electric via #2863\\)\n- Updated `Electric.StatusMonitor.mark_connection_pool_ready/2` calls to `/3` \\(Electric 1.2.x API change\\)\n- Updated storage configuration to use keyword list format \\(Electric 1.2.x requirement\\)\n- Implemented `Inspector.load_supported_features/1` callback \\(new in Electric 1.2.x\\)\n- Implemented `PublicationManager.wait_for_restore/1` callback \\(new in Electric 1.2.x\\)\n- Updated storage configuration tests to handle both keyword list and map formats\n\n### Known Issues\n\n- **Sandbox mode** \\(`mode: :sandbox`\\) is not yet compatible with Electric 1.2.x due to internal architecture changes \\(`Electric.Replication.Supervisor` was removed\\). Sandbox mode will be updated in a future release.\n\n### Migration Guide\n\nIf upgrading from Phoenix.Sync 0.6.1 or earlier:\n\n1. **Electric 1.2.x Required**: This version requires Electric 1.2.4 or later. Electric 1.1.x is no longer supported.\n\n2. **Deprecated Configuration Options**:\n   - `experimental_live_sse` has been replaced by `live_sse` in Electric 1.2.x\n   - The `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` environment variable has been retired; use the `max_shapes` configuration option instead\n\n3. **New Configuration Options** \\(Electric 1.2.x\\):\n   - `live_sse`: Enable server-sent events for real-time updates\n   - `replication_idle_timeout`: Automatically close database connections during idle replication streams\n\n## Test plan\n\n- [x] Application tests pass \\(22/22\\)\n- [ ] Sandbox tests - skipped \\(requires Electric 1.2.x architecture update\\)\n- [ ] Integration tests with real Electric 1.2.x server\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
+      "Bash(mix format:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

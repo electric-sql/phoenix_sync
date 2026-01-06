@@ -16,7 +16,7 @@ case System.get_env("PHOENIX_SYNC_MODE", "embedded") do
       password: "password",
       hostname: "localhost",
       database: "electric",
-      port: 54321
+      port: 55555
 
   _ ->
     IO.puts("Starting in embedded mode")
@@ -31,5 +31,5 @@ case System.get_env("PHOENIX_SYNC_MODE", "embedded") do
       password: "password",
       hostname: "localhost",
       database: "plug_sync",
-      port: 54321
+      port: 55555
 end

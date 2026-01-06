@@ -10,7 +10,7 @@ config :phoenix_sync_example, PhoenixSyncExample.Repo,
   password: "password",
   hostname: "localhost",
   database: "phoenix_sync_example_test#{System.get_env("MIX_TEST_PARTITION")}",
-  port: 54321,
+  port: 55555,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
