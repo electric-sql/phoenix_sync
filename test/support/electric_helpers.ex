@@ -5,6 +5,66 @@ defmodule Support.ElectricHelpers do
 
   @endpoint Phoenix.Sync.LiveViewTest.Endpoint
 
+  @doc """
+  Extract data messages from an Electric response, filtering out control messages
+  (like snapshot-end, up-to-date) and normalizing to a simpler format.
+
+  Options:
+    - `:keys` - list of value keys to keep (default: all keys)
+    - `:include_control` - whether to include control messages (default: false)
+  """
+  def extract_data_messages(json_body, opts \\ []) when is_binary(json_body) do
+    include_control = Keyword.get(opts, :include_control, false)
+    value_keys = Keyword.get(opts, :keys, nil)
+
+    json_body
+    |> Jason.decode!()
+    |> Enum.filter(fn
+      %{"headers" => %{"operation" => _}} -> true
+      %{"headers" => %{"control" => _}} -> include_control
+      _ -> false
+    end)
+    |> Enum.map(fn
+      %{"headers" => %{"operation" => op}, "value" => value} ->
+        filtered_value =
+          if value_keys do
+            Map.take(value, Enum.map(value_keys, &to_string/1))
+          else
+            value
+          end
+
+        %{"headers" => %{"operation" => op}, "value" => filtered_value}
+
+      msg ->
+        msg
+    end)
+  end
+
+  @doc """
+  Assert that the response body contains expected data messages.
+  Filters out control messages and compares only operation and specified value keys.
+  """
+  def assert_sync_response(resp_body, expected, opts \\ []) do
+    actual = extract_data_messages(resp_body, opts)
+
+    # Normalize expected to match the format
+    normalized_expected =
+      Enum.map(expected, fn %{"headers" => headers, "value" => value} ->
+        value_keys = Keyword.get(opts, :keys, nil)
+
+        filtered_value =
+          if value_keys do
+            Map.take(value, Enum.map(value_keys, &to_string/1))
+          else
+            value
+          end
+
+        %{"headers" => %{"operation" => headers["operation"]}, "value" => filtered_value}
+      end)
+
+    actual == normalized_expected
+  end
+
   defmacro __using__(opts) do
     endpoint_module = opts[:endpoint] || @endpoint
 
@@ -67,11 +127,11 @@ defmodule Support.ElectricHelpers do
       pid: ExUnit.Callbacks.start_supervised!(Electric.PersistentKV.Memory, restart: :temporary)
     }
 
+    # Electric 1.2.x: Pass storage as tuple with keyword list, not processed via shared_opts
+    # StackSupervisor.shared_storage_opts/1 expects keyword list format
     storage =
-      Electric.ShapeCache.Storage.shared_opts(
-        {Electric.ShapeCache.InMemoryStorage,
-         stack_id: stack_id, table_base_name: :"in_memory_storage_#{stack_id}"}
-      )
+      {Electric.ShapeCache.InMemoryStorage,
+       [stack_id: stack_id, table_base_name: :"in_memory_storage_#{stack_id}"]}
 
     publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 

@@ -56,5 +56,10 @@ if Phoenix.Sync.sandbox_enabled?() do
     def refresh_publication(_opts) do
       :ok
     end
+
+    # Electric 1.2.x: New callback for waiting for restore completion
+    def wait_for_restore(_opts) do
+      :ok
+    end
   end
 end

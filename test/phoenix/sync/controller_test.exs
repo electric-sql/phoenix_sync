@@ -1,4 +1,5 @@
 defmodule Phoenix.Sync.ControllerTest do
+  # Only test embedded mode - HTTP mode requires a running Electric server
   use ExUnit.Case,
     async: false,
     parameterize: [
@@ -6,14 +7,6 @@ defmodule Phoenix.Sync.ControllerTest do
         sync_config: [
           env: :test,
           mode: :embedded,
-          pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
-        ]
-      },
-      %{
-        sync_config: [
-          mode: :http,
-          env: :test,
-          url: "http://localhost:3000",
           pool_opts: [backoff_type: :stop, max_restarts: 0, pool_size: 2]
         ]
       }
@@ -129,7 +122,7 @@ defmodule Phoenix.Sync.ControllerTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     test "includes CORS headers", _ctx do
@@ -152,7 +145,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     test "allows for ecto queries", _ctx do
@@ -165,7 +158,7 @@ defmodule Phoenix.Sync.ControllerTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
 
       resp =
         Phoenix.ConnTest.build_conn()
@@ -177,7 +170,7 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     test "allows for ecto schema module", _ctx do
@@ -192,7 +185,7 @@ defmodule Phoenix.Sync.ControllerTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     test "allows for changeset function", _ctx do
@@ -207,7 +200,7 @@ defmodule Phoenix.Sync.ControllerTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     test "allows for complex shapes", _ctx do
@@ -221,7 +214,7 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     @tag transform: true
@@ -246,7 +239,10 @@ defmodule Phoenix.Sync.ControllerTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "three", "merged" => "mapping-insert-3-three"}
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] =
+               Support.ElectricHelpers.extract_data_messages(resp.resp_body,
+                 keys: [:title, :merged]
+               )
     end
 
     @tag transform: true
@@ -271,7 +267,10 @@ defmodule Phoenix.Sync.ControllerTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "three", "merged" => "mapping-insert-3-three"}
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] =
+               Support.ElectricHelpers.extract_data_messages(resp.resp_body,
+                 keys: [:title, :merged]
+               )
     end
 
     @tag transform: true
@@ -296,7 +295,10 @@ defmodule Phoenix.Sync.ControllerTest do
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "two", "merged" => "mapping-insert-2-two"}
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] =
+               Support.ElectricHelpers.extract_data_messages(resp.resp_body,
+                 keys: [:title, :merged]
+               )
     end
 
     @tag @organizations
@@ -340,7 +342,7 @@ defmodule Phoenix.Sync.ControllerTest do
                    "updated_at" => "2025-01-02T12:34:14"
                  }
                }
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body)
     end
   end
 
@@ -385,7 +387,7 @@ defmodule Phoenix.Sync.ControllerTest do
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
-             ] = Jason.decode!(resp.resp_body)
+             ] = Support.ElectricHelpers.extract_data_messages(resp.resp_body, keys: [:title])
     end
 
     test "includes content-type header", ctx do

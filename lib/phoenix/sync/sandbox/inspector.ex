@@ -34,6 +34,12 @@ if Phoenix.Sync.sandbox_enabled?() do
     @impl Electric.Postgres.Inspector
     def list_relations_with_stale_cache(_), do: {:ok, []}
 
+    @impl Electric.Postgres.Inspector
+    def load_supported_features(_stack_id) do
+      # Electric 1.2.x requires supports_generated_column_replication feature flag
+      {:ok, %{supports_generated_column_replication: false}}
+    end
+
     def start_link(args) do
       GenServer.start_link(__MODULE__, args, name: name(args[:stack_id]))
     end

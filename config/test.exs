@@ -17,7 +17,7 @@ db_config = [
   password: "password",
   hostname: "localhost",
   database: "phoenix_sync",
-  port: 55555
+  port: 54321
 ]
 
 # configure the support repo with random options so we can validate them in Phoenix.Sync.ConfigTest
@@ -51,7 +51,9 @@ config :phoenix_sync,
            ownership_log: :warning
          ]
 
-config :phoenix_sync, env: :test, mode: :sandbox
+# Note: sandbox mode is deprecated and disabled in Electric 1.2.x
+# Tests now run in embedded mode with a real test database
+config :phoenix_sync, env: :test, mode: :embedded
 
 config :phoenix_sync,
        Phoenix.Sync.SandboxTest.Endpoint,

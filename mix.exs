@@ -2,8 +2,8 @@ defmodule Phoenix.Sync.MixProject do
   use Mix.Project
 
   # Remember to update the README when you change the version
-  @version "0.6.1"
-  @electric_version ">= 1.1.9 and <= 1.1.10"
+  @version "0.6.2"
+  @electric_version "~> 1.2.4"
 
   def project do
     [
@@ -46,7 +46,7 @@ defmodule Phoenix.Sync.MixProject do
       {:jason, "~> 1.0"},
       {:ecto_sql, "~> 3.10", optional: true},
       {:electric, @electric_version, optional: true},
-      {:electric_client, "~> 0.7.2"},
+      {:electric_client, "~> 0.8.0"},
       {:igniter, "~> 0.6", optional: true}
     ] ++ deps_for_env(Mix.env()) ++ json_deps()
   end
@@ -133,7 +133,7 @@ defmodule Phoenix.Sync.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp test_as_a_dep_embedded(args) do
-    do_test_as_a_dep("tmp/as_a_dep_embedded", [{:electric, "~> 1.0"}], args)
+    do_test_as_a_dep("tmp/as_a_dep_embedded", [{:electric, "~> 1.2"}], args)
   end
 
   defp test_as_a_dep_standalone(args) do

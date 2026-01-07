@@ -6,7 +6,7 @@ config :phoenix_sync_example, PhoenixSyncExample.Repo,
   password: "password",
   hostname: "localhost",
   database: "phoenix_sync_example_dev",
-  port: 55555,
+  port: 54321,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

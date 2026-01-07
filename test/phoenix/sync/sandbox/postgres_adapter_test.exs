@@ -1,6 +1,8 @@
 defmodule Phoenix.Sync.Sandbox.PostgresAdapterTest do
   use ExUnit.Case, async: true
 
+  @moduletag :sandbox
+
   describe "adapter/1" do
     defmodule Adapter do
       import Phoenix.Sync.Sandbox.Postgres, only: [adapter: 0, adapter: 1]

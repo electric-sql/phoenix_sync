@@ -31,7 +31,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 55555:5432
+          - 54321:5432
 
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +83,8 @@ jobs:
         run: mix compile --force --all-warnings --warnings-as-errors
 
       - name: Run tests
-        run: mix test --trace
+        # Include igniter tests since phx_new is installed in CI
+        run: mix test --trace --include igniter
 
   test-as-dep-standalone:
     name: Test installation as a dependency without Electric or Ecto
@@ -140,7 +141,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 55555:5432
+          - 54321:5432
     steps:
       - uses: actions/checkout@v4
 

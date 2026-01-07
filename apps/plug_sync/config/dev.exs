@@ -31,5 +31,5 @@ case System.get_env("PHOENIX_SYNC_MODE", "embedded") do
       password: "password",
       hostname: "localhost",
       database: "plug_sync",
-      port: 55555
+      port: 54321
 end

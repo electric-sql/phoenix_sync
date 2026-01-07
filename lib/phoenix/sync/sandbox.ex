@@ -1,6 +1,15 @@
 if Phoenix.Sync.sandbox_enabled?() do
   defmodule Phoenix.Sync.Sandbox do
     @moduledoc """
+    > #### Deprecated {: .warning}
+    >
+    > Sandbox mode is deprecated and will be removed in a future version.
+    > Electric 1.2.x introduced architectural changes that make sandbox mode
+    > incompatible with the new internal structure. Use embedded mode with
+    > a test database and proper cleanup instead.
+    >
+    > See the [Testing Guide](guides/testing.md) for recommended testing strategies.
+
     Integration between `Ecto.Adapters.SQL.Sandbox` and `Electric` that produces
     replication events from Ecto operations within a sandboxed connection.
 
@@ -256,10 +265,14 @@ if Phoenix.Sync.sandbox_enabled?() do
           # give the inspector access to the sandboxed connection
           Ecto.Adapters.SQL.Sandbox.allow(repo, owner, Sandbox.Inspector.name(stack_id))
 
-          # mark the stack as ready
+          # mark the stack as ready - Electric 1.2.x requires all these conditions
           Electric.StatusMonitor.mark_pg_lock_acquired(stack_id, owner)
           Electric.StatusMonitor.mark_replication_client_ready(stack_id, owner)
-          Electric.StatusMonitor.mark_connection_pool_ready(stack_id, owner)
+          # Electric 1.2.x requires pool type (:admin or :snapshot) as second argument
+          Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :admin, owner)
+          Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, owner)
+          # Electric 1.2.x requires integrity checks to pass (note: typo is in Electric's code)
+          Electric.StatusMonitor.mark_integrety_checks_passed(stack_id, owner)
 
           api_config = Sandbox.Stack.config(stack_id, repo)
           api = Electric.Application.api(api_config)
