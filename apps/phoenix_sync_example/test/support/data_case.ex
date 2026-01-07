@@ -40,7 +40,6 @@ defmodule PhoenixSyncExample.DataCase do
       Ecto.Adapters.SQL.Sandbox.start_owner!(PhoenixSyncExample.Repo, shared: not tags[:async])
 
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
-    Phoenix.Sync.Sandbox.start!(PhoenixSyncExample.Repo, pid, shared: not tags[:async])
   end
 
   @doc """
