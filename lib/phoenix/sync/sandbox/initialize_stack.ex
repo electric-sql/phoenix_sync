@@ -13,7 +13,7 @@ defmodule Phoenix.Sync.Sandbox.InitializeStack do
   def init(args) do
     {:ok, stack_id} = Keyword.fetch(args, :stack_id)
 
-    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize(stack_id)
+    :ok = Electric.ShapeCache.ShapeStatusOwner.refresh(stack_id)
 
     Electric.LsnTracker.set_last_processed_lsn(
       stack_id,
