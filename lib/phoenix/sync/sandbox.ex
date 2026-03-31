@@ -261,6 +261,7 @@ if Phoenix.Sync.sandbox_enabled?() do
           Electric.StatusMonitor.mark_integrety_checks_passed(stack_id, owner)
           Electric.StatusMonitor.mark_shape_log_collector_ready(stack_id, owner)
           Electric.StatusMonitor.mark_supervisor_processes_ready(stack_id, owner)
+          Electric.StatusMonitor.mark_shape_metadata_ready(stack_id, owner)
 
           api_config = Sandbox.Stack.config(stack_id, repo)
           api = Electric.Application.api(api_config)
