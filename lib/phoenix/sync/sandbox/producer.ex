@@ -55,6 +55,8 @@ if Phoenix.Sync.sandbox_enabled?() do
       {:ok, state}
     end
 
+    def handle_cast({:emit_changes, []}, state), do: {:noreply, state}
+
     def handle_cast({:emit_changes, changes}, %{txid: txid, stack_id: stack_id} = state) do
       {msgs, next_txid} =
         changes
