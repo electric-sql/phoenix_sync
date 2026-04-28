@@ -22,7 +22,7 @@ defmodule TXIDMatch.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:electric, "~> 1.1.1", override: true},
+      {:electric, "~> 1.0", override: true},
       {:electric_client, "~> 0.7", override: true},
       {:nimble_options, "~> 1.1"},
       {:phoenix_live_view, "~> 1.0", optional: true},

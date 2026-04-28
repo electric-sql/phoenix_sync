@@ -124,7 +124,8 @@ defmodule Phoenix.Sync.ElectricTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -180,7 +181,8 @@ defmodule Phoenix.Sync.ElectricTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"value" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 

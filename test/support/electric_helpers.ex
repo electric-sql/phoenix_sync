@@ -68,10 +68,8 @@ defmodule Support.ElectricHelpers do
     }
 
     storage =
-      Electric.ShapeCache.Storage.shared_opts(
-        {Electric.ShapeCache.InMemoryStorage,
-         stack_id: stack_id, table_base_name: :"in_memory_storage_#{stack_id}"}
-      )
+      {Electric.ShapeCache.InMemoryStorage,
+       stack_id: stack_id, table_base_name: :"in_memory_storage_#{stack_id}"}
 
     publication_name = "electric_test_pub_#{:erlang.phash2(stack_id)}"
 

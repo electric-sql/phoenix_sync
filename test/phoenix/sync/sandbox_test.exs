@@ -95,10 +95,10 @@ defmodule Phoenix.Sync.SandboxTest do
     {:ok, lv, html} =
       build_conn()
       |> put_private(:test_pid, self())
+      |> put_private(:electric_client, Phoenix.Sync.Sandbox.client!())
       |> live("/stream/sandbox")
 
     assert_receive {:sync, {:todos, :loaded}}
-    assert_receive {:sync, {:todos, :live}}
 
     for todo <- Repo.all(Todo) do
       assert html =~ todo.title
@@ -106,7 +106,7 @@ defmodule Phoenix.Sync.SandboxTest do
 
     Repo.insert!(%Todo{title: "fourth", completed: false})
 
-    assert_receive {:sync, _event}
+    assert_receive {:sync, {:todos, :live}}
 
     assert render(lv) =~ "fourth"
   end
@@ -180,7 +180,8 @@ defmodule Phoenix.Sync.SandboxTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -204,7 +205,7 @@ defmodule Phoenix.Sync.SandboxTest do
             Phoenix.ConnTest.build_conn()
             |> Phoenix.ConnTest.get("/sync/todos", %{offset: offset, handle: handle})
 
-          assert [%{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => "0"}}] =
+          assert [%{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => "10200"}}] =
                    Jason.decode!(resp.resp_body)
 
           [offset] = Plug.Conn.get_resp_header(resp, "electric-offset")
@@ -237,7 +238,8 @@ defmodule Phoenix.Sync.SandboxTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = snapshot
 
       send(task1.pid, :request)
@@ -267,7 +269,8 @@ defmodule Phoenix.Sync.SandboxTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -292,7 +295,7 @@ defmodule Phoenix.Sync.SandboxTest do
             Phoenix.ConnTest.build_conn()
             |> Phoenix.ConnTest.get(path, %{offset: offset, handle: handle})
 
-          assert [%{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => "0"}}] =
+          assert [%{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => "10200"}}] =
                    Jason.decode!(resp.resp_body)
 
           [offset] = Plug.Conn.get_resp_header(resp, "electric-offset")
@@ -325,7 +328,8 @@ defmodule Phoenix.Sync.SandboxTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = snapshot
 
       send(task1.pid, :request)

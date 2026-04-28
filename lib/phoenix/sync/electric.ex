@@ -640,8 +640,9 @@ defmodule Phoenix.Sync.Electric do
   end
 end
 
-if Code.ensure_loaded?(Electric.Shapes.Api) &&
-     Code.ensure_loaded?(Phoenix.Sync.Electric.ApiAdapter) do
+if Code.ensure_loaded?(Electric.Shapes.Api) do
+  Code.ensure_loaded(Phoenix.Sync.Electric.ApiAdapter)
+
   defimpl Phoenix.Sync.Adapter.PlugApi, for: Electric.Shapes.Api do
     alias Electric.Shapes
 
@@ -701,7 +702,7 @@ if Code.ensure_loaded?(Electric.Shapes.Api) &&
       end
     end
 
-    def send_response(%ApiAdapter{}, conn, {request, response}) do
+    def send_response(_api, conn, {request, response}) do
       conn
       |> content_type()
       |> Plug.Conn.assign(:request, request)

@@ -340,10 +340,7 @@ defmodule Phoenix.Sync.ApplicationTest do
 
       api = App.plug_opts(config)
 
-      assert %Electric.Shapes.Api{
-               storage: {Electric.ShapeCache.PureFileStorage, %{base_path: ^storage_dir <> _}},
-               persistent_kv: %Electric.PersistentKV.Filesystem{root: ^storage_dir}
-             } = api
+      assert %Electric.Shapes.Api{stack_id: "electric-embedded"} = api
     end
 
     test "remote http mode" do

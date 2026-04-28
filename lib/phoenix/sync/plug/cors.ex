@@ -13,10 +13,12 @@ defmodule Phoenix.Sync.Plug.CORS do
   @electric_headers [
     "electric-cursor",
     "electric-handle",
+    "electric-has-data",
     "electric-offset",
     "electric-schema",
     "electric-up-to-date",
-    "electric-internal-known-error"
+    "electric-internal-known-error",
+    "retry-after"
   ]
 
   @expose_headers ["transfer-encoding" | @electric_headers]

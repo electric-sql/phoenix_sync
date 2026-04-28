@@ -4,57 +4,31 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     use GenServer
 
-    @behaviour Electric.Replication.PublicationManager
-
-    def start_link(_) do
-      :ignore
+    def start_link(args) do
+      GenServer.start_link(__MODULE__, args, name: name(args))
     end
 
-    def init(_arg) do
-      :ignore
+    def name(stack_ref) do
+      Electric.Replication.PublicationManager.name(stack_ref)
     end
 
-    def name(stack_id) when is_binary(stack_id) do
-      Phoenix.Sync.Sandbox.name({__MODULE__, stack_id})
+    def init(opts) do
+      {:ok, opts}
     end
 
-    def name(opts) when is_list(opts) do
-      opts
-      |> Keyword.fetch!(:stack_id)
-      |> name()
-    end
-
-    def recover_shape(_shape_handle, _shape, _opts) do
-      :ok
-    end
-
-    def recover_shape(_shape, _opts) do
-      :ok
-    end
-
-    def add_shape(_shape_handle, _shape, opts) do
-      snapshotter = self()
-      {:ok, owner} = Keyword.fetch(opts, :owner)
-      {:ok, repo} = Keyword.fetch(opts, :repo)
+    # intercept the snapshotter process's add_shape call to add it to the allow
+    # list for the sandbox repo
+    def handle_call({:add_shape, _shape_handle, _pub_filter}, {snapshotter, _ref}, state) do
+      {:ok, owner} = Keyword.fetch(state, :owner)
+      {:ok, repo} = Keyword.fetch(state, :repo)
 
       Ecto.Adapters.SQL.Sandbox.allow(repo, owner, snapshotter)
-      :ok
+
+      {:reply, :ok, state}
     end
 
-    def add_shape(_shape, _opts) do
-      :ok
-    end
-
-    def remove_shape(_shape_handle, _shape, _opts) do
-      :ok
-    end
-
-    def remove_shape(_shape, _opts) do
-      :ok
-    end
-
-    def refresh_publication(_opts) do
-      :ok
+    def handle_call(_msg, _from, state) do
+      {:reply, :ok, state}
     end
   end
 end

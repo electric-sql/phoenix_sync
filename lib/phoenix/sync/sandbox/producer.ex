@@ -3,7 +3,8 @@ if Phoenix.Sync.sandbox_enabled?() do
     @moduledoc false
 
     alias Electric.Replication.Changes.{
-      Transaction,
+      TransactionFragment,
+      Commit,
       NewRecord,
       UpdatedRecord,
       DeletedRecord,
@@ -50,6 +51,7 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     def init(stack_id) do
       state = %{txid: 10000, stack_id: stack_id}
+
       {:ok, state}
     end
 
@@ -62,7 +64,7 @@ if Phoenix.Sync.sandbox_enabled?() do
       :ok =
         txid
         |> transaction(msgs)
-        |> ShapeLogCollector.store_transaction(ShapeLogCollector.name(stack_id))
+        |> ShapeLogCollector.handle_event(stack_id)
 
       {:noreply, %{state | txid: next_txid}}
     end
@@ -73,20 +75,22 @@ if Phoenix.Sync.sandbox_enabled?() do
       :ok =
         state.txid
         |> transaction(changes)
-        |> ShapeLogCollector.store_transaction(ShapeLogCollector.name(state.stack_id))
+        |> ShapeLogCollector.handle_event(state.stack_id)
 
       {:noreply, %{state | txid: state.txid + 100}}
     end
 
     defp transaction(txid, changes) do
-      %Transaction{
+      %{log_offset: last_log_offset} = Enum.at(changes, -1)
+
+      %TransactionFragment{
         xid: txid,
         lsn: Electric.Postgres.Lsn.from_integer(txid),
-        last_log_offset: Enum.at(changes, -1) |> Map.fetch!(:log_offset),
+        last_log_offset: last_log_offset,
+        has_begin?: true,
+        commit: %Commit{},
         changes: changes,
-        num_changes: length(changes),
-        commit_timestamp: DateTime.utc_now(),
-        affected_relations: Enum.into(changes, MapSet.new(), & &1.relation)
+        affected_relations: MapSet.new(changes, & &1.relation)
       }
     end
 

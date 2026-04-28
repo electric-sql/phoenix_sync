@@ -6,6 +6,8 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     alias Phoenix.Sync.Sandbox
 
+    @json Phoenix.Sync.json_library()
+
     def child_spec(opts) do
       {:ok, stack_id} = Keyword.fetch(opts, :stack_id)
       {:ok, repo} = Keyword.fetch(opts, :repo)
@@ -27,47 +29,90 @@ if Phoenix.Sync.sandbox_enabled?() do
       Supervisor.start_link(__MODULE__, {stack_id, repo, owner}, name: name(stack_id))
     end
 
-    alias Electric.Shapes.Querying
     alias Electric.ShapeCache.Storage
+    alias Electric.Shapes.Querying
 
     def snapshot_query(
-          parent,
+          task_parent,
+          consumer,
           shape_handle,
           shape,
-          db_pool,
-          storage,
-          stack_id,
-          chunk_bytes_threshold
+          %{storage: storage, stack_id: stack_id},
+          sandbox_pool
         ) do
       Postgrex.transaction(
-        db_pool,
+        sandbox_pool,
         fn conn ->
-          GenServer.cast(parent, {:pg_snapshot_known, shape_handle, {1000, 1100, []}})
+          xmin = 1000
+          xmax = 1100
+
+          send(task_parent, {:ready_to_stream, self(), System.monotonic_time(:millisecond)})
+
+          GenServer.cast(consumer, {:pg_snapshot_known, shape_handle, {xmin, xmax, []}})
 
           # Enforce display settings *before* querying initial data to maintain consistent
           # formatting between snapshot and live log entries.
           Enum.each(Electric.Postgres.display_settings(), &Postgrex.query!(conn, &1, []))
 
+          chunk_bytes_threshold = Electric.StackConfig.lookup(stack_id, :chunk_bytes_threshold)
+
+          # xmin/xmax/xip_list are uint64, so we need to convert them to strings for JS not to mangle them
+          finishing_control_message =
+            @json.encode!(%{
+              headers: %{
+                control: "snapshot-end",
+                xmin: to_string(xmin),
+                xmax: to_string(xmax),
+                xip_list: []
+              }
+            })
+
           stream =
-            Querying.stream_initial_data(conn, stack_id, shape, chunk_bytes_threshold)
+            Querying.stream_initial_data(
+              conn,
+              stack_id,
+              shape_handle,
+              shape,
+              chunk_bytes_threshold
+            )
             |> Stream.transform(
               fn -> false end,
               fn item, acc ->
-                if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
+                if not acc do
+                  send(task_parent, :data_received)
+                  GenServer.cast(consumer, {:snapshot_started, shape_handle})
+                end
+
                 {[item], true}
               end,
               fn acc ->
-                if not acc, do: GenServer.cast(parent, {:snapshot_started, shape_handle})
+                if not acc do
+                  # The stream has been read to the end but we haven't seen a single item in
+                  # it. Notify `consumer` anyway since an empty file will have been created by
+                  # the storage implementation for the API layer to read the snapshot data
+                  # from.
+                  send(task_parent, :data_received)
+                  GenServer.cast(consumer, {:snapshot_started, shape_handle})
+                end
+
+                {[], acc}
+              end,
+              fn acc ->
+                # noop after fun just to be able to specify the last fun which is only
+                # available in `Stream.transoform/5`.
                 acc
               end
             )
+            |> Stream.concat([finishing_control_message])
 
-          # could pass the shape and then make_new_snapshot! can pass it to row_to_snapshot_item
-          # that way it has the relation, but it is still missing the pk_cols
           Storage.make_new_snapshot!(stream, storage)
         end,
         timeout: :infinity
       )
+    end
+
+    defp storage_dir(stack_id) do
+      Path.join([System.tmp_dir!(), "#{inspect(__MODULE__)}_#{stack_id}"])
     end
 
     def config(stack_id, repo, owner \\ nil) do
@@ -79,28 +124,23 @@ if Phoenix.Sync.sandbox_enabled?() do
 
       %{pid: pool} = Ecto.Adapter.lookup_meta(repo.get_dynamic_repo())
 
-      registry = :"#{__MODULE__}.Registry-#{stack_id}"
+      registry = Electric.StackSupervisor.registry_name(stack_id)
+
+      storage_dir = storage_dir(stack_id)
 
       storage = {
-        Electric.ShapeCache.InMemoryStorage,
-        %{stack_id: stack_id, table_base_name: :"#{stack_id}"}
+        Electric.ShapeCache.PureFileStorage,
+        [stack_id: stack_id, storage_dir: storage_dir]
       }
 
       [
-        purge_all_shapes?: false,
         stack_id: stack_id,
         storage: storage,
-        shape_status:
-          {Electric.ShapeCache.ShapeStatus,
-           Electric.ShapeCache.ShapeStatus.opts(
-             shape_meta_table: Electric.ShapeCache.ShapeStatus.shape_meta_table(stack_id),
-             storage: storage
-           )},
+        storage_dir: storage_dir,
         inspector: inspector,
         publication_manager: publication_manager_spec,
         chunk_bytes_threshold: 10_485_760,
         db_pool: pool,
-        create_snapshot_fn: &snapshot_query/7,
         log_producer: Electric.Replication.ShapeLogCollector.name(stack_id),
         consumer_supervisor: Electric.Shapes.DynamicConsumerSupervisor.name(stack_id),
         registry: registry,
@@ -110,47 +150,60 @@ if Phoenix.Sync.sandbox_enabled?() do
 
     def init({stack_id, repo, owner}) do
       config = config(stack_id, repo, owner)
-      shape_cache_spec = {Electric.ShapeCache, config}
+      shape_cache_spec = {Electric.ShapeCache, stack_id: stack_id}
       persistent_kv = Electric.PersistentKV.Memory.new!()
 
-      shape_status_owner_spec =
-        {Electric.ShapeCache.ShapeStatusOwner,
-         [stack_id: stack_id, shape_status: config[:shape_status]]}
+      storage = Storage.shared_opts(config[:storage])
 
-      consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
+      create_snapshot_fn = fn task_parent, consumer, shape_handle, shape, ctx ->
+        snapshot_query(task_parent, consumer, shape_handle, shape, ctx, config[:db_pool])
+      end
 
       children = [
+        {Sandbox.Cleanup, {stack_id, config[:storage_dir]}},
+        {Electric.ProcessRegistry, partitions: 1, stack_id: stack_id},
         {Registry, keys: :duplicate, name: config[:registry]},
-        {Electric.ProcessRegistry, stack_id: stack_id},
-        {Electric.StatusMonitor, stack_id},
-        {Electric.Shapes.Monitor,
+        {Electric.StackConfig,
          stack_id: stack_id,
-         storage: config[:storage],
-         shape_status: config[:shape_status],
-         publication_manager: config[:publication_manager]},
-        # TODO: start an electric stack, decoupled from the db connection
-        #       with in memory storage, a mock publication_manager and inspector
+         seed_config: [
+           inspector: config[:inspector],
+           create_snapshot_fn: create_snapshot_fn
+         ]},
+        {Electric.AsyncDeleter,
+         stack_id: stack_id,
+         storage_dir: config[:storage_dir],
+         cleanup_interval_ms: :timer.seconds(60)},
+        Storage.stack_child_spec(storage),
+        {
+          Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+          shape_db_opts: [storage_dir: ":memory:", exclusive_mode: true], stack_id: stack_id
+        },
+        {Electric.ShapeCache.ShapeStatusOwner, stack_id: stack_id},
+        {Electric.StatusMonitor, stack_id: stack_id},
+        {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, stack_id: stack_id},
+        {Sandbox.Inspector, stack_id: stack_id, repo: repo, owner: owner},
+        {DynamicSupervisor,
+         name: Phoenix.Sync.Sandbox.Fetch.name(stack_id), strategy: :one_for_one},
         Supervisor.child_spec(
           {
-            Electric.Replication.Supervisor,
+            Electric.Shapes.Supervisor,
             stack_id: stack_id,
-            shape_status_owner: shape_status_owner_spec,
+            consumer_supervisor: {Electric.Shapes.DynamicConsumerSupervisor, stack_id: stack_id},
+            shape_cleaner:
+              {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, stack_id: stack_id},
             shape_cache: shape_cache_spec,
             publication_manager: config[:publication_manager],
-            consumer_supervisor: consumer_supervisor_spec,
             log_collector: {
-              Electric.Replication.ShapeLogCollector,
+              Electric.Replication.ShapeLogCollector.Supervisor,
               stack_id: stack_id, inspector: config[:inspector], persistent_kv: persistent_kv
             },
             schema_reconciler: {Phoenix.Sync.Sandbox.SchemaReconciler, stack_id},
-            stack_events_registry: config[:registry]
+            expiry_manager: {Phoenix.Sync.Sandbox.ExpiryManager, stack_id: stack_id}
           },
           restart: :temporary
         ),
-        {Sandbox.Inspector, stack_id: stack_id, repo: repo},
         {Sandbox.Producer, stack_id: stack_id},
-        {DynamicSupervisor,
-         name: Phoenix.Sync.Sandbox.Fetch.name(stack_id), strategy: :one_for_one}
+        {Sandbox.InitializeStack, stack_id: stack_id}
       ]
 
       Supervisor.init(children, strategy: :one_for_one)
