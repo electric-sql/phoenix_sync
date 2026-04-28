@@ -24,3 +24,5 @@ electric_phoenix-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+.claude
+

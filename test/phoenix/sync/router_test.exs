@@ -173,7 +173,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -197,7 +198,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -222,7 +224,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -293,7 +296,8 @@ defmodule Phoenix.Sync.RouterTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "world war"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "make tea"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "make tea"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -321,7 +325,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "peas"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "beans"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "sweetcorn"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"food" => "sweetcorn"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -349,7 +354,8 @@ defmodule Phoenix.Sync.RouterTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
 
       resp =
@@ -362,7 +368,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
 
       resp =
@@ -375,7 +382,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
 
       resp =
@@ -388,7 +396,8 @@ defmodule Phoenix.Sync.RouterTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -415,7 +424,8 @@ defmodule Phoenix.Sync.RouterTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
 
       resp =
@@ -427,7 +437,8 @@ defmodule Phoenix.Sync.RouterTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -516,7 +527,8 @@ defmodule Phoenix.Sync.RouterTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"merged" => "query-mfa-insert-2-two", "title" => "two"}
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -579,7 +591,8 @@ defmodule Phoenix.Sync.RouterTest do
                    "inserted_at" => "2025-01-02T12:34:14",
                    "updated_at" => "2025-01-02T12:34:14"
                  }
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
   end
@@ -697,7 +710,8 @@ defmodule Phoenix.Sync.RouterTest do
         assert [
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                  %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-                 %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+                 %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+                 %{"headers" => %{"control" => "snapshot-end"}}
                ] = Jason.decode!(resp.resp_body)
       end
     end
@@ -723,7 +737,8 @@ defmodule Phoenix.Sync.RouterTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"merged" => "module-mfa-insert-3-three", "title" => "three"}
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -748,7 +763,8 @@ defmodule Phoenix.Sync.RouterTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"merged" => "capture-insert-3-three", "title" => "three"}
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -812,7 +828,8 @@ defmodule Phoenix.Sync.RouterTest do
                    "inserted_at" => "2025-01-02T12:34:14",
                    "updated_at" => "2025-01-02T12:34:14"
                  }
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 

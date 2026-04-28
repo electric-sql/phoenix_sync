@@ -300,7 +300,7 @@ if Code.ensure_loaded?(Igniter) do
     defp required_electric_version do
       Phoenix.Sync.MixProject.project()
       |> Keyword.fetch!(:deps)
-      |> Enum.find(&match?({:electric, _, _}, &1))
+      |> Enum.find(&(elem(&1, 0) == :electric))
       |> elem(1)
     end
 

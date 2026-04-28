@@ -128,7 +128,8 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -151,7 +152,8 @@ defmodule Phoenix.Sync.ControllerTest do
       assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
 
       assert [
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -164,7 +166,8 @@ defmodule Phoenix.Sync.ControllerTest do
       assert Plug.Conn.get_resp_header(resp, "electric-offset") == ["0_0"]
 
       assert [
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
 
       resp =
@@ -176,7 +179,8 @@ defmodule Phoenix.Sync.ControllerTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -191,7 +195,8 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -206,7 +211,8 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -220,7 +226,8 @@ defmodule Phoenix.Sync.ControllerTest do
 
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -245,7 +252,8 @@ defmodule Phoenix.Sync.ControllerTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "three", "merged" => "mapping-insert-3-three"}
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -270,7 +278,8 @@ defmodule Phoenix.Sync.ControllerTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "three", "merged" => "mapping-insert-3-three"}
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -295,7 +304,8 @@ defmodule Phoenix.Sync.ControllerTest do
                %{
                  "headers" => %{"operation" => "insert"},
                  "value" => %{"title" => "two", "merged" => "mapping-insert-2-two"}
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 
@@ -339,7 +349,8 @@ defmodule Phoenix.Sync.ControllerTest do
                    "inserted_at" => "2025-01-02T12:34:14",
                    "updated_at" => "2025-01-02T12:34:14"
                  }
-               }
+               },
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
   end
@@ -384,7 +395,8 @@ defmodule Phoenix.Sync.ControllerTest do
       assert [
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "one"}},
                %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "two"}},
-               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}}
+               %{"headers" => %{"operation" => "insert"}, "value" => %{"title" => "three"}},
+               %{"headers" => %{"control" => "snapshot-end"}}
              ] = Jason.decode!(resp.resp_body)
     end
 

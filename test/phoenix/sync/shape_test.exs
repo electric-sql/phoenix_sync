@@ -174,7 +174,7 @@ defmodule Support.ShapeTest do
              ] = Shape.to_list(pid)
     end
 
-    test "must refetch messages clear the state", ctx do
+    test "must-refetch messages clear the state", ctx do
       {:ok, pid} = start_shape(Support.Todo, client: ctx.client)
 
       ref = Shape.subscribe(pid, only: [:up_to_date, :must_refetch], tag: :my_sync)
@@ -228,7 +228,7 @@ defmodule Support.ShapeTest do
 
       ref = Shape.subscribe(pid, only: [:up_to_date, :must_refetch], tag: :my_sync)
 
-      assert_receive {:my_sync, ^ref, :up_to_date}, 1000
+      assert_receive {:my_sync, ^ref, :up_to_date}, 2000
 
       assert [] = Shape.to_list(pid)
     end

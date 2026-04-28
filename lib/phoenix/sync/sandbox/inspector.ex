@@ -34,6 +34,13 @@ if Phoenix.Sync.sandbox_enabled?() do
     @impl Electric.Postgres.Inspector
     def list_relations_with_stale_cache(_), do: {:ok, []}
 
+    @impl Electric.Postgres.Inspector
+    def load_supported_features(stack_id) do
+      with {:ok, pid} <- validate_stack_alive(stack_id) do
+        GenServer.call(pid, :load_supported_features)
+      end
+    end
+
     def start_link(args) do
       GenServer.start_link(__MODULE__, args, name: name(args[:stack_id]))
     end
@@ -56,8 +63,20 @@ if Phoenix.Sync.sandbox_enabled?() do
     def init(args) do
       {:ok, stack_id} = Keyword.fetch(args, :stack_id)
       {:ok, repo} = Keyword.fetch(args, :repo)
+      {:ok, owner} = Keyword.fetch(args, :owner)
 
-      {:ok, %{repo: repo, stack_id: stack_id, relations: %{}, columns: %{}, oids: %{}}}
+      # give the inspector access to the sandboxed connection
+      Ecto.Adapters.SQL.Sandbox.allow(repo, owner, self())
+
+      {:ok,
+       %{
+         repo: repo,
+         stack_id: stack_id,
+         relations: %{},
+         columns: %{},
+         oids: %{},
+         supported_features: %{}
+       }}
     end
 
     @impl GenServer
@@ -83,6 +102,15 @@ if Phoenix.Sync.sandbox_enabled?() do
       {result, state} =
         fetch_lazy(state, :columns, relation, fn ->
           Electric.Postgres.Inspector.DirectInspector.load_column_info(relation, pool(state))
+        end)
+
+      {:reply, result, state}
+    end
+
+    def handle_call(:load_supported_features, _from, state) do
+      {result, state} =
+        fetch_lazy(state, :supported_features, nil, fn ->
+          Electric.Postgres.Inspector.DirectInspector.load_supported_features(pool(state))
         end)
 
       {:reply, result, state}

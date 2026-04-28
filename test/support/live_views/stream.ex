@@ -229,6 +229,10 @@ defmodule Phoenix.Sync.LiveViewTest.StreamSandbox do
   end
 
   def mount(_params, _session, socket) do
+    client =
+      get_in(socket.private.connect_info.private, [:electric_client]) ||
+        raise "missing client configuration"
+
     parent =
       get_in(socket.private.connect_info.private, [:test_pid]) ||
         raise "missing parent pid configuration"
@@ -236,7 +240,7 @@ defmodule Phoenix.Sync.LiveViewTest.StreamSandbox do
     {:ok,
      socket
      |> assign(:test_pid, parent)
-     |> Phoenix.Sync.LiveView.sync_stream(:todos, Support.Todo)}
+     |> Phoenix.Sync.LiveView.sync_stream(:todos, Support.Todo, client: client)}
   end
 
   def handle_info({:sync, event}, socket) do

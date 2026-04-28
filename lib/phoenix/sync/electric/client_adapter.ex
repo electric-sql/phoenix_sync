@@ -37,8 +37,8 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     end
 
     # this is the server-defined shape route, so we want to only pass on the
-    # per-request/stream position params leaving the shape-definition params
-    # from the configured client.
+    # per-request/stream position params and subset query params, leaving
+    # the shape-definition params from the configured client.
     defp request(%{shape_definition: %PredefinedShape{} = shape} = sync_client, _conn, params) do
       {
         Client.request(
@@ -47,7 +47,8 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           offset: params["offset"],
           shape_handle: params["handle"],
           live: live?(params["live"]),
-          next_cursor: params["cursor"]
+          next_cursor: params["cursor"],
+          params: subset_request_params(params)
         ),
         shape
       }
@@ -67,6 +68,9 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
 
     defp normalise_method(method), do: method |> String.downcase() |> String.to_atom()
     defp live?(live), do: live == "true"
+
+    defp subset_request_params(params),
+      do: Map.filter(params, fn {key, _} -> String.starts_with?(key, "subset__") end)
 
     defp fetch_upstream(sync_client, conn, request, shape) do
       response = make_request(sync_client, conn, request, shape)
