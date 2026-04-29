@@ -23,10 +23,12 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       end
 
       def call(%ApiAdapter{api: api, shape: shape}, %{method: "GET"} = conn, params) do
+        params = Phoenix.Sync.Electric.normalize_subset_params(conn, params)
+
         if transform_fun = PredefinedShape.transform_fun(shape) do
           case Shapes.Api.validate(api, params) do
             {:ok, request} ->
-              response = Shapes.Api.serve_shape_log(request)
+              response = Shapes.Api.serve_shape_response(request)
               response = Map.update!(response, :body, &apply_transform(&1, transform_fun))
 
               conn
@@ -47,15 +49,18 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
       end
 
       def call(%ApiAdapter{api: api}, conn, params) do
+        params = Phoenix.Sync.Electric.normalize_subset_params(conn, params)
         Phoenix.Sync.Adapter.PlugApi.call(api, conn, params)
       end
 
       # only works if method is GET...
       def response(%ApiAdapter{api: api, shape: shape}, %{method: "GET"} = conn, params) do
+        params = Phoenix.Sync.Electric.normalize_subset_params(conn, params)
+
         if transform_fun = PredefinedShape.transform_fun(shape) do
           case Shapes.Api.validate(api, params) do
             {:ok, request} ->
-              response = Shapes.Api.serve_shape_log(request)
+              response = Shapes.Api.serve_shape_response(request)
               response = Map.update!(response, :body, &apply_transform(&1, transform_fun))
               {request, response}
 

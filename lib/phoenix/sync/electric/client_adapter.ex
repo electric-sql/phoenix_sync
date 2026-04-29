@@ -8,6 +8,24 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
 
     alias Phoenix.Sync.PredefinedShape
 
+    # Predefined-shape routes must not allow overriding server-defined shape
+    # attributes or stream-position keys (which are passed via dedicated fields).
+    @blocked_passthrough_keys ~w(
+      table
+      where
+      columns
+      params
+      replica
+      where_expr
+      order_by_expr
+      order_by
+      limit
+      offset
+      handle
+      live
+      cursor
+    )
+
     def predefined_shape(sync_client, %PredefinedShape{} = predefined_shape) do
       shape_client = PredefinedShape.client(sync_client.client, predefined_shape)
 
@@ -37,8 +55,8 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
     end
 
     # this is the server-defined shape route, so we want to only pass on the
-    # per-request/stream position params leaving the shape-definition params
-    # from the configured client.
+    # per-request/stream position params and protocol-level params, leaving
+    # the shape-definition params from the configured client.
     defp request(%{shape_definition: %PredefinedShape{} = shape} = sync_client, _conn, params) do
       {
         Client.request(
@@ -47,7 +65,8 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
           offset: params["offset"],
           shape_handle: params["handle"],
           live: live?(params["live"]),
-          next_cursor: params["cursor"]
+          next_cursor: params["cursor"],
+          params: protocol_request_params(sync_client, params)
         ),
         shape
       }
@@ -67,6 +86,21 @@ defmodule Phoenix.Sync.Electric.ClientAdapter do
 
     defp normalise_method(method), do: method |> String.downcase() |> String.to_atom()
     defp live?(live), do: live == "true"
+
+    defp protocol_request_params(%{client: %{params: client_params}}, params) do
+      client_param_keys =
+        client_params
+        |> stringify_keys()
+        |> Map.keys()
+
+      params
+      |> stringify_keys()
+      |> Map.drop(@blocked_passthrough_keys ++ client_param_keys)
+    end
+
+    defp stringify_keys(params) do
+      Map.new(params, fn {key, value} -> {to_string(key), value} end)
+    end
 
     defp fetch_upstream(sync_client, conn, request, shape) do
       response = make_request(sync_client, conn, request, shape)
