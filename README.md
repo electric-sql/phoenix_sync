@@ -17,6 +17,7 @@ Real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) 
 [![License](https://img.shields.io/badge/license-Apache_2.0-green)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/electric-sql/phoenix_sync)
 [![Discord](https://img.shields.io/discord/933657521581858818?color=5969EA&label=discord)](https://discord.electric-sql.com)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Felectric-sql%2Fphoenix_sync.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Felectric-sql%2Fphoenix_sync?ref=badge_shield)
 
 Documentation is available at [hexdocs.pm/phoenix_sync](https://hexdocs.pm/phoenix_sync).
 
@@ -453,3 +454,7 @@ The available options are:
 - `replica` (optional). By default Electric will only send primary keys + changed columns on updates. Set `replica: :full` to receive the full row, not just the changed columns.
 
 See the [Electric Shapes guide](https://electric-sql.com/docs/guides/shapes) for more information.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Felectric-sql%2Fphoenix_sync.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Felectric-sql%2Fphoenix_sync?ref=badge_large)
